@@ -17,7 +17,10 @@
     "test": "turbo run test",
     "test:integration": "turbo run test:integration --concurrency=1",
     "commitlint": "commitlint",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "budget:check": "turbo run budget:check",
+    "db:migrate": "pnpm --filter @glim/db db:migrate",
+    "db:generate": "pnpm --filter @glim/db db:generate"
   },
   "simple-git-hooks": {
     "commit-msg": "pnpm exec commitlint --edit \"$1\""

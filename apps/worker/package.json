@@ -3,14 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "dev": "tsx watch --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@glim/contracts": "workspace:*",
+    "@glim/db": "workspace:*",
     "@glim/shared": "workspace:*",
-    "@glim/telemetry": "workspace:*"
+    "@glim/telemetry": "workspace:*",
+    "pg-boss": "12.37.0"
   },
   "devDependencies": {
     "tsx": "4.23.15"

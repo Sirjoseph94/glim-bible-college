@@ -95,6 +95,9 @@ const envSchema = z.object({
   CSRF_SECRET: optionalText,
   BACKUP_AGE_RECIPIENT: optionalText,
 
+  TEST_POSTGRES_URL: optionalText,
+  TEST_S3_ENDPOINT: optionalText,
+
   FEATURE_DIRECT_UPLOAD: flag,
   FEATURE_PHONE_DIAL_IN: flag,
 });
@@ -141,6 +144,8 @@ export interface Config {
   auth: { sessionSecret: string; csrfSecret: string };
   backupAgeRecipient: string | undefined;
   features: { directUpload: boolean; phoneDialIn: boolean };
+  /** Test harness overrides: use an existing server instead of starting Testcontainers. */
+  testing: { postgresUrl: string | undefined; s3Endpoint: string | undefined };
 }
 
 export class ConfigError extends Error {
@@ -245,5 +250,6 @@ export function loadConfig(env: Env = process.env): Config {
     auth: { sessionSecret: pick("SESSION_SECRET"), csrfSecret: pick("CSRF_SECRET") },
     backupAgeRecipient: e.BACKUP_AGE_RECIPIENT,
     features: { directUpload: e.FEATURE_DIRECT_UPLOAD, phoneDialIn: e.FEATURE_PHONE_DIAL_IN },
+    testing: { postgresUrl: e.TEST_POSTGRES_URL, s3Endpoint: e.TEST_S3_ENDPOINT },
   };
 }

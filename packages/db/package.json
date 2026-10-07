@@ -3,14 +3,31 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./vitest": "./src/testing/integration-config.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env src/bin/migrate.ts",
+    "test:integration": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@glim/contracts": "workspace:*",
-    "@glim/shared": "workspace:*"
+    "@glim/shared": "workspace:*",
+    "@glim/telemetry": "workspace:*",
+    "@testcontainers/postgresql": "12.2.0",
+    "drizzle-orm": "0.45.3",
+    "pg": "8.23.1",
+    "pg-boss": "12.37.0",
+    "testcontainers": "12.2.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15"
   }
 }

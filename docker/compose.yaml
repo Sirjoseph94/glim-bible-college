@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: glim
     ports:
-      - "5432:5432"
+      - "${GLIM_PG_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -17,23 +17,17 @@ services:
       interval: 2s
       retries: 30
   minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+    # MinIO no longer publishes official images; Bitnami's legacy build is the same server.
+    image: bitnamilegacy/minio:2025.7.23
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DEFAULT_BUCKETS: glim-files,glim-backups
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - miniodata:/data
-  minio-setup:
-    image: minio/mc:latest
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
-      mc mb --ignore-existing local/glim-files; mc mb --ignore-existing local/glim-backups"
+      - miniodata:/bitnami/minio/data
   mailpit:
     image: axllent/mailpit:latest
     ports:

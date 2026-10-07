@@ -30,3 +30,17 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm deps:check
       - run: pnpm test
+      - run: pnpm budget:check
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Testcontainers starts Postgres 18 and MinIO on the runner's Docker.
+      - run: pnpm test:integration

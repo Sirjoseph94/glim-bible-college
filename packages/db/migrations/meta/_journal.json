@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791345416162,
+      "tag": "0000_wp00_extensions_and_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791345425759,
+      "tag": "0001_wp00_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791345426324,
+      "tag": "0002_wp00_settings_row",
+      "breakpoints": true
+    }
+  ]
+}
