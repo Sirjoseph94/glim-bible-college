@@ -1,26 +1,28 @@
 import { Db, schema, type Database } from "@glim/db";
-import { AppError, CLOCK, type Clock } from "@glim/shared";
+import {
+  CLOCK,
+  DAY_MS,
+  domainError,
+  err,
+  MINUTE_MS,
+  ok,
+  type Clock,
+  type DomainResult,
+} from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { AccountMailer } from "./account-mailer";
 import { hashPassword, passwordProblem, verifyAgainstDummy, verifyPassword } from "./passwords";
-import { SessionService, type ActiveSession } from "./session.service";
+import { SessionService, type ActiveSession, type ClientMeta } from "./session.service";
 import { generateToken, hashToken } from "./tokens";
-
-const MINUTE = 60_000;
 
 /** Lockout and token lifetimes (§8.1). */
 export const AUTH_POLICY = {
   maxFailedLogins: 5,
-  lockoutMs: 15 * MINUTE,
-  inviteMs: 7 * 24 * 60 * MINUTE,
-  resetMs: 30 * MINUTE,
+  lockoutMs: 15 * MINUTE_MS,
+  inviteMs: 7 * DAY_MS,
+  resetMs: 30 * MINUTE_MS,
 } as const;
-
-export interface ClientMeta {
-  ip?: string | undefined;
-  userAgent?: string | undefined;
-}
 
 export interface SignedIn {
   token: string;
@@ -29,18 +31,20 @@ export interface SignedIn {
 
 type TokenPurpose = "INVITE" | "PASSWORD_RESET";
 
-const INVALID_CREDENTIALS = () =>
-  new AppError("INVALID_CREDENTIALS", "The email or password is incorrect.");
-const INVALID_LINK = () =>
-  new AppError("VALIDATION_FAILED", "This link is invalid or has expired.", {
-    fieldErrors: [
-      {
-        path: "body.token",
-        code: "token_invalid",
-        message: "This link is invalid or has expired.",
-      },
-    ],
-  });
+/**
+ * The one answer for every failed sign-in: unknown email, wrong password, an account that can't
+ * use a password, or a locked account. Nothing tells them apart (§8.1).
+ */
+const INVALID_CREDENTIALS = domainError(
+  "INVALID_CREDENTIALS",
+  "The email or password is incorrect, or the account is locked after too many attempts. Try again later or reset your password.",
+);
+
+const INVALID_LINK = domainError("VALIDATION_FAILED", "This link is invalid or has expired.", {
+  fieldErrors: [
+    { path: "body.token", code: "token_invalid", message: "This link is invalid or has expired." },
+  ],
+});
 
 /** Local email + password sign-in for staff and imported students (§8.1). */
 @Injectable()
@@ -52,44 +56,38 @@ export class AuthService {
     @Inject(AccountMailer) private readonly mail: AccountMailer,
   ) {}
 
-  /**
-   * Signs in with email and password. Unknown emails, wrong passwords and accounts that can't use
-   * a password all fail the same way, in the same time (no account enumeration).
-   */
+  /** Signs in with email and password. Every failure looks and takes the same (§8.1). */
   async login(
     input: { email: string; password: string; previousSessionId?: string | undefined } & ClientMeta,
-  ): Promise<SignedIn> {
+  ): Promise<DomainResult<SignedIn>> {
     const now = this.clock.now();
     const [user] = await this.db.read
       .select()
       .from(schema.users)
       .where(eq(schema.users.email, input.email.trim()));
 
-    if (user?.lockedUntil != null && user.lockedUntil > now) {
-      const retryAfter = Math.ceil((user.lockedUntil.getTime() - now.getTime()) / 1000);
-      throw new AppError("ACCOUNT_LOCKED", "Too many failed sign-in attempts. Try again later.", {
-        headers: { "retry-after": String(retryAfter) },
-      });
-    }
-    if (user?.status !== "ACTIVE" || user.passwordHash === null) {
+    const locked = user?.lockedUntil != null && user.lockedUntil > now;
+    if (user?.status !== "ACTIVE" || user.passwordHash === null || locked) {
       await verifyAgainstDummy(input.password);
-      throw INVALID_CREDENTIALS();
+      return err(INVALID_CREDENTIALS);
     }
     if (!(await verifyPassword(user.passwordHash, input.password))) {
       await this.recordFailure(user.id, now);
-      throw INVALID_CREDENTIALS();
+      return err(INVALID_CREDENTIALS);
     }
 
-    return this.db.withTx(async ({ db }) => {
-      await db
-        .update(schema.users)
-        .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: now })
-        .where(eq(schema.users.id, user.id));
-      // Always rotate: a session presented at sign-in is replaced, never reused (§8.3).
-      if (input.previousSessionId !== undefined)
-        await this.sessions.revoke(db, input.previousSessionId);
-      return this.sessions.create(db, user.id, input);
-    });
+    return ok(
+      await this.db.withTx(async ({ db }) => {
+        await db
+          .update(schema.users)
+          .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: now })
+          .where(eq(schema.users.id, user.id));
+        // Always rotate: a session presented at sign-in is replaced, never reused (§8.3).
+        if (input.previousSessionId !== undefined)
+          await this.sessions.revoke(db, input.previousSessionId);
+        return this.sessions.create(db, user.id, input);
+      }),
+    );
   }
 
   async logout(sessionId: string): Promise<void> {
@@ -97,42 +95,27 @@ export class AuthService {
   }
 
   /** Issues a 7-day invite token inside the caller's transaction; earlier open invites stop working. */
-  async issueInvite(db: Database, userId: string, createdBy: string | null): Promise<string> {
+  issueInvite(db: Database, userId: string, createdBy: string | null): Promise<string> {
     return this.issueToken(db, userId, "INVITE", AUTH_POLICY.inviteMs, createdBy);
   }
 
   /** Accepting an invite sets the password, activates the account and signs the user in. */
-  async acceptInvite(input: { token: string; password: string } & ClientMeta): Promise<SignedIn> {
-    const problem = passwordFieldError(input.password);
-    if (problem) throw problem;
-    const passwordHash = await hashPassword(input.password);
+  acceptInvite(
+    input: { token: string; password: string } & ClientMeta,
+  ): Promise<DomainResult<SignedIn>> {
+    return this.setPasswordFromLink(input, "INVITE", async (db, userId) =>
+      this.sessions.create(db, userId, input),
+    );
+  }
 
-    return this.db.withTx(async ({ db }) => {
-      const now = this.clock.now();
-      const token = await this.consumeToken(db, input.token, "INVITE", now);
-      const [user] = await db
-        .update(schema.users)
-        .set({
-          passwordHash,
-          passwordChangedAt: now,
-          status: "ACTIVE",
-          failedLoginCount: 0,
-          lockedUntil: null,
-          lastLoginAt: now,
-          updatedAt: now,
-          version: sql`${schema.users.version} + 1`,
-        })
-        .where(and(eq(schema.users.id, token.userId), eq(schema.users.status, "INVITED")))
-        .returning({ id: schema.users.id });
-      if (user === undefined) throw INVALID_LINK();
-      await this.sessions.revokeAllForUser(db, user.id);
-      return this.sessions.create(db, user.id, input);
-    });
+  /** Sets a new password from a reset link; every session of the user is revoked. */
+  async resetPassword(input: { token: string; password: string }): Promise<DomainResult<null>> {
+    return this.setPasswordFromLink(input, "PASSWORD_RESET", () => Promise.resolve(null));
   }
 
   /**
-   * Starts a password reset. Always succeeds from the caller's point of view; only active users
-   * who already have a password get an email (§8.1).
+   * Starts a password reset. Always succeeds, in the same time, whether or not the email belongs to
+   * an account: the email is sent after the response, and only to active users with a password.
    */
   async requestPasswordReset(email: string): Promise<void> {
     const issued = await this.db.withTx(async ({ db }) => {
@@ -144,45 +127,60 @@ export class AuthService {
       const token = await this.issueToken(db, user.id, "PASSWORD_RESET", AUTH_POLICY.resetMs, null);
       return { user, token };
     });
-    if (issued) await this.mail.sendPasswordReset(issued.user, issued.token);
+    if (issued) void this.mail.sendPasswordReset(issued.user, issued.token);
   }
 
-  /** Sets a new password from a reset link; every session of the user is revoked. */
-  async resetPassword(input: { token: string; password: string }): Promise<void> {
-    const problem = passwordFieldError(input.password);
-    if (problem) throw problem;
+  /**
+   * Shared by invite acceptance and password reset: check the policy, consume the link, set the
+   * password (activating an invited account), revoke every session, then `afterwards`.
+   */
+  private async setPasswordFromLink<T>(
+    input: { token: string; password: string },
+    purpose: TokenPurpose,
+    afterwards: (db: Database, userId: string) => Promise<T>,
+  ): Promise<DomainResult<T>> {
+    const problem = passwordProblemError(input.password);
+    if (problem) return err(problem);
     const passwordHash = await hashPassword(input.password);
+    const fromStatus = purpose === "INVITE" ? "INVITED" : "ACTIVE";
 
-    await this.db.withTx(async ({ db }) => {
+    return this.db.withTxResult(async ({ db }) => {
       const now = this.clock.now();
-      const token = await this.consumeToken(db, input.token, "PASSWORD_RESET", now);
+      const token = await this.consumeToken(db, input.token, purpose, now);
+      if (token === null) return err(INVALID_LINK);
       const [user] = await db
         .update(schema.users)
         .set({
           passwordHash,
           passwordChangedAt: now,
+          status: "ACTIVE",
           failedLoginCount: 0,
           lockedUntil: null,
           updatedAt: now,
           version: sql`${schema.users.version} + 1`,
+          ...(purpose === "INVITE" ? { lastLoginAt: now } : {}),
         })
-        .where(and(eq(schema.users.id, token.userId), eq(schema.users.status, "ACTIVE")))
+        .where(and(eq(schema.users.id, token.userId), eq(schema.users.status, fromStatus)))
         .returning({ id: schema.users.id });
-      if (user === undefined) throw INVALID_LINK();
+      if (user === undefined) return err(INVALID_LINK);
       await this.sessions.revokeAllForUser(db, user.id);
+      return ok(await afterwards(db, user.id));
     });
   }
 
   private async recordFailure(userId: string, now: Date): Promise<void> {
     const limit = AUTH_POLICY.maxFailedLogins;
     const lockUntil = new Date(now.getTime() + AUTH_POLICY.lockoutMs);
-    await this.db.read
-      .update(schema.users)
-      .set({
-        failedLoginCount: sql`CASE WHEN ${schema.users.failedLoginCount} + 1 >= ${limit} THEN 0 ELSE ${schema.users.failedLoginCount} + 1 END`,
-        lockedUntil: sql`CASE WHEN ${schema.users.failedLoginCount} + 1 >= ${limit} THEN ${lockUntil.toISOString()}::timestamptz ELSE ${schema.users.lockedUntil} END`,
-      })
-      .where(eq(schema.users.id, userId));
+    const count = schema.users.failedLoginCount;
+    await this.db.withTx(({ db }) =>
+      db
+        .update(schema.users)
+        .set({
+          failedLoginCount: sql`CASE WHEN ${count} + 1 >= ${limit} THEN 0 ELSE ${count} + 1 END`,
+          lockedUntil: sql`CASE WHEN ${count} + 1 >= ${limit} THEN ${lockUntil.toISOString()}::timestamptz ELSE ${schema.users.lockedUntil} END`,
+        })
+        .where(eq(schema.users.id, userId)),
+    );
   }
 
   private async issueToken(
@@ -193,18 +191,13 @@ export class AuthService {
     createdBy: string | null,
   ): Promise<string> {
     const now = this.clock.now();
+    const t = schema.authTokens;
     await db
-      .update(schema.authTokens)
+      .update(t)
       .set({ usedAt: now })
-      .where(
-        and(
-          eq(schema.authTokens.userId, userId),
-          eq(schema.authTokens.purpose, purpose),
-          isNull(schema.authTokens.usedAt),
-        ),
-      );
+      .where(and(eq(t.userId, userId), eq(t.purpose, purpose), isNull(t.usedAt)));
     const token = generateToken();
-    await db.insert(schema.authTokens).values({
+    await db.insert(t).values({
       userId,
       purpose,
       tokenHash: hashToken(token),
@@ -215,26 +208,26 @@ export class AuthService {
     return token;
   }
 
-  /** Marks a token used, atomically; a used, expired or unknown token is rejected. */
+  /** Marks a token used, atomically; null for a used, expired or unknown token. */
   private async consumeToken(db: Database, token: string, purpose: TokenPurpose, now: Date) {
+    const t = schema.authTokens;
     const [row] = await db
-      .update(schema.authTokens)
+      .update(t)
       .set({ usedAt: now })
       .where(
         and(
-          eq(schema.authTokens.tokenHash, hashToken(token)),
-          eq(schema.authTokens.purpose, purpose),
-          isNull(schema.authTokens.usedAt),
-          gt(schema.authTokens.expiresAt, now),
+          eq(t.tokenHash, hashToken(token)),
+          eq(t.purpose, purpose),
+          isNull(t.usedAt),
+          gt(t.expiresAt, now),
         ),
       )
-      .returning({ userId: schema.authTokens.userId });
-    if (row === undefined) throw INVALID_LINK();
-    return row;
+      .returning({ userId: t.userId });
+    return row ?? null;
   }
 }
 
-function passwordFieldError(password: string): AppError | null {
+function passwordProblemError(password: string) {
   const problem = passwordProblem(password);
   if (problem === null) return null;
   const message = {
@@ -242,7 +235,7 @@ function passwordFieldError(password: string): AppError | null {
     TOO_LONG: "Use at most 256 characters.",
     BREACHED: "This password has appeared in data breaches. Choose a different one.",
   }[problem];
-  return new AppError("VALIDATION_FAILED", message, {
+  return domainError("VALIDATION_FAILED", message, {
     fieldErrors: [{ path: "body.password", code: `password_${problem.toLowerCase()}`, message }],
   });
 }

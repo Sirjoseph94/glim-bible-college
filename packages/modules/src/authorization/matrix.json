@@ -1,0 +1,310 @@
+{
+  "$comment": "Machine-readable twin of TRD \u00a77.3 (permissions) and \u00a77.4 (lecturer capabilities). If the TRD and this file disagree, this file wins. Deny tests are generated from it. student.status: E = ENROLLED only, E/C = ENROLLED or COMPLETED; student.own: the resource must belong to the student; student.rule: an extra condition checked by the owning module. lecturer: a capability name requires an active assignment on the resource's offering with that capability; \"*\" means any active Lecturer. student.any: any ACTIVE student.",
+  "permissions": {
+    "identity:user:read": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER", "REGISTRAR", "ACADEMIC_ADMIN"]
+    },
+    "identity:user:manage": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "identity:role:manage": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "identity:policy:manage": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "identity:import:run": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
+    },
+    "admissions:intake:manage": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER"]
+    },
+    "admissions:application:read": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER"]
+    },
+    "admissions:application:read-sensitive": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER"]
+    },
+    "admissions:application:decide": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER"]
+    },
+    "admissions:application:own-edit": {
+      "staff": [],
+      "applicant": true
+    },
+    "admissions:application:own-accept": {
+      "staff": [],
+      "applicant": true
+    },
+    "admissions:report:read": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER"]
+    },
+    "academic:structure:read": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "*",
+      "student": {
+        "any": true
+      }
+    },
+    "academic:structure:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
+    },
+    "academic:course-offering:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E/C"
+      }
+    },
+    "academic:course-offering:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
+    },
+    "lecturing:assignment:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E/C"
+      }
+    },
+    "lecturing:assignment:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
+    },
+    "enrollment:student:read": {
+      "staff": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "roster"
+    },
+    "enrollment:student:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
+    },
+    "enrollment:course-enrollment:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "roster",
+      "student": {
+        "own": true
+      }
+    },
+    "enrollment:course-enrollment:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
+    },
+    "enrollment:elective:select": {
+      "staff": [],
+      "student": {
+        "own": true,
+        "rule": "registration-window-open"
+      }
+    },
+    "meeting:class-meeting:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E"
+      }
+    },
+    "meeting:class-meeting:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "manageMeetings"
+    },
+    "meeting:class-meeting:start": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "attend"
+    },
+    "meeting:class-meeting:end": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "attend"
+    },
+    "meeting:class-meeting:join": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E"
+      }
+    },
+    "attendance:record:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "roster",
+      "student": {
+        "own": true
+      }
+    },
+    "attendance:roll-call:mark": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "roster"
+    },
+    "attendance:record:override": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "overrideAttendance"
+    },
+    "attendance:participant:resolve": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "roster"
+    },
+    "attendance:report:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "roster"
+    },
+    "video:asset:read": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E/C"
+      }
+    },
+    "video:asset:play": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E/C"
+      }
+    },
+    "video:asset:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "manageVideo"
+    },
+    "video:asset:admin": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "video:progress:write": {
+      "staff": [],
+      "student": {
+        "status": "E/C",
+        "own": true
+      }
+    },
+    "content:material:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "attend",
+      "student": {
+        "status": "E/C"
+      }
+    },
+    "content:material:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "manageContent"
+    },
+    "content:announcement:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "manageContent"
+    },
+    "assessment:assignment:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "manageAssessment"
+    },
+    "assessment:quiz:manage": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "manageAssessment"
+    },
+    "assessment:submission:create": {
+      "staff": [],
+      "student": {
+        "status": "E",
+        "own": true
+      }
+    },
+    "assessment:quiz:attempt": {
+      "staff": [],
+      "student": {
+        "status": "E",
+        "own": true
+      }
+    },
+    "assessment:submission:read": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "roster",
+      "student": {
+        "own": true
+      }
+    },
+    "assessment:grade:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "roster",
+      "student": {
+        "own": true,
+        "rule": "released"
+      }
+    },
+    "assessment:grade:update": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "updateGrades"
+    },
+    "assessment:grade:release": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "releaseGrades"
+    },
+    "results:course-result:finalize": {
+      "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
+      "lecturer": "finalizeResults"
+    },
+    "results:course-result:reopen": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "results:semester:compute": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"]
+    },
+    "results:semester:approve": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "results:semester:publish": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "results:record:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
+      "lecturer": "roster",
+      "student": {
+        "own": true,
+        "rule": "finalized"
+      }
+    },
+    "results:award:confirm": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "results:scheme:manage": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "transcript:request:create": {
+      "staff": [],
+      "student": {
+        "own": true
+      }
+    },
+    "transcript:request:manage": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "transcript:document:issue": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "transcript:document:revoke": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
+    },
+    "transcript:document:read": {
+      "staff": ["SYSTEM_ADMIN", "REGISTRAR"],
+      "student": {
+        "own": true,
+        "rule": "issued"
+      }
+    },
+    "audit:log:read": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "ops:integration:manage": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "ops:failures:read": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
+    "ops:failures:replay": {
+      "staff": ["SYSTEM_ADMIN"]
+    }
+  },
+  "lecturerCapabilities": {
+    "manageMeetings": ["PRIMARY", "CO_LECTURER"],
+    "attend": ["PRIMARY", "CO_LECTURER", "ASSISTANT", "GUEST_LECTURER"],
+    "roster": ["PRIMARY", "CO_LECTURER", "ASSISTANT", "GUEST_LECTURER"],
+    "overrideAttendance": ["PRIMARY", "CO_LECTURER"],
+    "manageContent": ["PRIMARY", "CO_LECTURER", "ASSISTANT"],
+    "manageVideo": ["PRIMARY", "CO_LECTURER"],
+    "manageAssessment": ["PRIMARY", "CO_LECTURER"],
+    "updateGrades": ["PRIMARY", "CO_LECTURER", "ASSISTANT"],
+    "releaseGrades": ["PRIMARY", "CO_LECTURER"],
+    "finalizeResults": ["PRIMARY"]
+  }
+}

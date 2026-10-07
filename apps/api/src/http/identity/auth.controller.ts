@@ -1,13 +1,18 @@
 import { auth, type BodyOf, type ResponseOf } from "@glim/contracts";
-import { AuthService, type ActiveSession } from "@glim/modules/identity";
+import {
+  AuthService,
+  MeService,
+  type ActiveSession,
+  type ClientMeta,
+} from "@glim/modules/identity";
+import { AppError, unwrap } from "@glim/shared";
 import { Controller, Inject, Req, Res } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { CurrentSession } from "../../common/auth.guard";
 import { Body, Endpoint } from "../../common/endpoint";
-import { MeAssembler } from "./me.assembler";
 import { clearSessionCookie, setSessionCookie } from "./session-cookie";
 
-function clientMeta(req: FastifyRequest) {
+function clientMeta(req: FastifyRequest): ClientMeta {
   return { ip: req.clientIp, userAgent: req.headers["user-agent"] };
 }
 
@@ -15,7 +20,7 @@ function clientMeta(req: FastifyRequest) {
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
-    @Inject(MeAssembler) private readonly me: MeAssembler,
+    @Inject(MeService) private readonly me: MeService,
   ) {}
 
   @Endpoint(auth.login)
@@ -24,13 +29,15 @@ export class AuthController {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ResponseOf<typeof auth.login>> {
-    const signedIn = await this.auth.login({
-      ...body,
-      ...clientMeta(req),
-      previousSessionId: req.session?.sessionId,
-    });
+    const signedIn = unwrap(
+      await this.auth.login({
+        ...body,
+        ...clientMeta(req),
+        previousSessionId: req.session?.sessionId,
+      }),
+    );
     setSessionCookie(reply, signedIn);
-    return this.me.build(signedIn.session);
+    return this.meFor(signedIn.session);
   }
 
   @Endpoint(auth.logout)
@@ -52,7 +59,7 @@ export class AuthController {
   async resetPassword(
     @Body(auth.resetPassword) body: BodyOf<typeof auth.resetPassword>,
   ): Promise<void> {
-    await this.auth.resetPassword(body);
+    unwrap(await this.auth.resetPassword(body));
   }
 
   @Endpoint(auth.acceptInvite)
@@ -61,8 +68,14 @@ export class AuthController {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ResponseOf<typeof auth.acceptInvite>> {
-    const signedIn = await this.auth.acceptInvite({ ...body, ...clientMeta(req) });
+    const signedIn = unwrap(await this.auth.acceptInvite({ ...body, ...clientMeta(req) }));
     setSessionCookie(reply, signedIn);
-    return this.me.build(signedIn.session);
+    return this.meFor(signedIn.session);
+  }
+
+  private async meFor(session: ActiveSession) {
+    const me = await this.me.forSession(session);
+    if (me === null) throw new AppError("UNAUTHENTICATED", "Please sign in.");
+    return me;
   }
 }

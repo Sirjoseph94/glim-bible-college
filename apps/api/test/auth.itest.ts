@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { bootstrapSystemAdmin } from "../src/bin/bootstrap";
+import { bootstrapSystemAdmin } from "./bootstrap";
 import { createTestApp, type TestApp } from "./harness";
 
 let t: TestApp;
@@ -165,6 +165,16 @@ describe("sign-in, sessions and sign-out", () => {
       payload: { email: ADMIN.email, password: GOOD_PASSWORD },
     });
     expect(crossSite.statusCode).toBe(403);
+    // Browsers always send one of the two on a write; a request with neither isn't from our SPA.
+    const neither = await t.app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        payload: { email: ADMIN.email, password: GOOD_PASSWORD },
+      });
+    expect(neither.statusCode).toBe(403);
     const sameOrigin = await t.request({
       method: "POST",
       url: "/api/v1/auth/login",
@@ -208,12 +218,14 @@ describe("lockout", () => {
     expect((await login()).statusCode).toBe(200); // a success clears the failure count
   });
 
-  it("locks the account for 15 minutes after 5 failures", async () => {
+  it("locks the account for 15 minutes after 5 failures, without revealing the lock", async () => {
     for (let i = 0; i < 5; i++) expect((await login("wrong password!!")).statusCode).toBe(401);
     const locked = await login();
-    expect(locked.statusCode).toBe(429);
-    expect(locked.json()).toMatchObject({ error: { code: "ACCOUNT_LOCKED" } });
-    expect(Number(locked.headers["retry-after"])).toBeGreaterThan(0);
+    const unknown = await login(GOOD_PASSWORD, "nobody@glim.edu.ng");
+    expect(locked.statusCode).toBe(401);
+    expect(locked.json<{ error: { code: string; message: string } }>().error.message).toBe(
+      unknown.json<{ error: { code: string; message: string } }>().error.message,
+    );
 
     t.clock.advance({ minutes: 15, seconds: 1 });
     expect((await login()).statusCode).toBe(200);

@@ -48,3 +48,7 @@ export class TestClock implements Clock {
 
 /** DI token for the Clock. */
 export const CLOCK = Symbol.for("glim.Clock");
+
+export const MINUTE_MS = 60_000;
+export const HOUR_MS = 60 * MINUTE_MS;
+export const DAY_MS = 24 * HOUR_MS;

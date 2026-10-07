@@ -61,7 +61,8 @@ export async function createTestApp(options: { staticDir?: string } = {}): Promi
         method,
         url,
         remoteAddress: remoteAddress ?? nextAddress(),
-        ...(headers ? { headers } : {}),
+        // A browser on our own origin sends this on every write; tests override it to probe CSRF.
+        headers: { ...(method === "GET" ? {} : { "sec-fetch-site": "same-origin" }), ...headers },
         ...(payload === undefined ? {} : { payload: payload as object }),
       }),
     close: async () => {

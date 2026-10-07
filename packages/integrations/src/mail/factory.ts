@@ -1,6 +1,6 @@
-import type { Mailer } from "@glim/integrations/mail/port";
-import { SendGridMailer } from "@glim/integrations/mail/sendgrid";
-import { SmtpMailer } from "@glim/integrations/mail/smtp";
+import type { Mailer } from "./port";
+import { SendGridMailer } from "./sendgrid";
+import { SmtpMailer } from "./smtp";
 import type { Config } from "@glim/shared/config";
 
 /** Binds the Mailer port: SendGrid in production, SMTP (Mailpit) locally (TRD §22.3). */

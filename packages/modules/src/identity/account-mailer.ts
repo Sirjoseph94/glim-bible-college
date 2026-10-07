@@ -2,6 +2,7 @@ import { MAILER, type Mailer } from "@glim/integrations/mail/port";
 import { CONFIG, type Config } from "@glim/shared/config";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
+import type { Recipient } from "./user.service";
 
 /**
  * Account emails: invites and password resets. Sent after the transaction that issued the token
@@ -24,7 +25,7 @@ export class AccountMailer {
   }
 
   /** Returns false (and logs) if the email couldn't be handed to the mail provider. */
-  async sendInvite(to: { email: string; displayName: string }, token: string): Promise<boolean> {
+  async sendInvite(to: Recipient, token: string): Promise<boolean> {
     const link = this.inviteLink(token);
     return this.deliver({
       to: to.email,
@@ -42,10 +43,7 @@ export class AccountMailer {
     });
   }
 
-  async sendPasswordReset(
-    to: { email: string; displayName: string },
-    token: string,
-  ): Promise<boolean> {
+  async sendPasswordReset(to: Recipient, token: string): Promise<boolean> {
     const link = this.resetLink(token);
     return this.deliver({
       to: to.email,

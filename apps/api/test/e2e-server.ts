@@ -11,7 +11,7 @@ import { createLogger } from "@glim/telemetry";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import Fastify from "fastify";
 import { buildApp } from "../src/app";
-import { bootstrapSystemAdmin } from "../src/bin/bootstrap";
+import { bootstrapSystemAdmin } from "./bootstrap";
 
 export const E2E_ADMIN = { email: "e2e-admin@glim.test", displayName: "Esther Admin" };
 

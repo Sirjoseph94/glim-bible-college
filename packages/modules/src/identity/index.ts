@@ -1,12 +1,14 @@
 export { AccountMailer } from "./account-mailer";
-export { AUTH_POLICY, AuthService, type ClientMeta, type SignedIn } from "./auth.service";
+export { AUTH_POLICY, AuthService, type SignedIn } from "./auth.service";
 export { IdentityModule } from "./identity.module";
+export { MeService } from "./me.service";
 export {
   SESSION_COOKIE,
   SESSION_LIFETIME,
   SessionService,
   type ActiveSession,
+  type ClientMeta,
 } from "./session.service";
 export { SettingsService, type Institution } from "./settings.service";
 export { StaffAccountsService, type InvitedStaff } from "./staff-accounts.service";
-export { UserService, type UserProfile } from "./user.service";
+export { UserService, type Recipient, type UserProfile, type UserStatus } from "./user.service";

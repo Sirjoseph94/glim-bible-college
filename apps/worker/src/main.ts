@@ -1,9 +1,12 @@
-import { createBoss } from "@glim/db";
+import { createBoss, createPool, Db } from "@glim/db";
+import { createMailer } from "@glim/integrations/mail/factory";
+import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import { createHandlers } from "./handlers";
 import { subscribers } from "./subscribers";
 import { runsScheduler, startWorker } from "./worker";
+import { createWorkerContext } from "./worker.module";
 
 const config = loadConfig();
 const logger = createLogger({ service: "worker", level: config.logLevel });
@@ -15,11 +18,20 @@ const boss = createBoss(config.db.directUrl, {
   supervise: scheduler,
   schedule: scheduler,
 });
+// Handlers write through the transaction-mode pool, sending follow-up jobs on their transaction.
+const db = new Db(createPool(config.db.url, config.db.poolWorker), boss);
+const context = await createWorkerContext({
+  db,
+  clock: systemClock,
+  logger,
+  config,
+  mailer: createMailer(config),
+});
 
 const worker = await startWorker({
   boss,
   role: config.workerRole,
-  handlers: createHandlers({ subscribers }),
+  handlers: createHandlers({ context, subscribers }),
   logger,
   concurrency: config.queueConcurrency,
 });
@@ -30,12 +42,16 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
     if (stopping) return;
     stopping = true;
     logger.info({ signal }, "shutting down");
-    worker.stop().then(
-      () => process.exit(0),
-      (error: unknown) => {
+    void (async () => {
+      try {
+        await worker.stop();
+        await context.close();
+        await db.pool.end();
+        process.exit(0);
+      } catch (error) {
         logger.error({ err: error }, "shutdown failed");
         process.exit(1);
-      },
-    );
+      }
+    })();
   });
 }

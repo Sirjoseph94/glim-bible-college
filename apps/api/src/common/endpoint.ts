@@ -26,8 +26,11 @@ const METHODS: Record<EndpointSpec["method"], RequestMethod> = {
 };
 
 const byIp = (req: FastifyRequest) => req.clientIp;
-/** Per-user classes key on the session cookie (parsed before rate limiting), else the IP. */
-const byUser = (req: FastifyRequest) => req.cookies["__Host-glim_sid"] ?? req.clientIp;
+
+/** Per-user limits key on the resolved session's user (never the raw cookie), else the IP. */
+export const rateLimitKey = (req: FastifyRequest) =>
+  req.session === null ? `ip:${req.clientIp}` : `user:${req.session.userId}`;
+const byUser = rateLimitKey;
 
 /** Rate-limit classes (§5.4). In-memory per instance, so the effective limit is × instances (§5.7). */
 export const RATE_LIMITS: Record<

@@ -29,6 +29,27 @@
       "when": 1791346896248,
       "tag": "0003_wp01_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791347922996,
+      "tag": "0004_wp06_audit_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791347923616,
+      "tag": "0005_wp06_audit_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791348688574,
+      "tag": "0006_wp01_auth_tokens_fk_restrict",
+      "breakpoints": true
     }
   ]
 }

@@ -1,27 +1,31 @@
 import { randomBytes } from "node:crypto";
 import { Db, schema, type Database } from "@glim/db";
-import { CLOCK, type Clock } from "@glim/shared";
+import { CLOCK, DAY_MS, HOUR_MS, MINUTE_MS, type Clock } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { csrfTokenFor, generateToken, hashToken, safeEqual } from "./tokens";
-
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
 
 /** Session lifetimes (§8.3). */
 export const SESSION_LIFETIME = {
-  idleMs: 2 * HOUR,
-  absoluteMs: 12 * HOUR,
-  /** Applicants fill in a long form saved as a draft, so their sessions last a day. */
-  applicantIdleMs: 24 * HOUR,
-  applicantAbsoluteMs: 24 * HOUR,
+  idleMs: 2 * HOUR_MS,
+  /** Applicants fill in a long form saved as a draft, so they get a longer idle window. */
+  applicantIdleMs: 24 * HOUR_MS,
+  absoluteMs: 12 * HOUR_MS,
   /** The sliding idle expiry is written at most this often. */
-  touchEveryMs: MINUTE,
+  touchEveryMs: MINUTE_MS,
   /** In-process lookup cache: revocation takes effect within this window (§5.7). */
   cacheMs: 5_000,
+  /** Ended sessions are kept this long for investigation, then deleted. */
+  keepEndedMs: 7 * DAY_MS,
 } as const;
 
 export const SESSION_COOKIE = "__Host-glim_sid";
+
+/** Where a request came from; recorded on sessions and audit rows. */
+export interface ClientMeta {
+  ip?: string | undefined;
+  userAgent?: string | undefined;
+}
 
 export interface ActiveSession {
   sessionId: string;
@@ -30,7 +34,8 @@ export interface ActiveSession {
   expiresAt: Date;
   idleExpiresAt: Date;
   lastSeenAt: Date;
-  long: boolean;
+  /** Sliding idle window for this session: 2 h, or 24 h for applicants. */
+  idleWindowMs: number;
 }
 
 interface CacheEntry {
@@ -55,13 +60,14 @@ export class SessionService {
   async create(
     db: Database,
     userId: string,
-    meta: { ip?: string | undefined; userAgent?: string | undefined; longIdle?: boolean } = {},
+    meta: ClientMeta & { applicant?: boolean } = {},
   ): Promise<{ token: string; session: ActiveSession }> {
     const token = generateToken();
     const now = this.clock.now();
-    const long = meta.longIdle ?? false;
-    const idleMs = long ? SESSION_LIFETIME.applicantIdleMs : SESSION_LIFETIME.idleMs;
-    const absoluteMs = long ? SESSION_LIFETIME.applicantAbsoluteMs : SESSION_LIFETIME.absoluteMs;
+    const idleWindowMs = meta.applicant
+      ? SESSION_LIFETIME.applicantIdleMs
+      : SESSION_LIFETIME.idleMs;
+    const expiresAt = new Date(now.getTime() + SESSION_LIFETIME.absoluteMs);
     const csrfSecret = randomBytes(32);
     const [row] = await db
       .insert(schema.authSessions)
@@ -69,8 +75,8 @@ export class SessionService {
         userId,
         createdAt: now,
         tokenHash: hashToken(token),
-        expiresAt: new Date(now.getTime() + absoluteMs),
-        idleExpiresAt: new Date(now.getTime() + idleMs),
+        expiresAt,
+        idleExpiresAt: idleExpiry(now, idleWindowMs, expiresAt),
         lastSeenAt: now,
         ip: meta.ip ?? null,
         userAgent: meta.userAgent?.slice(0, 512) ?? null,
@@ -128,7 +134,7 @@ export class SessionService {
     this.forget((entry) => entry.session?.sessionId === sessionId);
   }
 
-  /** Revokes every session of a user, e.g. after a password change (§8.1, §8.3). */
+  /** Revokes every session of a user, e.g. after a password change or deactivation (§8.1, §8.2). */
   async revokeAllForUser(db: Database, userId: string): Promise<void> {
     await db
       .update(schema.authSessions)
@@ -137,13 +143,33 @@ export class SessionService {
     this.forget((entry) => entry.userId === userId);
   }
 
+  /** Deletes sessions that ended more than a week ago (`auth.session-cleanup`, §17.2). */
+  async deleteEnded(): Promise<number> {
+    const cutoff = new Date(this.clock.now().getTime() - SESSION_LIFETIME.keepEndedMs);
+    const t = schema.authSessions;
+    const deleted = await this.db.withTx(({ db }) =>
+      db
+        .delete(t)
+        .where(
+          or(
+            lt(t.expiresAt, cutoff),
+            lt(t.idleExpiresAt, cutoff),
+            and(isNotNull(t.revokedAt), lt(t.revokedAt, cutoff)),
+          ),
+        )
+        .returning({ id: t.id }),
+    );
+    return deleted.length;
+  }
+
   private async touch(session: ActiveSession, now: Date): Promise<ActiveSession> {
-    const idleMs = session.long ? SESSION_LIFETIME.applicantIdleMs : SESSION_LIFETIME.idleMs;
-    const idleExpiresAt = new Date(Math.min(now.getTime() + idleMs, session.expiresAt.getTime()));
-    await this.db.read
-      .update(schema.authSessions)
-      .set({ idleExpiresAt, lastSeenAt: now })
-      .where(eq(schema.authSessions.id, session.sessionId));
+    const idleExpiresAt = idleExpiry(now, session.idleWindowMs, session.expiresAt);
+    await this.db.withTx(({ db }) =>
+      db
+        .update(schema.authSessions)
+        .set({ idleExpiresAt, lastSeenAt: now })
+        .where(eq(schema.authSessions.id, session.sessionId)),
+    );
     return { ...session, idleExpiresAt, lastSeenAt: now };
   }
 
@@ -161,6 +187,22 @@ export class SessionService {
   }
 }
 
+function idleExpiry(now: Date, idleWindowMs: number, expiresAt: Date): Date {
+  return new Date(Math.min(now.getTime() + idleWindowMs, expiresAt.getTime()));
+}
+
+/**
+ * The idle window isn't stored (the TRD schema has no column for it). A session started with the
+ * applicant window always has more than 2 h of idle time left after a touch, until the absolute
+ * expiry makes the two windows equal anyway.
+ */
+function idleWindowOf(row: typeof schema.authSessions.$inferSelect): number {
+  const remainingIdle = row.idleExpiresAt.getTime() - row.lastSeenAt.getTime();
+  return remainingIdle > SESSION_LIFETIME.idleMs
+    ? SESSION_LIFETIME.applicantIdleMs
+    : SESSION_LIFETIME.idleMs;
+}
+
 function toActive(row: typeof schema.authSessions.$inferSelect, csrfSecret: Buffer): ActiveSession {
   return {
     sessionId: row.id,
@@ -169,7 +211,7 @@ function toActive(row: typeof schema.authSessions.$inferSelect, csrfSecret: Buff
     expiresAt: row.expiresAt,
     idleExpiresAt: row.idleExpiresAt,
     lastSeenAt: row.lastSeenAt,
-    long: row.expiresAt.getTime() - row.createdAt.getTime() > SESSION_LIFETIME.absoluteMs,
+    idleWindowMs: idleWindowOf(row),
   };
 }
 

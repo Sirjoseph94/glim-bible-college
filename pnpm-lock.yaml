@@ -336,15 +336,33 @@ importers:
       '@glim/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@glim/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
+      '@glim/modules':
+        specifier: workspace:*
+        version: link:../../packages/modules
       '@glim/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@glim/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
+      '@nestjs/common':
+        specifier: 12.1.2
+        version: 12.1.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
+      '@nestjs/core':
+        specifier: 12.1.2
+        version: 12.1.2(@nestjs/common@12.1.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       pg-boss:
         specifier: 12.37.0
         version: 12.37.0(@opentelemetry/api@1.9.1)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: 7.8.2
+        version: 7.8.2
     devDependencies:
       tsx:
         specifier: 4.23.15

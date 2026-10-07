@@ -2,13 +2,14 @@
 import "reflect-metadata";
 import { parseArgs } from "node:util";
 import { createBoss, createPool, Db } from "@glim/db";
+import { SYSTEM_ACTOR } from "@glim/modules/audit";
+import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app";
-import { createMailer } from "../mailer";
-import { bootstrapSystemAdmin } from "./bootstrap";
+import { createMailer } from "@glim/integrations/mail/factory";
 
 const { values } = parseArgs({ options: { email: { type: "string" }, name: { type: "string" } } });
 if (values.email === undefined || values.name === undefined) {
@@ -27,10 +28,11 @@ const app = await NestFactory.createApplicationContext(
 );
 
 try {
-  const invited = await bootstrapSystemAdmin(app, {
-    email: values.email,
-    displayName: values.name,
-  });
+  const result = await app
+    .get(StaffAccountsService)
+    .bootstrapSystemAdmin({ email: values.email, displayName: values.name }, SYSTEM_ACTOR);
+  if (!result.ok) throw new Error(result.error.message);
+  const invited = result.value;
   if (invited.emailSent) {
     console.log(`Invite emailed to ${invited.user.email}. The link is valid for 7 days.`);
   } else {

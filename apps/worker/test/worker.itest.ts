@@ -1,16 +1,20 @@
 import type { DomainEvent } from "@glim/contracts";
-import { createBoss, createPool, Db } from "@glim/db";
-import { createTestDatabase, type TestDatabase } from "@glim/db/testing";
+import { createBoss, createPool, Db, schema } from "@glim/db";
+import { createTestDatabase, drainQueues, type TestDatabase } from "@glim/db/testing";
+import { TestClock } from "@glim/shared";
 import { createLogger } from "@glim/telemetry";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createHandlers } from "../src/handlers";
 import { startWorker, type RunningWorker } from "../src/worker";
+import { createWorkerContext } from "../src/worker.module";
 
 const logger = createLogger({ service: "worker-test", level: "silent" });
+const clock = new TestClock("2026-11-02T09:00:00Z");
 
 let database: TestDatabase;
 let db: Db;
 let sendBoss: ReturnType<typeof createBoss>;
+let context: Awaited<ReturnType<typeof createWorkerContext>>;
 const running: RunningWorker[] = [];
 
 beforeAll(async () => {
@@ -18,6 +22,7 @@ beforeAll(async () => {
   sendBoss = createBoss(database.appUrl, { max: 2 });
   await sendBoss.start();
   db = new Db(createPool(database.appUrl, 2), sendBoss);
+  context = await createWorkerContext({ db, clock, logger });
 });
 
 afterEach(async () => {
@@ -25,6 +30,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  await context.close();
   await sendBoss.stop({ graceful: false });
   await db.pool.end();
   await database.drop();
@@ -37,6 +43,7 @@ describe("worker", () => {
       boss: createBoss(database.appUrl, { max: 2 }),
       role: "general",
       handlers: createHandlers({
+        context,
         subscribers: {
           "academic.session.activated": [(e) => Promise.resolve(void received.push(e))],
         },
@@ -47,7 +54,11 @@ describe("worker", () => {
     running.push(worker);
 
     await db.withTx(({ boss }) =>
-      boss.publish("academic.session.activated", { sessionId: "2027/2028" }),
+      boss.publish(
+        "academic.session.activated",
+        { sessionId: "2027/2028" },
+        { occurredAt: new Date() },
+      ),
     );
 
     await vi.waitFor(
@@ -110,20 +121,57 @@ describe("worker", () => {
     );
   });
 
-  it("registers cron schedules only in processes with the scheduler role", async () => {
+  it("registers cron only in scheduler processes, and only for queues it has a handler for", async () => {
     const general = createBoss(database.appUrl, { max: 2 });
     running.push(await startWorker({ boss: general, role: "general", handlers: {}, logger }));
     expect(await general.getSchedules()).toEqual([]);
 
     const scheduler = createBoss(database.appUrl, { max: 2 });
-    running.push(await startWorker({ boss: scheduler, role: "all", handlers: {}, logger }));
-    const names = (await scheduler.getSchedules()).map((s) => s.key);
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "meeting-tick",
-        "admissions.offer-sweep",
-        "video.availability-check",
-      ]),
+    running.push(
+      await startWorker({
+        boss: scheduler,
+        role: "all",
+        handlers: { "auth.session-cleanup": () => Promise.resolve() },
+        logger,
+      }),
     );
+    expect((await scheduler.getSchedules()).map((s) => s.key)).toEqual(["auth.session-cleanup"]);
+  });
+});
+
+describe("auth.session-cleanup", () => {
+  it("deletes sessions that ended more than a week ago and keeps the rest", async () => {
+    const handlers = createHandlers({ subscribers: {}, context });
+    const [user] = await db.read
+      .insert(schema.users)
+      .values({ email: "s@glim.test", displayName: "S", status: "ACTIVE" })
+      .returning();
+    const userId = user?.id ?? "";
+    const day = 86_400_000;
+    const now = clock.now().getTime();
+    const session = (n: number, ends: number, revoked: number | null) => ({
+      userId,
+      tokenHash: Buffer.from(`token-${String(n)}`),
+      csrfSecret: Buffer.from("x"),
+      createdAt: new Date(ends - day),
+      lastSeenAt: new Date(ends - day),
+      expiresAt: new Date(ends),
+      idleExpiresAt: new Date(ends),
+      revokedAt: revoked === null ? null : new Date(revoked),
+    });
+    await db.read.insert(schema.authSessions).values([
+      session(1, now - 8 * day, null), // expired 8 days ago: deleted
+      session(2, now + day, now - 9 * day), // revoked 9 days ago: deleted
+      session(3, now - 2 * day, null), // expired 2 days ago: kept
+      session(4, now + day, null), // live: kept
+    ]);
+
+    await db.withTx(({ boss }) => boss.send("auth.session-cleanup", {}));
+    await drainQueues(sendBoss, handlers);
+
+    const left = await db.read
+      .select({ hash: schema.authSessions.tokenHash })
+      .from(schema.authSessions);
+    expect(left.map((r) => r.hash.toString()).sort()).toEqual(["token-3", "token-4"]);
   });
 });

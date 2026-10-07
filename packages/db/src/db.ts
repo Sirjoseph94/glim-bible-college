@@ -1,5 +1,5 @@
 import type { DomainEvent, DomainEventName, QueueName } from "@glim/contracts";
-import { newId } from "@glim/shared";
+import { newId, type Result } from "@glim/shared";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PgBoss, SendOptions } from "pg-boss";
 import pg from "pg";
@@ -13,10 +13,11 @@ type QueryClient = Pick<pg.PoolClient, "query">;
 /** Enqueues pg-boss jobs on the caller's transaction, so jobs commit or roll back with it (INV-5). */
 export interface TxQueue {
   send(queue: QueueName, data: object, options?: Omit<SendOptions, "db">): Promise<string | null>;
+  /** `occurredAt` comes from the caller's Clock (§5.1). */
   publish(
     name: DomainEventName,
     payload: Record<string, unknown>,
-    meta?: { actorUserId?: string | null; occurredAt?: Date },
+    meta: { occurredAt: Date; actorUserId?: string | null },
   ): Promise<string | null>;
 }
 
@@ -43,13 +44,20 @@ function txQueue(boss: PgBoss, client: QueryClient): TxQueue {
       const event: DomainEvent = {
         id: newId(),
         name,
-        occurredAt: (meta?.occurredAt ?? new Date()).toISOString(),
-        actorUserId: meta?.actorUserId ?? null,
+        occurredAt: meta.occurredAt.toISOString(),
+        actorUserId: meta.actorUserId ?? null,
         payload,
       };
       return boss.send("domain-event", event, { db, id: event.id });
     },
   };
+}
+
+/** Carries an expected failure out of `withTx` so the transaction rolls back. */
+class RollbackWith extends Error {
+  constructor(readonly result: unknown) {
+    super("rolled back: expected failure");
+  }
 }
 
 /**
@@ -79,6 +87,23 @@ export class Db {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Like `withTx` for use cases that return a Result: an expected failure rolls the transaction
+   * back (nothing it wrote, or enqueued, survives) and is returned to the caller (§5.8).
+   */
+  async withTxResult<T, E>(fn: (tx: Tx) => Promise<Result<T, E>>): Promise<Result<T, E>> {
+    try {
+      return await this.withTx(async (tx) => {
+        const result = await fn(tx);
+        if (!result.ok) throw new RollbackWith(result);
+        return result;
+      });
+    } catch (error) {
+      if (error instanceof RollbackWith) return error.result as Result<T, E>;
+      throw error;
     }
   }
 

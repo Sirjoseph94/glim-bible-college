@@ -19,6 +19,7 @@ const STATUS_CODES: Partial<Record<number, ErrorCode>> = {
 
 const MESSAGES: Partial<Record<ErrorCode, string>> = {
   NOT_FOUND: "Not found.",
+  VALIDATION_FAILED: "The request is invalid.",
   RATE_LIMITED: "Too many requests. Please wait and try again.",
   INTERNAL: "Something went wrong. Please try again.",
 };
@@ -46,7 +47,6 @@ export function createErrorRenderer(logger: Logger, spaFallback: SpaFallback | n
       const status = statusOf(exception);
       if (status === 404 && spaFallback?.(req, reply)) return;
       code = (status !== undefined && STATUS_CODES[status]) || "INTERNAL";
-      if (code === "VALIDATION_FAILED" && exception instanceof Error) message = exception.message;
     }
 
     if (code === "INTERNAL") {

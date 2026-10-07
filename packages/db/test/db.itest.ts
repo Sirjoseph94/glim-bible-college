@@ -34,7 +34,11 @@ describe("Db.withTx (INV-5: jobs commit or roll back with the change)", () => {
         .update(schema.settings)
         .set({ name: "GLIM Bible College" })
         .where(eq(schema.settings.id, 1));
-      await queue.publish("academic.session.activated", { sessionId: "s1" });
+      await queue.publish(
+        "academic.session.activated",
+        { sessionId: "s1" },
+        { occurredAt: new Date() },
+      );
     });
 
     expect(await institutionName()).toBe("GLIM Bible College");
@@ -121,5 +125,32 @@ describe("drainQueues", () => {
 
     expect(seen).toEqual(["sweep:first", "notify:applicant"]);
     expect(result).toEqual({ completed: 2, failed: 0 });
+  });
+});
+
+describe("Db.withTxResult", () => {
+  it("rolls back the change and its jobs when the use case returns an expected failure", async () => {
+    const result = await db.withTxResult(async ({ db: tx, boss: queue }) => {
+      await tx
+        .update(schema.settings)
+        .set({ name: "Should not stick" })
+        .where(eq(schema.settings.id, 1));
+      await queue.send("admissions.purge", { reason: "test" });
+      return { ok: false as const, error: "INTAKE_CLOSED" };
+    });
+    expect(result).toEqual({ ok: false, error: "INTAKE_CLOSED" });
+    expect(await institutionName()).toBe("GLIM Bible College");
+    expect(await boss.fetch("admissions.purge")).toHaveLength(0);
+  });
+
+  it("commits when the use case succeeds", async () => {
+    const result = await db.withTxResult(async ({ db: tx }) => {
+      await tx
+        .update(schema.settings)
+        .set({ name: "GLIM Bible College" })
+        .where(eq(schema.settings.id, 1));
+      return { ok: true as const, value: "saved" };
+    });
+    expect(result).toEqual({ ok: true, value: "saved" });
   });
 });

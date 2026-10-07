@@ -3,7 +3,7 @@ import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import { buildApp } from "./app";
-import { createMailer } from "./mailer";
+import { createMailer } from "@glim/integrations/mail/factory";
 
 const config = loadConfig();
 const logger = createLogger({ service: "api", level: config.logLevel });

@@ -26,8 +26,15 @@ function closure(key, seen = new Set()) {
   return seen;
 }
 
+// "Initial JS (login + shell)" (§18.3): the entry plus the lazily loaded sign-in page.
+const FIRST_SCREEN = ["src/routes/login.tsx"];
+
 const entryKey = Object.keys(manifest).find((k) => manifest[k].isEntry);
 const initial = closure(entryKey);
+for (const key of FIRST_SCREEN) {
+  if (!manifest[key]) throw new Error(`First-screen route ${key} is missing from the build`);
+  closure(key, initial);
+}
 const initialJs = [...initial].map((k) => manifest[k].file);
 const initialCss = [...initial].flatMap((k) => manifest[k].css ?? []);
 const initialJsSize = initialJs.reduce((sum, f) => sum + gz(f), 0);
@@ -51,7 +58,7 @@ console.log(`initial CSS ${kb(initialCssSize)} gzip`);
 console.log(`requests to first screen: ${requests}`);
 
 for (const [key, chunk] of Object.entries(manifest)) {
-  if (!chunk.isDynamicEntry) continue;
+  if (!chunk.isDynamicEntry || FIRST_SCREEN.includes(key)) continue;
   const own = [...closure(key)].filter((k) => !initial.has(k)).map((k) => manifest[k].file);
   const size = own.reduce((sum, f) => sum + gz(f), 0);
   console.log(`route ${key}: ${kb(size)} gzip`);

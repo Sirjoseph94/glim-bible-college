@@ -1,7 +1,9 @@
+import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { Module } from "@nestjs/common";
 import { AccountMailer } from "./account-mailer";
 import { AuthService } from "./auth.service";
+import { MeService } from "./me.service";
 import { SessionService } from "./session.service";
 import { SettingsService } from "./settings.service";
 import { StaffAccountsService } from "./staff-accounts.service";
@@ -14,7 +16,8 @@ const services = [
   UserService,
   AccountMailer,
   StaffAccountsService,
+  MeService,
 ];
 
-@Module({ imports: [AuthorizationModule], providers: services, exports: services })
+@Module({ imports: [AuditModule, AuthorizationModule], providers: services, exports: services })
 export class IdentityModule {}

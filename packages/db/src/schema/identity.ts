@@ -79,7 +79,7 @@ export const authTokens = pgTable(
     ...stdRo(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "restrict" }),
     purpose: text().notNull(),
     tokenHash: bytea("token_hash").notNull().unique(),
     expiresAt: tstz("expires_at").notNull(),

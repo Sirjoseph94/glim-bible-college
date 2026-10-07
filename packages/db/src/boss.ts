@@ -5,14 +5,17 @@ export const BOSS_SCHEMA = "pgboss";
 
 const DAY = 86_400;
 
-/** Queue options (TRD §5.6, §17.1): retries with backoff, a dead-letter queue, archive/delete windows. */
+/**
+ * Queue options (TRD §5.6, §17.1): retries with backoff and a dead-letter queue. pg-boss 12 has
+ * no archive table, so finished jobs stay queryable for 30 days and are then deleted; jobs still
+ * waiting keep pg-boss's default queued lifetime.
+ */
 export function queueOptions(queue: QueueName) {
   const spec = QUEUES[queue];
   return {
     retryLimit: spec.retryLimit,
     retryBackoff: true,
     expireInSeconds: spec.expireInSeconds,
-    retentionSeconds: 7 * DAY,
     deleteAfterSeconds: 30 * DAY,
     deadLetter: deadLetterQueue(queue),
   };
@@ -24,7 +27,7 @@ export async function ensureQueues(boss: PgBoss): Promise<void> {
   for (const queue of Object.keys(QUEUES) as QueueName[]) {
     if (QUEUES[queue].slice !== "v1") continue;
     const dlq = deadLetterQueue(queue);
-    if (!existing.has(dlq)) await boss.createQueue(dlq, { retentionSeconds: 30 * DAY });
+    if (!existing.has(dlq)) await boss.createQueue(dlq, { deleteAfterSeconds: 30 * DAY });
     if (!existing.has(queue)) await boss.createQueue(queue, queueOptions(queue));
   }
 }

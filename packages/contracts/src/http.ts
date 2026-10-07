@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { Permission } from "./permissions";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -14,6 +15,12 @@ export interface EndpointSpec {
   tag: string;
   /** "public" endpoints need no session; everything else requires one (and CSRF for writes). */
   auth: "public" | "session";
+  /**
+   * The permission the caller needs (§7). Endpoints without one are open to any session (e.g. /me).
+   * With `resource`, the decision is made for that resource, and one the caller can't see is a 404.
+   */
+  permission?: Permission;
+  resource?: { type: ResourceType; param: string };
   params?: z.ZodType;
   query?: z.ZodType;
   body?: z.ZodType;
@@ -25,6 +32,9 @@ export interface EndpointSpec {
   /** Rate-limit class (§5.4); endpoints without one get the default 600/min. */
   rateLimit?: RateLimitClass;
 }
+
+/** Resource types whose owning module registers a ResourceContextLoader (§7.2). */
+export type ResourceType = "user";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

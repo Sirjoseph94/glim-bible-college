@@ -1,4 +1,4 @@
-import { queuesForRole, type WorkerRole } from "@glim/contracts";
+import { queuesForRole, type QueueName, type WorkerRole } from "@glim/contracts";
 import { ensureQueues } from "@glim/db";
 import type { Logger } from "@glim/telemetry";
 import type { PgBoss } from "pg-boss";
@@ -33,7 +33,12 @@ export async function startWorker(options: WorkerOptions): Promise<RunningWorker
 
   await boss.start();
   await ensureQueues(boss);
-  if (runsScheduler(role)) await registerSchedules(boss);
+  if (runsScheduler(role)) {
+    const handled = new Set(
+      (Object.keys(handlers) as QueueName[]).filter((q) => handlers[q] !== undefined),
+    );
+    await registerSchedules(boss, handled);
+  }
 
   const queues = queuesForRole(role).filter((queue) => handlers[queue] !== undefined);
   for (const queue of queues) {

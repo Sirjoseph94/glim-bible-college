@@ -22,7 +22,7 @@ test("an invited System Admin sets a password, signs out, signs in, and resets t
   await page.getByLabel("Email").fill(ADMIN);
   await page.getByLabel("Password").fill("not the right password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("alert")).toHaveText("The email or password is incorrect.");
+  await expect(page.getByRole("alert")).toContainText("The email or password is incorrect");
 
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();

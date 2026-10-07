@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AppError, err, isAppError, ok, type Result } from "./result";
+import { AppError, domainError, err, isAppError, ok, unwrap, type Result } from "./result";
 
 function parseLevel(n: number): Result<number, "LEVEL_OUT_OF_RANGE"> {
   return n === 1 || n === 2 ? ok(n) : err("LEVEL_OUT_OF_RANGE");
@@ -28,5 +28,32 @@ describe("AppError", () => {
     });
     expect(v.status).toBe(400);
     expect(v.fieldErrors).toHaveLength(1);
+  });
+});
+
+describe("domain errors", () => {
+  it("unwrap returns the value of a success", () => {
+    expect(unwrap(ok(42))).toBe(42);
+  });
+
+  it("unwrap turns an expected failure into an AppError for the API envelope", () => {
+    const failure = err(
+      domainError("VALIDATION_FAILED", "Use at least 12 characters.", {
+        fieldErrors: [
+          {
+            path: "body.password",
+            code: "password_too_short",
+            message: "Use at least 12 characters.",
+          },
+        ],
+      }),
+    );
+    expect(() => unwrap(failure)).toThrow(
+      expect.objectContaining({
+        code: "VALIDATION_FAILED",
+        status: 400,
+        fieldErrors: [expect.objectContaining({ path: "body.password" })],
+      }),
+    );
   });
 });
