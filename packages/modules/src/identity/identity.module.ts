@@ -7,6 +7,7 @@ import { MeService } from "./me.service";
 import { SessionService } from "./session.service";
 import { SettingsService } from "./settings.service";
 import { StaffAccountsService } from "./staff-accounts.service";
+import { UserAdminService } from "./user-admin.service";
 import { UserService } from "./user.service";
 
 const services = [
@@ -17,6 +18,7 @@ const services = [
   AccountMailer,
   StaffAccountsService,
   MeService,
+  UserAdminService,
 ];
 
 @Module({ imports: [AuditModule, AuthorizationModule], providers: services, exports: services })

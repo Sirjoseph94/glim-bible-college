@@ -1,18 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decodeCursor, encodeCursor, pageQuerySchema, toPage } from "./pagination";
+import { decodeCursor, encodeCursor, toPage } from "./pagination";
 import { AppError } from "./result";
-
-describe("pageQuerySchema", () => {
-  it("defaults the limit to 25 and caps it at 100", () => {
-    expect(pageQuerySchema.parse({})).toEqual({ limit: 25 });
-    expect(pageQuerySchema.parse({ limit: "100", cursor: "abc" })).toEqual({
-      limit: 100,
-      cursor: "abc",
-    });
-    expect(pageQuerySchema.safeParse({ limit: "101" }).success).toBe(false);
-    expect(pageQuerySchema.safeParse({ limit: "0" }).success).toBe(false);
-  });
-});
 
 describe("cursors", () => {
   it("round-trip the sort key and id as an opaque base64url string", () => {

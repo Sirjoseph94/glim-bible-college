@@ -95,6 +95,27 @@ describe("schema", () => {
     );
   });
 
+  it("keeps audit_logs append-only: the app role can't change rows, and the trigger stops even the owner (INV-11)", async () => {
+    await db.pool.query(
+      "INSERT INTO audit_logs (actor_type, action, resource_type, outcome) VALUES ('SYSTEM', 'test.event', 'test', 'SUCCESS')",
+    );
+    await expect(db.pool.query("UPDATE audit_logs SET action = 'tampered'")).rejects.toThrow(
+      /permission denied/,
+    );
+    await expect(db.pool.query("DELETE FROM audit_logs")).rejects.toThrow(/permission denied/);
+    const owner = new pg.Client({ connectionString: database.migratorUrl });
+    await owner.connect();
+    try {
+      await expect(owner.query("UPDATE audit_logs SET action = 'tampered'")).rejects.toThrow(
+        /append-only/,
+      );
+      await expect(owner.query("DELETE FROM audit_logs")).rejects.toThrow(/append-only/);
+      await expect(owner.query("TRUNCATE audit_logs")).rejects.toThrow(/append-only/);
+    } finally {
+      await owner.end();
+    }
+  });
+
   it("gives the app role DML but no DDL (TRD §5.2)", async () => {
     const client = new pg.Client({ connectionString: database.appUrl });
     await client.connect();

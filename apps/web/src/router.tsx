@@ -54,12 +54,45 @@ const inviteRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/invite"), "InvitePage"),
 });
 
+/** Staff screens: the server authorizes every call; this only keeps the UI tidy (INV-1). */
+const requireRole =
+  (role: string) =>
+  async ({ context }: { context: RouterContext }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+    if (!(me.roles.staff as readonly string[]).includes(role)) throw redirect({ to: "/" });
+  };
+
+const adminUsersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/users",
+  beforeLoad: requireRole("SYSTEM_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-users"), "AdminUsersPage"),
+});
+
+const adminUserRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/users/$userId",
+  beforeLoad: requireRole("SYSTEM_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-user"), "AdminUserPage"),
+});
+
+const adminAuditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/audit",
+  beforeLoad: requireRole("SYSTEM_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-audit"), "AdminAuditPage"),
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
   forgotRoute,
   resetRoute,
   inviteRoute,
+  adminUsersRoute,
+  adminUserRoute,
+  adminAuditRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

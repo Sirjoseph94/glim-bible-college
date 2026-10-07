@@ -27,6 +27,8 @@ export interface EndpointSpec {
   /** Responses are parsed through this schema, which strips fields the caller can't use. */
   response: z.ZodType;
   successStatus?: 200 | 201 | 202 | 204;
+  /** Requires `If-Match: "<version>"` for optimistic concurrency (§5.4). */
+  ifMatch?: boolean;
   /** Requires an `Idempotency-Key` header (§5.4). */
   idempotent?: boolean;
   /** Rate-limit class (§5.4); endpoints without one get the default 600/min. */
@@ -42,11 +44,20 @@ export function endpoint<const E extends EndpointSpec>(spec: E): E {
   return spec;
 }
 
+/** What a handler returns (and a client receives). */
 export type ResponseOf<E extends EndpointSpec> = z.infer<E["response"]>;
+/** The parsed request parts a handler receives. */
 export type BodyOf<E extends EndpointSpec> = E["body"] extends z.ZodType
   ? z.infer<E["body"]>
   : never;
 export type QueryOf<E extends EndpointSpec> = E["query"] extends z.ZodType
+  ? z.infer<E["query"]>
+  : never;
+export type ParamsOf<E extends EndpointSpec> = E["params"] extends z.ZodType
+  ? z.infer<E["params"]>
+  : never;
+/** What a client may send as the query string, before defaults apply. */
+export type QueryInput<E extends EndpointSpec> = E["query"] extends z.ZodType
   ? z.input<E["query"]>
   : never;
 

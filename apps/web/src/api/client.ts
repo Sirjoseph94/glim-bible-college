@@ -36,12 +36,27 @@ export function setCsrfToken(token: string | null): void {
 export async function api<E extends EndpointSpec>(
   method: E["method"],
   path: E["path"],
-  init: { body?: unknown; signal?: AbortSignal } = {},
+  init: {
+    body?: unknown;
+    signal?: AbortSignal;
+    /** Values for the path's `:params`. */
+    params?: Record<string, string>;
+    query?: Record<string, string | number | undefined>;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<ResponseOf<E>> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...init.headers };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (method !== "GET" && csrfToken !== null) headers["x-csrf-token"] = csrfToken;
-  const res = await fetch(`/api/v1${path}`, {
+  let url = path.replaceAll(/:(\w+)/g, (_m, name: string) =>
+    encodeURIComponent(init.params?.[name] ?? ""),
+  );
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(init.query ?? {}))
+    if (v !== undefined && v !== "") search.set(k, String(v));
+  const qs = search.toString();
+  if (qs !== "") url += `?${qs}`;
+  const res = await fetch(`/api/v1${url}`, {
     method,
     credentials: "same-origin",
     headers,

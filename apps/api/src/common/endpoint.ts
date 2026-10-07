@@ -3,6 +3,8 @@ import { AppError } from "@glim/shared";
 import {
   applyDecorators,
   Body as NestBody,
+  createParamDecorator,
+  type ExecutionContext,
   HttpCode,
   Param as NestParam,
   Query as NestQuery,
@@ -89,3 +91,17 @@ export const Query = (spec: EndpointSpec) =>
   NestQuery(new ZodPipe(required(spec, "query"), "query"));
 export const Params = (spec: EndpointSpec) =>
   NestParam(new ZodPipe(required(spec, "params"), "params"));
+
+/** The version from `If-Match: "<version>"` (§5.4); missing or malformed is a validation error. */
+export const IfMatch = createParamDecorator((_data: unknown, context: ExecutionContext): number => {
+  const header = context.switchToHttp().getRequest<FastifyRequest>().headers["if-match"];
+  const match = typeof header === "string" ? /^(?:W\/)?"?(\d{1,9})"?$/.exec(header.trim()) : null;
+  if (match?.[1] === undefined) {
+    throw new AppError("VALIDATION_FAILED", 'Send If-Match: "<version>" with this request.', {
+      fieldErrors: [
+        { path: "headers.if-match", code: "if_match_required", message: "If-Match is required." },
+      ],
+    });
+  }
+  return Number(match[1]);
+});

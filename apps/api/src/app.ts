@@ -22,7 +22,9 @@ import { ResponseInterceptor } from "./common/response.interceptor";
 import { helmetOptions } from "./common/security";
 import { BOSS } from "./common/tokens";
 import { AuthController } from "./http/identity/auth.controller";
+import { AuditController } from "./http/audit/audit.controller";
 import { MeController } from "./http/identity/me.controller";
+import { UsersController } from "./http/users/users.controller";
 import { HealthController } from "./http/platform/health.controller";
 import { InstitutionController } from "./http/platform/institution.controller";
 import { OpenApiController } from "./http/platform/openapi.controller";
@@ -46,6 +48,8 @@ export class AppModule {
         HealthController,
         AuthController,
         MeController,
+        UsersController,
+        AuditController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

@@ -1,4 +1,4 @@
-import type { EndpointSpec } from "@glim/contracts";
+import type { EndpointSpec, ResponseOf } from "@glim/contracts";
 import {
   Inject,
   Injectable,
@@ -14,6 +14,16 @@ import { ENDPOINT_METADATA } from "./endpoint";
  * Parses every response through its contract schema. Unknown fields are stripped, so a handler
  * can never leak data the contract doesn't declare (§5.4, INV-15).
  */
+/** Dates become RFC 3339 strings (§5.4) before the contract parses the response. */
+function toWire(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(toWire);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toWire(v)]));
+  }
+  return value;
+}
+
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
   constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
@@ -28,8 +38,22 @@ export class ResponseInterceptor implements NestInterceptor {
       .handle()
       .pipe(
         map((body: unknown) =>
-          spec.successStatus === 204 ? undefined : spec.response.parse(body),
+          spec.successStatus === 204 ? undefined : spec.response.parse(toWire(body)),
         ),
       );
   }
 }
+
+/**
+ * What a handler may return for an endpoint: the contract's response, except that any string may
+ * be a Date (dates are serialised as RFC 3339 by the interceptor).
+ */
+export type Reply<E extends EndpointSpec> = WithDates<ResponseOf<E>>;
+
+type WithDates<T> = T extends string
+  ? string | Date
+  : T extends (infer U)[]
+    ? WithDates<U>[]
+    : T extends object
+      ? { [K in keyof T]: WithDates<T[K]> }
+      : T;

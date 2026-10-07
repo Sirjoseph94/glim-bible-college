@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { createBoss, createPool, Db } from "@glim/db";
 import { createTestDatabase, prepareTemplate } from "@glim/db/testing";
 import { MemoryMailer } from "@glim/integrations/mail/memory";
+import { SYSTEM_ACTOR } from "@glim/modules/audit";
+import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -39,6 +41,13 @@ const app = await buildApp({
   staticDir: fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });
 await bootstrapSystemAdmin(app, E2E_ADMIN);
+// A second System Admin for specs that need one without depending on the sign-in spec.
+await app
+  .get(StaffAccountsService)
+  .inviteStaff(
+    { email: "e2e-ops@glim.test", displayName: "Obi Ops", roles: ["SYSTEM_ADMIN"] },
+    SYSTEM_ACTOR,
+  );
 await app.listen(config.port, "127.0.0.1");
 
 const mailbox = Fastify();

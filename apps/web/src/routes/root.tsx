@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Outlet, useNavigate } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
 import { meQuery, signOut } from "../api/session";
 
@@ -20,15 +20,30 @@ export function RootLayout() {
           <div className="h-7 w-56 animate-pulse rounded bg-white/20" aria-label="Loading" />
         )}
         {me.data ? (
-          <button
-            type="button"
-            className="rounded border border-white/40 px-3 py-1 text-sm"
-            onClick={() => {
-              void signOut(queryClient).then(() => navigate({ to: "/login" }));
-            }}
-          >
-            Sign out
-          </button>
+          <nav className="flex items-center gap-3 text-sm">
+            <Link to="/" className="underline">
+              Home
+            </Link>
+            {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
+              <>
+                <Link to="/admin/users" className="underline">
+                  Users
+                </Link>
+                <Link to="/admin/audit" className="underline">
+                  Audit log
+                </Link>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="rounded border border-white/40 px-3 py-1 text-sm"
+              onClick={() => {
+                void signOut(queryClient).then(() => navigate({ to: "/login" }));
+              }}
+            >
+              Sign out
+            </button>
+          </nav>
         ) : null}
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">

@@ -11,4 +11,5 @@ export {
 } from "./session.service";
 export { SettingsService, type Institution } from "./settings.service";
 export { StaffAccountsService, type InvitedStaff } from "./staff-accounts.service";
+export { UserAdminService, type UserDetail, type UserListItem } from "./user-admin.service";
 export { UserService, type Recipient, type UserProfile, type UserStatus } from "./user.service";
