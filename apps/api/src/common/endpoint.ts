@@ -1,4 +1,4 @@
-import { API_PREFIX, type EndpointSpec } from "@glim/contracts";
+import { API_PREFIX, type EndpointSpec, type RateLimitClass } from "@glim/contracts";
 import { AppError } from "@glim/shared";
 import {
   applyDecorators,
@@ -11,6 +11,8 @@ import {
   SetMetadata,
   type PipeTransform,
 } from "@nestjs/common";
+import { RouteConfig } from "@nestjs/platform-fastify";
+import type { FastifyRequest } from "fastify";
 import type { z } from "zod";
 
 export const ENDPOINT_METADATA = "glim:endpoint";
@@ -23,12 +25,32 @@ const METHODS: Record<EndpointSpec["method"], RequestMethod> = {
   DELETE: RequestMethod.DELETE,
 };
 
+const byIp = (req: FastifyRequest) => req.clientIp;
+/** Per-user classes key on the session cookie (parsed before rate limiting), else the IP. */
+const byUser = (req: FastifyRequest) => req.cookies["__Host-glim_sid"] ?? req.clientIp;
+
+/** Rate-limit classes (§5.4). In-memory per instance, so the effective limit is × instances (§5.7). */
+export const RATE_LIMITS: Record<
+  RateLimitClass,
+  { max: number; timeWindow: string; keyGenerator: (req: FastifyRequest) => string }
+> = {
+  auth: { max: 10, timeWindow: "1 minute", keyGenerator: byIp },
+  apply: { max: 10, timeWindow: "1 minute", keyGenerator: byIp },
+  join: { max: 20, timeWindow: "1 minute", keyGenerator: byUser },
+  playback: { max: 60, timeWindow: "1 minute", keyGenerator: byUser },
+  progress: { max: 12, timeWindow: "1 minute", keyGenerator: byUser },
+  verify: { max: 30, timeWindow: "1 minute", keyGenerator: byIp },
+};
+
 /** Routes a controller method to a contract endpoint; its response is parsed by the contract. */
 export function Endpoint(spec: EndpointSpec): MethodDecorator {
   return applyDecorators(
     RequestMapping({ path: `${API_PREFIX}${spec.path}`, method: METHODS[spec.method] }),
     HttpCode(spec.successStatus ?? (spec.method === "POST" ? 201 : 200)),
     SetMetadata(ENDPOINT_METADATA, spec),
+    ...(spec.rateLimit === undefined
+      ? []
+      : [RouteConfig({ rateLimit: RATE_LIMITS[spec.rateLimit] })]),
   );
 }
 

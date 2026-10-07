@@ -11,6 +11,10 @@
   },
   "dependencies": {
     "@glim/contracts": "workspace:*",
-    "@glim/shared": "workspace:*"
+    "@glim/shared": "workspace:*",
+    "nodemailer": "10.0.15"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.2"
   }
 }

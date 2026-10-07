@@ -44,3 +44,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Testcontainers starts Postgres 18 and MinIO on the runner's Docker.
       - run: pnpm test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @glim/web exec playwright install --with-deps chromium
+      # The e2e server starts Postgres 18 with Testcontainers.
+      - run: pnpm test:e2e

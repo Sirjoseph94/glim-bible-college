@@ -45,3 +45,6 @@ export class TestClock implements Clock {
     this.current += durationMs(by);
   }
 }
+
+/** DI token for the Clock. */
+export const CLOCK = Symbol.for("glim.Clock");

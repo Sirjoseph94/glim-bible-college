@@ -3,6 +3,7 @@ import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import { buildApp } from "./app";
+import { createMailer } from "./mailer";
 
 const config = loadConfig();
 const logger = createLogger({ service: "api", level: config.logLevel });
@@ -12,7 +13,14 @@ const boss = createBoss(config.db.url, { max: 1 });
 await boss.start();
 const db = new Db(createPool(config.db.url, config.db.poolApi), boss);
 
-const app = await buildApp({ config, db, boss, clock: systemClock, logger });
+const app = await buildApp({
+  config,
+  db,
+  boss,
+  clock: systemClock,
+  logger,
+  mailer: createMailer(config),
+});
 await app.listen(config.port, "0.0.0.0");
 logger.info({ port: config.port }, "api listening");
 

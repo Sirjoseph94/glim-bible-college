@@ -32,6 +32,11 @@ export default tseslint.config(
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "@typescript-eslint/no-extraneous-class": ["error", { allowWithDecorator: true }],
       "@typescript-eslint/consistent-type-imports": "error",
+      // TanStack Router signals redirects by throwing its Redirect object.
+      "@typescript-eslint/only-throw-error": [
+        "error",
+        { allow: [{ from: "package", package: "@tanstack/router-core", name: "Redirect" }] },
+      ],
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },

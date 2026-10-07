@@ -26,3 +26,15 @@ The harness creates the `glim_migrator` and `glim_app` roles, migrates a `glim_t
 ## The SPA through the API (one origin)
 
 `pnpm build` builds the SPA and copies it into `apps/api/static`, which the API serves at `/`. `pnpm budget:check` enforces the TRD §18.3 bundle budgets.
+
+## First System Admin
+
+```sh
+pnpm --filter @glim/api admin:bootstrap --email you@example.org --name "Your Name"
+```
+
+Creates the user with the System Admin role and emails a 7-day invite link (locally it lands in Mailpit at http://localhost:8025). If the email can't be sent, the command prints the link instead. It refuses to run once any System Admin exists; invite everyone else from the app.
+
+## End-to-end tests
+
+`pnpm test:e2e` builds the SPA, starts the API on :4173 against a fresh database (Testcontainers, or `TEST_POSTGRES_URL`), and runs Playwright on a mobile viewport. Emails go to an in-memory mailbox the tests read on :4174.

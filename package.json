@@ -20,7 +20,8 @@
     "prepare": "simple-git-hooks",
     "budget:check": "turbo run budget:check",
     "db:migrate": "pnpm --filter @glim/db db:migrate",
-    "db:generate": "pnpm --filter @glim/db db:generate"
+    "db:generate": "pnpm --filter @glim/db db:generate",
+    "test:e2e": "pnpm --filter @glim/web test:e2e"
   },
   "simple-git-hooks": {
     "commit-msg": "pnpm exec commitlint --edit \"$1\""

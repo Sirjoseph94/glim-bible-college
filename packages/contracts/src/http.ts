@@ -22,7 +22,11 @@ export interface EndpointSpec {
   successStatus?: 200 | 201 | 202 | 204;
   /** Requires an `Idempotency-Key` header (§5.4). */
   idempotent?: boolean;
+  /** Rate-limit class (§5.4); endpoints without one get the default 600/min. */
+  rateLimit?: RateLimitClass;
 }
+
+export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 
 export function endpoint<const E extends EndpointSpec>(spec: E): E {
   return spec;

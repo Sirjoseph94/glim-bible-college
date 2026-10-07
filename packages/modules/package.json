@@ -16,6 +16,7 @@
     "@glim/shared": "workspace:*",
     "@glim/telemetry": "workspace:*",
     "@nestjs/common": "12.1.2",
+    "argon2": "0.45.1",
     "drizzle-orm": "0.45.3",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"

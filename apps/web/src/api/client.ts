@@ -6,23 +6,45 @@ export class ApiError extends Error {
     readonly status: number,
     readonly envelope: ErrorEnvelope | null,
   ) {
-    super(envelope?.error.message ?? `Request failed (${status})`);
+    super(envelope?.error.message ?? `Request failed (${String(status)})`);
   }
+
+  get code(): string | undefined {
+    return this.envelope?.error.code;
+  }
+
+  /** Field errors keyed by field name (the part after `body.`). */
+  get fieldErrors(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const f of this.envelope?.error.fieldErrors ?? [])
+      out[f.path.replace(/^body\./, "")] = f.message;
+    return out;
+  }
+}
+
+let csrfToken: string | null = null;
+
+/** Set from `GET /me`; sent as X-CSRF-Token on every write (§8.3). */
+export function setCsrfToken(token: string | null): void {
+  csrfToken = token;
 }
 
 /**
  * Calls an endpoint declared in the shared contracts. Only types come from the contracts, so no
- * schema code reaches the browser bundle; the server already validates and strips responses.
+ * schema code reaches the browser bundle; the server validates input and strips responses.
  */
 export async function api<E extends EndpointSpec>(
   method: E["method"],
   path: E["path"],
   init: { body?: unknown; signal?: AbortSignal } = {},
 ): Promise<ResponseOf<E>> {
+  const headers: Record<string, string> = {};
+  if (init.body !== undefined) headers["content-type"] = "application/json";
+  if (method !== "GET" && csrfToken !== null) headers["x-csrf-token"] = csrfToken;
   const res = await fetch(`/api/v1${path}`, {
     method,
     credentials: "same-origin",
-    headers: init.body === undefined ? {} : { "content-type": "application/json" },
+    headers,
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     ...(init.signal ? { signal: init.signal } : {}),
   });
@@ -30,5 +52,6 @@ export async function api<E extends EndpointSpec>(
     const envelope = (await res.json().catch(() => null)) as ErrorEnvelope | null;
     throw new ApiError(res.status, envelope);
   }
-  return (res.status === 204 ? undefined : await res.json()) as ResponseOf<E>;
+  if (res.status === 204 || res.status === 202) return undefined as ResponseOf<E>;
+  return (await res.json()) as ResponseOf<E>;
 }

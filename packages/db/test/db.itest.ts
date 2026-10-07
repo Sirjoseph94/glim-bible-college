@@ -1,3 +1,4 @@
+import { ENUMS, type EnumKey } from "@glim/contracts";
 import { eq } from "drizzle-orm";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
@@ -63,6 +64,25 @@ describe("Db.withTx (INV-5: jobs commit or roll back with the change)", () => {
 });
 
 describe("schema", () => {
+  it("mirrors every enumeration in contracts/enums.ts with a CHECK constraint (TRD §6.1)", async () => {
+    const { rows } = await db.pool.query<{ table: string; name: string; def: string }>(`
+      SELECT c.conrelid::regclass::text AS table, c.conname AS name, pg_get_constraintdef(c.oid) AS def
+      FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+      WHERE c.contype = 'c' AND n.nspname = 'public'`);
+    const tables = new Set(rows.map((r) => r.table));
+    const checked: string[] = [];
+    for (const key of Object.keys(ENUMS) as EnumKey[]) {
+      const [table, column] = key.split(".") as [string, string];
+      if (!tables.has(table)) continue; // created by a later migration group
+      const constraint = rows.find((r) => r.name === `${table}_${column}_check`);
+      expect(constraint, key).toBeDefined();
+      const values = [...(constraint?.def ?? "").matchAll(/'([^']*)'/g)].map((m) => m[1]);
+      expect(values, key).toEqual([...ENUMS[key]]);
+      checked.push(key);
+    }
+    expect(checked).toContain("users.status");
+  });
+
   it("keeps exactly one settings row", async () => {
     const rows = await db.read.select().from(schema.settings);
     expect(rows).toHaveLength(1);

@@ -49,3 +49,6 @@ export function createLogger(options: LoggerOptions, destination?: DestinationSt
     destination,
   );
 }
+
+/** DI token for the Logger. */
+export const LOGGER = Symbol.for("glim.Logger");

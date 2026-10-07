@@ -70,6 +70,9 @@ const envSchema = z.object({
   API_INSTANCE_COUNT: int(2),
   WORKER_INSTANCE_COUNT: int(1),
 
+  /** A header set by the platform edge with the client's IP (App Platform: do-connecting-ip). */
+  CLIENT_IP_HEADER: optionalText,
+
   WORKER_ROLE: z.enum(WORKER_ROLES).default("all"),
 
   GOOGLE_OAUTH_CLIENT_ID: optionalText,
@@ -110,6 +113,7 @@ export interface Config {
   appOrigin: string;
   institutionDefaultTz: string;
   logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent";
+  clientIpHeader: string | undefined;
   db: {
     url: string;
     directUrl: string;
@@ -223,6 +227,7 @@ export function loadConfig(env: Env = process.env): Config {
     appOrigin: e.APP_ORIGIN ?? `http://localhost:${e.PORT}`,
     institutionDefaultTz: e.INSTITUTION_DEFAULT_TZ,
     logLevel: e.LOG_LEVEL,
+    clientIpHeader: e.CLIENT_IP_HEADER?.toLowerCase(),
     db,
     workerRole: e.WORKER_ROLE,
     queueConcurrency,
@@ -253,3 +258,6 @@ export function loadConfig(env: Env = process.env): Config {
     testing: { postgresUrl: e.TEST_POSTGRES_URL, s3Endpoint: e.TEST_S3_ENDPOINT },
   };
 }
+
+/** DI token for the loaded Config. */
+export const CONFIG = Symbol.for("glim.Config");

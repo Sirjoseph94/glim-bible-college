@@ -1,22 +1,29 @@
 import "reflect-metadata";
 import type { IncomingMessage } from "node:http";
 import fastifyCompress from "@fastify/compress";
+import fastifyCookie from "@fastify/cookie";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { Db } from "@glim/db";
+import type { Mailer } from "@glim/integrations/mail/port";
+import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
 import { newId, type Clock } from "@glim/shared";
 import type { Config } from "@glim/shared/config";
 import type { Logger } from "@glim/telemetry";
 import { Global, Module, type DynamicModule, type LoggerService } from "@nestjs/common";
-import { APP_INTERCEPTOR, NestFactory } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR, NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import type { PgBoss } from "pg-boss";
+import { AuthGuard } from "./common/auth.guard";
 import { createErrorRenderer, ErrorFilter } from "./common/error.filter";
 import { ResponseInterceptor } from "./common/response.interceptor";
 import { helmetOptions } from "./common/security";
-import { BOSS, CLOCK, CONFIG, LOGGER } from "./common/tokens";
+import { BOSS, CLOCK, CONFIG, LOGGER, MAILER } from "./common/tokens";
+import { AuthController } from "./http/identity/auth.controller";
+import { MeAssembler } from "./http/identity/me.assembler";
+import { MeController } from "./http/identity/me.controller";
 import { HealthController } from "./http/platform/health.controller";
 import { InstitutionController } from "./http/platform/institution.controller";
 import { OpenApiController } from "./http/platform/openapi.controller";
@@ -28,6 +35,7 @@ export interface AppDeps {
   boss: PgBoss;
   clock: Clock;
   logger: Logger;
+  mailer: Mailer;
   /** The built SPA; defaults to the directory the Docker image copies it into. */
   staticDir?: string;
 }
@@ -42,19 +50,30 @@ class CoreModule {
       { provide: BOSS, useValue: deps.boss },
       { provide: CLOCK, useValue: deps.clock },
       { provide: LOGGER, useValue: deps.logger },
+      { provide: MAILER, useValue: deps.mailer },
     ];
     return { module: CoreModule, providers, exports: providers.map((p) => p.provide) };
   }
 }
 
 @Module({})
-class AppModule {
+export class AppModule {
   static forRoot(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      imports: [CoreModule.forRoot(deps), IdentityModule],
-      controllers: [InstitutionController, OpenApiController, HealthController],
-      providers: [{ provide: APP_INTERCEPTOR, useClass: ResponseInterceptor }],
+      imports: [CoreModule.forRoot(deps), AuthorizationModule, IdentityModule],
+      controllers: [
+        InstitutionController,
+        OpenApiController,
+        HealthController,
+        AuthController,
+        MeController,
+      ],
+      providers: [
+        MeAssembler,
+        { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
+      ],
     };
   }
 }
@@ -78,7 +97,8 @@ function nestLogger(logger: Logger): LoggerService {
 /** Builds the API: REST at /api/v1 and the SPA at /, on one origin (TRD §4.1). */
 export async function buildApp(deps: AppDeps): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
-    trustProxy: true,
+    // Never trust X-Forwarded-For (spoofable); the client IP comes from CLIENT_IP_HEADER below.
+    trustProxy: false,
     bodyLimit: 1_048_576,
     requestIdHeader: false,
     genReqId: (req: IncomingMessage) => {
@@ -98,7 +118,11 @@ export async function buildApp(deps: AppDeps): Promise<NestFastifyApplication> {
     new ErrorFilter(createErrorRenderer(deps.logger, serveSpa ? spaFallback : null)),
   );
 
+  const ipHeader = deps.config.clientIpHeader;
+  fastify.decorateRequest("clientIp", "");
   fastify.addHook("onRequest", (req, reply, done) => {
+    const forwarded = ipHeader === undefined ? undefined : req.headers[ipHeader];
+    req.clientIp = typeof forwarded === "string" && forwarded.length > 0 ? forwarded : req.ip;
     void reply.header("x-request-id", req.id);
     done();
   });
@@ -119,10 +143,17 @@ export async function buildApp(deps: AppDeps): Promise<NestFastifyApplication> {
     done();
   });
 
+  await app.register(fastifyCookie);
   await app.register(fastifyHelmet, helmetOptions(deps.config));
   await app.register(fastifyCompress, { encodings: ["br", "gzip"], threshold: 1024 });
   // In-memory per instance (§5.7): the effective limit is limit × instances.
-  await app.register(fastifyRateLimit, { global: true, max: 600, timeWindow: "1 minute" });
+  await app.register(fastifyRateLimit, {
+    global: true,
+    max: 600,
+    timeWindow: "1 minute",
+    hook: "preHandler",
+    keyGenerator: (req) => req.cookies["__Host-glim_sid"] ?? req.clientIp,
+  });
   if (serveSpa) {
     await app.register(fastifyStatic, {
       root: staticDir,

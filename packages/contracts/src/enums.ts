@@ -7,6 +7,7 @@ export const ENUMS = {
   "users.status": ["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"],
   "users.email_status": ["OK", "BOUNCED", "COMPLAINED"],
   "identities.provider": ["google", "local"],
+  "auth_tokens.purpose": ["INVITE", "PASSWORD_RESET"],
   "role_assignments.role": ["SYSTEM_ADMIN", "ADMISSIONS_OFFICER", "REGISTRAR", "ACADEMIC_ADMIN"],
   "policies.policy_type": [
     "ATTENDANCE",

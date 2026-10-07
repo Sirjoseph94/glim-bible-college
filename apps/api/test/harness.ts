@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { createBoss, createPool, Db } from "@glim/db";
 import { createTestDatabase, type TestDatabase } from "@glim/db/testing";
+import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { TestClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -13,13 +14,22 @@ export interface TestApp {
   app: NestFastifyApplication;
   db: Db;
   clock: TestClock;
+  mailer: MemoryMailer;
   request(options: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     url: string;
     headers?: Record<string, string>;
     payload?: unknown;
+    /** Defaults to a fresh address per request, so rate limits only bite tests that pin one. */
+    remoteAddress?: string;
   }): Promise<LightMyRequestResponse>;
   close(): Promise<void>;
+}
+
+let addressCounter = 0;
+function nextAddress(): string {
+  addressCounter++;
+  return `10.${String((addressCounter >> 16) & 255)}.${String((addressCounter >> 8) & 255)}.${String(addressCounter & 255)}`;
 }
 
 /** Boots the real API against a fresh Postgres 18 database (spec: Seam 1). */
@@ -30,11 +40,13 @@ export async function createTestApp(options: { staticDir?: string } = {}): Promi
   await boss.start();
   const db = new Db(createPool(database.appUrl, 4), boss);
   const clock = new TestClock("2026-11-02T09:00:00Z");
+  const mailer = new MemoryMailer();
   const app = await buildApp({
     config,
     db,
     boss,
     clock,
+    mailer,
     logger: createLogger({ service: "api-test", level: "silent" }),
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });
@@ -43,10 +55,12 @@ export async function createTestApp(options: { staticDir?: string } = {}): Promi
     app,
     db,
     clock,
-    request: ({ method = "GET", url, headers, payload }) =>
+    mailer,
+    request: ({ method = "GET", url, headers, payload, remoteAddress }) =>
       fastify.inject({
         method,
         url,
+        remoteAddress: remoteAddress ?? nextAddress(),
         ...(headers ? { headers } : {}),
         ...(payload === undefined ? {} : { payload: payload as object }),
       }),
