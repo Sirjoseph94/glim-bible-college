@@ -1,5 +1,11 @@
 import { ENDPOINTS, type EndpointSpec } from "@glim/contracts";
-import { CoursesService, CurriculaService, ProgrammesService } from "@glim/modules/academic";
+import {
+  CalendarService,
+  CoursesService,
+  CurriculaService,
+  ProgrammesService,
+  RoomsService,
+} from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { AuthorizationService } from "@glim/modules/authorization";
 import { unwrap } from "@glim/shared";
@@ -146,11 +152,109 @@ const SAMPLES: Record<string, Sample> = {
   "POST /curricula/:id/activate": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/activate`,
   }),
+  "GET /academic-sessions": () => Promise.resolve({ url: "/api/v1/academic-sessions" }),
+  "POST /academic-sessions": () => {
+    n++;
+    const year = 2100 + n;
+    return Promise.resolve({
+      url: "/api/v1/academic-sessions",
+      payload: {
+        code: `${String(year)}/${String(year + 1)}`,
+        name: "Session",
+        startsOn: `${String(year)}-09-01`,
+        endsOn: `${String(year + 1)}-06-30`,
+      },
+    });
+  },
+  "PATCH /academic-sessions/:id": async (t) => ({
+    url: `/api/v1/academic-sessions/${(await calendarFixtures(t)).sessionId}`,
+    payload: { name: "Renamed" },
+    headers: { "if-match": '"999"' },
+  }),
+  "POST /academic-sessions/:id/activate": async (t) => ({
+    url: `/api/v1/academic-sessions/${(await calendarFixtures(t)).sessionId}/activate`,
+  }),
+  "POST /academic-sessions/:id/close": async (t) => ({
+    url: `/api/v1/academic-sessions/${(await calendarFixtures(t)).sessionId}/close`,
+  }),
+  "GET /semesters": () => Promise.resolve({ url: "/api/v1/semesters" }),
+  "POST /semesters": async (t) => ({
+    url: "/api/v1/semesters",
+    // Overlaps the fixture semester, so allowed callers get a 409 and change nothing.
+    payload: {
+      academicSessionId: (await calendarFixtures(t)).sessionId,
+      code: "SX",
+      name: "X",
+      sequence: 2,
+      startsOn: "2090-09-10",
+      endsOn: "2090-12-01",
+    },
+  }),
+  "PATCH /semesters/:id": async (t) => ({
+    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}`,
+    payload: { name: "Renamed" },
+    headers: { "if-match": '"999"' },
+  }),
+  "POST /semesters/:id/open-registration": async (t) => ({
+    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}/open-registration`,
+  }),
+  "POST /semesters/:id/activate": async (t) => ({
+    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}/activate`,
+  }),
+  "POST /semesters/:id/close": async (t) => ({
+    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}/close`,
+  }),
+  "GET /rooms": () => Promise.resolve({ url: "/api/v1/rooms" }),
+  "POST /rooms": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/rooms",
+      payload: { code: `R${String(n)}`, name: "Room" },
+    });
+  },
+  "PATCH /rooms/:id": async (t) => ({
+    url: `/api/v1/rooms/${(await calendarFixtures(t)).roomId}`,
+    payload: { name: "Renamed" },
+    headers: { "if-match": '"999"' },
+  }),
   "POST /curricula/:id/clone": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
     payload: { effectiveFrom: "2027-09-01" },
   }),
 };
+
+let calendarShared: { sessionId: string; semesterId: string; roomId: string } | undefined;
+/** A planned session (2090/2091) with one semester, and a Room, for the calendar samples. */
+async function calendarFixtures(t: TestApp) {
+  if (calendarShared !== undefined) return calendarShared;
+  const calendar = t.app.get(CalendarService);
+  const session = unwrap(
+    await calendar.createSession(
+      { code: "2090/2091", name: "Authz", startsOn: "2090-09-01", endsOn: "2091-06-30" },
+      SYSTEM_ACTOR,
+    ),
+  );
+  const semester = unwrap(
+    await calendar.createSemester(
+      {
+        academicSessionId: session.id,
+        code: "S1",
+        name: "First",
+        sequence: 1,
+        startsOn: "2090-09-04",
+        endsOn: "2091-01-26",
+      },
+      SYSTEM_ACTOR,
+    ),
+  );
+  const room = unwrap(
+    await t.app
+      .get(RoomsService)
+      .create({ code: "AUTHZ-R", name: "Authz Room", capacity: null }, SYSTEM_ACTOR),
+  );
+  calendarShared = { sessionId: session.id, semesterId: semester.id, roomId: room.id };
+  return calendarShared;
+}
 
 let shared: { programmeId: string; courseId: string; curriculumId: string } | undefined;
 /** One programme, course and (empty, draft) curriculum for the academic samples. */

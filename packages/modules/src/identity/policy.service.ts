@@ -1,5 +1,5 @@
 import { POLICY_SCHEMAS, type EditablePolicyType, type PolicyConfig } from "@glim/contracts";
-import { Db, schema } from "@glim/db";
+import { Db, PG, pgError, schema } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
@@ -89,7 +89,7 @@ export class PolicyService {
       });
     } catch (error) {
       // The unique (type, scope, version) index makes a concurrent save of the same version fail.
-      if (isUniqueViolation(error)) {
+      if (pgError(error)?.code === PG.UNIQUE_VIOLATION) {
         return err(
           domainError(
             "VERSION_MISMATCH",
@@ -107,9 +107,4 @@ export class PolicyService {
       createdBy: actor.userId,
     });
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  const cause = error instanceof Error && "cause" in error ? error.cause : error;
-  return typeof cause === "object" && cause !== null && "code" in cause && cause.code === "23505";
 }

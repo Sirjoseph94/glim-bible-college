@@ -1,7 +1,15 @@
 import type { EnumValue, FieldError } from "@glim/contracts";
 import { Db, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
-import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
+import {
+  CLOCK,
+  definedFields,
+  domainError,
+  err,
+  ok,
+  type Clock,
+  type DomainResult,
+} from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, max, sql } from "drizzle-orm";
 
@@ -129,7 +137,7 @@ export class CurriculaService {
     return this.db.withTxResult(async ({ db }) => {
       const current = await this.lockForChange(db, id, expectedVersion);
       if (!current.ok) return current;
-      const fields = Object.fromEntries(Object.entries(change).filter(([, v]) => v !== undefined));
+      const fields = definedFields(change);
       await this.bump(db, id, fields);
       await this.audit.record(db, actor, {
         action: "academic.curriculum.updated",

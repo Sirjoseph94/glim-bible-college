@@ -69,3 +69,8 @@ export function unwrap<T>(result: Result<T, DomainError>): T {
 
 /** A partial update as parsed from a request: every field optional, and `undefined` means "leave it". */
 export type Patch<T> = { [K in keyof T]?: T[K] | undefined };
+
+/** The fields of a patch that were actually given, ready for an UPDATE's SET clause. */
+export function definedFields(patch: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+}

@@ -100,3 +100,76 @@ export const curriculumCourses = pgTable(
     uniqueIndex("curriculum_courses_curriculum_course").on(t.curriculumId, t.courseId),
   ],
 );
+
+/** Owner: academic. One academic year, September to June, e.g. code "2027/2028" (TRD §9.1). */
+export const academicSessions = pgTable(
+  "academic_sessions",
+  {
+    ...std(),
+    code: citext().notNull().unique(),
+    name: text().notNull(),
+    startsOn: date("starts_on").notNull(),
+    endsOn: date("ends_on").notNull(),
+    status: text().notNull().default("PLANNED"),
+  },
+  (t) => [
+    enumCheck("academic_sessions.status", t.status),
+    check("academic_sessions_dates_check", sql`${t.endsOn} > ${t.startsOn}`),
+  ],
+);
+
+/** Owner: academic. Sequence 1 = Sept–Jan, 2 = Feb–June, each ending with exams (§9.1). */
+export const semesters = pgTable(
+  "semesters",
+  {
+    ...std(),
+    academicSessionId: uuid("academic_session_id")
+      .notNull()
+      .references(() => academicSessions.id, { onDelete: "restrict" }),
+    code: citext().notNull(),
+    name: text().notNull(),
+    sequence: smallint().notNull(),
+    startsOn: date("starts_on").notNull(),
+    endsOn: date("ends_on").notNull(),
+    registrationOpensOn: date("registration_opens_on"),
+    registrationClosesOn: date("registration_closes_on"),
+    addDropDeadlineOn: date("add_drop_deadline_on"),
+    examsStartOn: date("exams_start_on"),
+    examsEndOn: date("exams_end_on"),
+    status: text().notNull().default("PLANNED"),
+  },
+  (t) => [
+    enumCheck("semesters.status", t.status),
+    uniqueIndex("semesters_session_sequence").on(t.academicSessionId, t.sequence),
+    uniqueIndex("semesters_session_code").on(t.academicSessionId, t.code),
+    check("semesters_dates_check", sql`${t.endsOn} > ${t.startsOn}`),
+    check(
+      "semesters_registration_check",
+      sql`${t.registrationOpensOn} IS NULL OR ${t.registrationClosesOn} IS NULL OR ${t.registrationClosesOn} >= ${t.registrationOpensOn}`,
+    ),
+    check(
+      "semesters_exams_check",
+      sql`(${t.examsStartOn} IS NULL) = (${t.examsEndOn} IS NULL) AND (${t.examsStartOn} IS NULL OR (${t.examsEndOn} >= ${t.examsStartOn} AND ${t.examsStartOn} >= ${t.startsOn} AND ${t.examsEndOn} <= ${t.endsOn}))`,
+    ),
+    check(
+      "semesters_add_drop_check",
+      sql`${t.addDropDeadlineOn} IS NULL OR ${t.addDropDeadlineOn} BETWEEN ${t.startsOn} AND ${t.endsOn}`,
+    ),
+  ],
+);
+
+/** Owner: academic. Capacity is informational (C-35). */
+export const rooms = pgTable(
+  "rooms",
+  {
+    ...std(),
+    code: citext().notNull().unique(),
+    name: text().notNull(),
+    capacity: integer(),
+    status: text().notNull().default("ACTIVE"),
+  },
+  (t) => [
+    enumCheck("rooms.status", t.status),
+    check("rooms_capacity_check", sql`${t.capacity} IS NULL OR ${t.capacity} > 0`),
+  ],
+);

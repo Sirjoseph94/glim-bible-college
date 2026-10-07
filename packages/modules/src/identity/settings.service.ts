@@ -1,6 +1,14 @@
 import { Db, schema } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
-import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
+import {
+  CLOCK,
+  definedFields,
+  domainError,
+  err,
+  ok,
+  type Clock,
+  type DomainResult,
+} from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -70,7 +78,7 @@ export class SettingsService {
       const [row] = await db
         .update(s)
         .set({
-          ...Object.fromEntries(Object.entries(change).filter(([, v]) => v !== undefined)),
+          ...definedFields(change),
           updatedAt: this.clock.now(),
           version: sql`${s.version} + 1`,
         })

@@ -26,3 +26,19 @@ export function browserTimeZone(): string | null {
     return null;
   }
 }
+
+/**
+ * A calendar date (YYYY-MM-DD) such as a semester's start. Calendar dates belong to the
+ * institution's calendar (§5.1), so they read the same in every timezone.
+ */
+export function CalendarDate({ value }: { value: string | null }) {
+  if (value === null) return <span>—</span>;
+  const label = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00Z`));
+  return <time dateTime={value}>{label}</time>;
+}

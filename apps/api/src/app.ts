@@ -25,6 +25,7 @@ import { BOSS } from "./common/tokens";
 import { AuthController } from "./http/identity/auth.controller";
 import { GoogleController } from "./http/identity/google.controller";
 import { AcademicController } from "./http/academic/academic.controller";
+import { CalendarController } from "./http/academic/calendar.controller";
 import { AuditController } from "./http/audit/audit.controller";
 import { MeController } from "./http/identity/me.controller";
 import { SettingsController } from "./http/settings/settings.controller";
@@ -63,6 +64,7 @@ export class AppModule {
         AuditController,
         SettingsController,
         AcademicController,
+        CalendarController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

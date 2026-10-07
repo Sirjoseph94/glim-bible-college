@@ -4,6 +4,7 @@ import { AuditService, type AuditActor } from "@glim/modules/audit";
 import {
   CLOCK,
   decodeCursor,
+  definedFields,
   domainError,
   err,
   ok,
@@ -99,7 +100,7 @@ export class CoursesService {
   ): Promise<DomainResult<CourseRow>> {
     return this.db.withTxResult(async ({ db }) => {
       const c = schema.courses;
-      const fields = Object.fromEntries(Object.entries(change).filter(([, v]) => v !== undefined));
+      const fields = definedFields(change);
       const [row] = await db
         .update(c)
         .set({ ...fields, updatedAt: this.clock.now(), version: sql`${c.version} + 1` })

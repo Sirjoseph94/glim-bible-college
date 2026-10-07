@@ -41,4 +41,31 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await page.getByRole("button", { name: "Save placements" }).click();
   await page.getByRole("button", { name: "Activate" }).click();
   await expect(page.getByRole("heading", { name: /Curriculum v1 · active/ })).toBeVisible();
+
+  await page.getByRole("link", { name: "Calendar" }).click();
+  await page.getByText("Plan an Academic Session").click();
+  await page.getByLabel("Code (e.g. 2027/2028)").fill("2026/2027");
+  await page.getByLabel("Starts (September)").fill("2026-09-01");
+  await page.getByLabel("Ends (June)").fill("2027-06-30");
+  await page.getByRole("button", { name: "Plan session" }).click();
+  await expect(page.getByRole("heading", { name: /2026\/2027 Session · planned/ })).toBeVisible();
+  await page.getByRole("button", { name: "Activate session" }).click();
+  await expect(page.getByRole("heading", { name: /2026\/2027 Session · active/ })).toBeVisible();
+
+  await page.getByText("Add semester 1").click();
+  await page.getByLabel("Starts", { exact: true }).fill("2026-09-07");
+  await page.getByLabel("Ends", { exact: true }).fill("2027-01-29");
+  await page.getByLabel("Exams start").fill("2027-01-11");
+  await page.getByLabel("Exams end").fill("2027-01-22");
+  await page.getByRole("button", { name: "Add semester" }).click();
+  await expect(page.getByText("First Semester (S1) · planned")).toBeVisible();
+  await expect(page.getByText("Mon, 11 Jan 2027")).toBeVisible();
+  await page.getByRole("button", { name: "Open registration" }).click();
+  await expect(page.getByText("First Semester (S1) · registration")).toBeVisible();
+
+  await page.getByLabel("Room code").fill("R1");
+  await page.getByLabel("Room name").fill("Main Hall");
+  await page.getByLabel("Seats (optional)").fill("40");
+  await page.getByRole("button", { name: "Add Room" }).click();
+  await expect(page.getByText("40 seats")).toBeVisible();
 });

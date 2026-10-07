@@ -1,0 +1,1725 @@
+{
+  "id": "ad18eeb0-039b-44a5-b2fb-b6095e98589f",
+  "prevId": "8b973581-f4f1-4501-bb35-18f38e7d1166",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.academic_sessions": {
+      "name": "academic_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "code": {
+          "name": "code",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_on": {
+          "name": "starts_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_on": {
+          "name": "ends_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PLANNED'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "academic_sessions_code_unique": {
+          "name": "academic_sessions_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "academic_sessions_status_check": {
+          "name": "academic_sessions_status_check",
+          "value": "\"academic_sessions\".\"status\" IN ('PLANNED', 'ACTIVE', 'CLOSED')"
+        },
+        "academic_sessions_dates_check": {
+          "name": "academic_sessions_dates_check",
+          "value": "\"academic_sessions\".\"ends_on\" > \"academic_sessions\".\"starts_on\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.courses": {
+      "name": "courses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "code": {
+          "name": "code",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credits": {
+          "name": "credits",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "courses_code_unique": {
+          "name": "courses_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "courses_status_check": {
+          "name": "courses_status_check",
+          "value": "\"courses\".\"status\" IN ('ACTIVE', 'ARCHIVED')"
+        },
+        "courses_credits_check": {
+          "name": "courses_credits_check",
+          "value": "\"courses\".\"credits\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.curricula": {
+      "name": "curricula",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "programme_id": {
+          "name": "programme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "curriculum_version": {
+          "name": "curriculum_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_elective_credits": {
+          "name": "min_elective_credits",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        }
+      },
+      "indexes": {
+        "curricula_programme_version": {
+          "name": "curricula_programme_version",
+          "columns": [
+            {
+              "expression": "programme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "curriculum_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "one_active_curriculum": {
+          "name": "one_active_curriculum",
+          "columns": [
+            {
+              "expression": "programme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'ACTIVE'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "curricula_programme_id_programmes_id_fk": {
+          "name": "curricula_programme_id_programmes_id_fk",
+          "tableFrom": "curricula",
+          "tableTo": "programmes",
+          "columnsFrom": [
+            "programme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "curricula_status_check": {
+          "name": "curricula_status_check",
+          "value": "\"curricula\".\"status\" IN ('DRAFT', 'ACTIVE', 'RETIRED')"
+        },
+        "curricula_min_elective_credits_check": {
+          "name": "curricula_min_elective_credits_check",
+          "value": "\"curricula\".\"min_elective_credits\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.curriculum_courses": {
+      "name": "curriculum_courses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "curriculum_id": {
+          "name": "curriculum_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level_no": {
+          "name": "level_no",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semester_no": {
+          "name": "semester_no",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "course_type": {
+          "name": "course_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "credit_override": {
+          "name": "credit_override",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "curriculum_courses_curriculum_course": {
+          "name": "curriculum_courses_curriculum_course",
+          "columns": [
+            {
+              "expression": "curriculum_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "course_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "curriculum_courses_curriculum_id_curricula_id_fk": {
+          "name": "curriculum_courses_curriculum_id_curricula_id_fk",
+          "tableFrom": "curriculum_courses",
+          "tableTo": "curricula",
+          "columnsFrom": [
+            "curriculum_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "curriculum_courses_course_id_courses_id_fk": {
+          "name": "curriculum_courses_course_id_courses_id_fk",
+          "tableFrom": "curriculum_courses",
+          "tableTo": "courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "curriculum_courses_course_type_check": {
+          "name": "curriculum_courses_course_type_check",
+          "value": "\"curriculum_courses\".\"course_type\" IN ('COMPULSORY', 'ELECTIVE')"
+        },
+        "curriculum_courses_semester_no_check": {
+          "name": "curriculum_courses_semester_no_check",
+          "value": "\"curriculum_courses\".\"semester_no\" IN (1, 2)"
+        },
+        "curriculum_courses_level_no_check": {
+          "name": "curriculum_courses_level_no_check",
+          "value": "\"curriculum_courses\".\"level_no\" BETWEEN 1 AND 4"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.programmes": {
+      "name": "programmes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "code": {
+          "name": "code",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "award_type": {
+          "name": "award_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_semesters": {
+          "name": "duration_semesters",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "levels": {
+          "name": "levels",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grading_scheme_id": {
+          "name": "grading_scheme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "programmes_code_unique": {
+          "name": "programmes_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "programmes_award_type_check": {
+          "name": "programmes_award_type_check",
+          "value": "\"programmes\".\"award_type\" IN ('CERTIFICATE', 'DIPLOMA')"
+        },
+        "programmes_status_check": {
+          "name": "programmes_status_check",
+          "value": "\"programmes\".\"status\" IN ('ACTIVE', 'ARCHIVED')"
+        },
+        "programmes_duration_semesters_check": {
+          "name": "programmes_duration_semesters_check",
+          "value": "\"programmes\".\"duration_semesters\" > 0"
+        },
+        "programmes_levels_check": {
+          "name": "programmes_levels_check",
+          "value": "\"programmes\".\"levels\" BETWEEN 1 AND 4"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.rooms": {
+      "name": "rooms",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "code": {
+          "name": "code",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacity": {
+          "name": "capacity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "rooms_code_unique": {
+          "name": "rooms_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "rooms_status_check": {
+          "name": "rooms_status_check",
+          "value": "\"rooms\".\"status\" IN ('ACTIVE', 'ARCHIVED')"
+        },
+        "rooms_capacity_check": {
+          "name": "rooms_capacity_check",
+          "value": "\"rooms\".\"capacity\" IS NULL OR \"rooms\".\"capacity\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.semesters": {
+      "name": "semesters",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "academic_session_id": {
+          "name": "academic_session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_on": {
+          "name": "starts_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_on": {
+          "name": "ends_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registration_opens_on": {
+          "name": "registration_opens_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registration_closes_on": {
+          "name": "registration_closes_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "add_drop_deadline_on": {
+          "name": "add_drop_deadline_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exams_start_on": {
+          "name": "exams_start_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exams_end_on": {
+          "name": "exams_end_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PLANNED'"
+        }
+      },
+      "indexes": {
+        "semesters_session_sequence": {
+          "name": "semesters_session_sequence",
+          "columns": [
+            {
+              "expression": "academic_session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "semesters_session_code": {
+          "name": "semesters_session_code",
+          "columns": [
+            {
+              "expression": "academic_session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "semesters_academic_session_id_academic_sessions_id_fk": {
+          "name": "semesters_academic_session_id_academic_sessions_id_fk",
+          "tableFrom": "semesters",
+          "tableTo": "academic_sessions",
+          "columnsFrom": [
+            "academic_session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "semesters_status_check": {
+          "name": "semesters_status_check",
+          "value": "\"semesters\".\"status\" IN ('PLANNED', 'REGISTRATION', 'ACTIVE', 'CLOSED')"
+        },
+        "semesters_dates_check": {
+          "name": "semesters_dates_check",
+          "value": "\"semesters\".\"ends_on\" > \"semesters\".\"starts_on\""
+        },
+        "semesters_registration_check": {
+          "name": "semesters_registration_check",
+          "value": "\"semesters\".\"registration_opens_on\" IS NULL OR \"semesters\".\"registration_closes_on\" IS NULL OR \"semesters\".\"registration_closes_on\" >= \"semesters\".\"registration_opens_on\""
+        },
+        "semesters_exams_check": {
+          "name": "semesters_exams_check",
+          "value": "(\"semesters\".\"exams_start_on\" IS NULL) = (\"semesters\".\"exams_end_on\" IS NULL) AND (\"semesters\".\"exams_start_on\" IS NULL OR (\"semesters\".\"exams_end_on\" >= \"semesters\".\"exams_start_on\" AND \"semesters\".\"exams_start_on\" >= \"semesters\".\"starts_on\" AND \"semesters\".\"exams_end_on\" <= \"semesters\".\"ends_on\"))"
+        },
+        "semesters_add_drop_check": {
+          "name": "semesters_add_drop_check",
+          "value": "\"semesters\".\"add_drop_deadline_on\" IS NULL OR \"semesters\".\"add_drop_deadline_on\" BETWEEN \"semesters\".\"starts_on\" AND \"semesters\".\"ends_on\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.audit_logs": {
+      "name": "audit_logs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip": {
+          "name": "ip",
+          "type": "inet",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "audit_logs_created_at": {
+          "name": "audit_logs_created_at",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "audit_logs_resource": {
+          "name": "audit_logs_resource",
+          "columns": [
+            {
+              "expression": "resource_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "resource_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "audit_logs_actor_type_check": {
+          "name": "audit_logs_actor_type_check",
+          "value": "\"audit_logs\".\"actor_type\" IN ('USER', 'SYSTEM', 'JOB', 'PROVIDER')"
+        },
+        "audit_logs_outcome_check": {
+          "name": "audit_logs_outcome_check",
+          "value": "\"audit_logs\".\"outcome\" IN ('SUCCESS', 'DENIED', 'FAILURE')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.role_assignments": {
+      "name": "role_assignments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "granted_by": {
+          "name": "granted_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "role_assignments_active": {
+          "name": "role_assignments_active",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "revoked_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "role_assignments_user_id_users_id_fk": {
+          "name": "role_assignments_user_id_users_id_fk",
+          "tableFrom": "role_assignments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "role_assignments_role_check": {
+          "name": "role_assignments_role_check",
+          "value": "\"role_assignments\".\"role\" IN ('SYSTEM_ADMIN', 'ADMISSIONS_OFFICER', 'REGISTRAR', 'ACADEMIC_ADMIN')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.auth_sessions": {
+      "name": "auth_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idle_expires_at": {
+          "name": "idle_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ip": {
+          "name": "ip",
+          "type": "inet",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "csrf_secret": {
+          "name": "csrf_secret",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "auth_sessions_user_active": {
+          "name": "auth_sessions_user_active",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "revoked_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "auth_sessions_user_id_users_id_fk": {
+          "name": "auth_sessions_user_id_users_id_fk",
+          "tableFrom": "auth_sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "auth_sessions_token_hash_unique": {
+          "name": "auth_sessions_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.auth_tokens": {
+      "name": "auth_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_at": {
+          "name": "used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "auth_tokens_user_open": {
+          "name": "auth_tokens_user_open",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "purpose",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "used_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "auth_tokens_user_id_users_id_fk": {
+          "name": "auth_tokens_user_id_users_id_fk",
+          "tableFrom": "auth_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "auth_tokens_token_hash_unique": {
+          "name": "auth_tokens_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "auth_tokens_purpose_check": {
+          "name": "auth_tokens_purpose_check",
+          "value": "\"auth_tokens\".\"purpose\" IN ('INVITE', 'PASSWORD_RESET')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.identities": {
+      "name": "identities",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "identities_provider_subject": {
+          "name": "identities_provider_subject",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "identities_user_id_users_id_fk": {
+          "name": "identities_user_id_users_id_fk",
+          "tableFrom": "identities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "identities_provider_check": {
+          "name": "identities_provider_check",
+          "value": "\"identities\".\"provider\" IN ('google', 'local')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.policies": {
+      "name": "policies",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "policy_type": {
+          "name": "policy_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_type": {
+          "name": "scope_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'INSTITUTION'"
+        },
+        "scope_id": {
+          "name": "scope_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "policy_version": {
+          "name": "policy_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "policies_policy_type_check": {
+          "name": "policies_policy_type_check",
+          "value": "\"policies\".\"policy_type\" IN ('ATTENDANCE', 'RECORDING', 'JOIN_WINDOW', 'GOOGLE_MEET', 'RETENTION', 'GRADING_DEFAULTS', 'NOTIFICATION', 'ADMISSIONS')"
+        },
+        "policies_scope_type_check": {
+          "name": "policies_scope_type_check",
+          "value": "\"policies\".\"scope_type\" IN ('INSTITUTION', 'COURSE_OFFERING')"
+        },
+        "policies_scope_check": {
+          "name": "policies_scope_check",
+          "value": "(\"policies\".\"scope_type\" = 'INSTITUTION') = (\"policies\".\"scope_id\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "email": {
+          "name": "email",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'INVITED'"
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password_changed_at": {
+          "name": "password_changed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_login_count": {
+          "name": "failed_login_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "locked_until": {
+          "name": "locked_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_status": {
+          "name": "email_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OK'"
+        },
+        "referral_code": {
+          "name": "referral_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'en'"
+        },
+        "last_login_at": {
+          "name": "last_login_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        },
+        "users_referral_code_unique": {
+          "name": "users_referral_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "referral_code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "users_status_check": {
+          "name": "users_status_check",
+          "value": "\"users\".\"status\" IN ('INVITED', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED')"
+        },
+        "users_email_status_check": {
+          "name": "users_email_status_check",
+          "value": "\"users\".\"email_status\" IN ('OK', 'BOUNCED', 'COMPLAINED')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.settings": {
+      "name": "settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "smallint",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'GLIM Online Bible College'"
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Africa/Lagos'"
+        },
+        "staff_email_domains": {
+          "name": "staff_email_domains",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "youtube_channel_urls": {
+          "name": "youtube_channel_urls",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "statement_of_faith_url": {
+          "name": "statement_of_faith_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "settings_single_row": {
+          "name": "settings_single_row",
+          "value": "\"settings\".\"id\" = 1"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

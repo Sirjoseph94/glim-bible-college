@@ -38,9 +38,14 @@ export function RootLayout() {
               Profile
             </Link>
             {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "ACADEMIC_ADMIN") ? (
-              <Link to="/admin/academic" className="underline">
-                Academic
-              </Link>
+              <>
+                <Link to="/admin/academic" className="underline">
+                  Academic
+                </Link>
+                <Link to="/admin/calendar" className="underline">
+                  Calendar
+                </Link>
+              </>
             ) : null}
             {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
               <>
