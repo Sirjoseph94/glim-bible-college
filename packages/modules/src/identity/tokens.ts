@@ -20,3 +20,23 @@ export function safeEqual(a: string, b: string): boolean {
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
 }
+
+/** `base64url(json).hmac` — a value only this server could have produced. */
+export function signValue(payload: unknown, secret: string): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const mac = createHmac("sha256", secret).update(body).digest("base64url");
+  return `${body}.${mac}`;
+}
+
+/** The payload of a value from `signValue`, or null if it was altered. */
+export function verifySignedValue(value: string, secret: string): unknown {
+  const [body, mac] = value.split(".");
+  if (body === undefined || mac === undefined) return null;
+  const expected = createHmac("sha256", secret).update(body).digest("base64url");
+  if (!safeEqual(mac, expected)) return null;
+  try {
+    return JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}

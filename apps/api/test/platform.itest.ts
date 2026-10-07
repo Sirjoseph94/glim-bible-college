@@ -22,7 +22,11 @@ describe("public institution", () => {
   it("returns the institution name and timezone read from Postgres", async () => {
     const res = await t.request({ url: "/api/v1/public/institution" });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ name: "GLIM Online Bible College", timezone: "Africa/Lagos" });
+    expect(res.json()).toEqual({
+      name: "GLIM Online Bible College",
+      timezone: "Africa/Lagos",
+      googleSignIn: false,
+    });
   });
 });
 

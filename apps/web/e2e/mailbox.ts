@@ -9,3 +9,18 @@ export async function linkToken(to: string, kind: "invite" | "reset"): Promise<s
   if (token === undefined) throw new Error(`No ${kind} link in the email to ${to}`);
   return token;
 }
+
+/** Who the fake Google signs in next. */
+export async function nextGoogleSignIn(user: {
+  sub: string;
+  email: string;
+  name?: string;
+  hd?: string;
+}): Promise<void> {
+  const res = await fetch(`${MAILBOX}/google/next`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(user),
+  });
+  if (!res.ok) throw new Error("Could not queue the Google sign-in");
+}

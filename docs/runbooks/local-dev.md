@@ -38,3 +38,7 @@ Creates the user with the System Admin role and emails a 7-day invite link (loca
 ## End-to-end tests
 
 `pnpm test:e2e` builds the SPA, starts the API on :4173 against a fresh database (Testcontainers, or `TEST_POSTGRES_URL`), and runs Playwright on a mobile viewport. Emails go to an in-memory mailbox the tests read on :4174.
+
+## Google sign-in
+
+Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (a Google Cloud OAuth web client, TRD Appendix A.2) to enable "Continue with Google". The authorised redirect URI is `<APP_ORIGIN>/api/v1/auth/google/callback`. Without them, the button is hidden and `/auth/google/start` sends users back to the sign-in page. Tests and the e2e stack use `FakeOidcIssuer` (`packages/integrations/src/oidc/fake-issuer.ts`) instead of Google.

@@ -15,6 +15,8 @@ export const ENDPOINTS = [
   auth.forgotPassword,
   auth.resetPassword,
   auth.acceptInvite,
+  auth.googleStart,
+  auth.googleCallback,
   users.listUsers,
   users.inviteUser,
   users.getUser,

@@ -38,7 +38,9 @@ export class ResponseInterceptor implements NestInterceptor {
       .handle()
       .pipe(
         map((body: unknown) =>
-          spec.successStatus === 204 ? undefined : spec.response.parse(toWire(body)),
+          spec.successStatus === 204 || spec.successStatus === 302
+            ? undefined
+            : spec.response.parse(toWire(body)),
         ),
       );
   }

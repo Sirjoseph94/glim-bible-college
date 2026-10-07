@@ -26,7 +26,7 @@ export interface EndpointSpec {
   body?: z.ZodType;
   /** Responses are parsed through this schema, which strips fields the caller can't use. */
   response: z.ZodType;
-  successStatus?: 200 | 201 | 202 | 204;
+  successStatus?: 200 | 201 | 202 | 204 | 302;
   /** Requires `If-Match: "<version>"` for optimistic concurrency (§5.4). */
   ifMatch?: boolean;
   /** Requires an `Idempotency-Key` header (§5.4). */

@@ -24,6 +24,9 @@ export function RootLayout() {
             <Link to="/" className="underline">
               Home
             </Link>
+            <Link to="/profile" className="underline">
+              Profile
+            </Link>
             {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
               <>
                 <Link to="/admin/users" className="underline">

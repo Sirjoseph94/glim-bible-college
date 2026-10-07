@@ -10,6 +10,7 @@ import { createLogger } from "@glim/telemetry";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app";
 import { createMailer } from "@glim/integrations/mail/factory";
+import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 
 const { values } = parseArgs({ options: { email: { type: "string" }, name: { type: "string" } } });
 if (values.email === undefined || values.name === undefined) {
@@ -23,7 +24,15 @@ const boss = createBoss(config.db.url, { max: 1 });
 await boss.start();
 const db = new Db(createPool(config.db.url, 2), boss);
 const app = await NestFactory.createApplicationContext(
-  AppModule.forRoot({ config, db, boss, clock: systemClock, logger, mailer: createMailer(config) }),
+  AppModule.forRoot({
+    config,
+    db,
+    boss,
+    clock: systemClock,
+    logger,
+    mailer: createMailer(config),
+    identityProvider: createIdentityProvider(config),
+  }),
   { logger: false },
 );
 

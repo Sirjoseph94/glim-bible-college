@@ -22,6 +22,7 @@ import { ResponseInterceptor } from "./common/response.interceptor";
 import { helmetOptions } from "./common/security";
 import { BOSS } from "./common/tokens";
 import { AuthController } from "./http/identity/auth.controller";
+import { GoogleController } from "./http/identity/google.controller";
 import { AuditController } from "./http/audit/audit.controller";
 import { MeController } from "./http/identity/me.controller";
 import { UsersController } from "./http/users/users.controller";
@@ -47,6 +48,7 @@ export class AppModule {
         OpenApiController,
         HealthController,
         AuthController,
+        GoogleController,
         MeController,
         UsersController,
         AuditController,

@@ -12,7 +12,9 @@
   "dependencies": {
     "@glim/contracts": "workspace:*",
     "@glim/shared": "workspace:*",
-    "nodemailer": "10.0.15"
+    "jose": "6.2.12",
+    "nodemailer": "10.0.15",
+    "openid-client": "6.8.8"
   },
   "devDependencies": {
     "@types/nodemailer": "8.0.2"

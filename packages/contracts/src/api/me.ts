@@ -9,6 +9,8 @@ export const meSchema = z.object({
     id: z.uuid(),
     displayName: z.string(),
     email: z.string(),
+    /** Whether a Google account is linked (students need one before joining online, §8.1). */
+    googleLinked: z.boolean(),
     /** The viewer's IANA zone; the institution's when the user hasn't set one. */
     timezone: z.string(),
   }),

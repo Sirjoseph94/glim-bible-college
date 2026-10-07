@@ -10,8 +10,8 @@ export const institutionSchema = z.object({
 export const getInstitution = endpoint({
   method: "GET",
   path: "/public/institution",
-  summary: "Institution name and timezone",
+  summary: "Institution name and timezone, and whether Google sign-in is available",
   tag: "Public",
   auth: "public",
-  response: institutionSchema,
+  response: institutionSchema.extend({ googleSignIn: z.boolean() }),
 });

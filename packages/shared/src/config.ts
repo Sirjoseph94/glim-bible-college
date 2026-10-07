@@ -75,6 +75,7 @@ const envSchema = z.object({
 
   WORKER_ROLE: z.enum(WORKER_ROLES).default("all"),
 
+  GOOGLE_OIDC_ISSUER: z.url().default("https://accounts.google.com"),
   GOOGLE_OAUTH_CLIENT_ID: optionalText,
   GOOGLE_OAUTH_CLIENT_SECRET: optionalText,
 
@@ -127,7 +128,11 @@ export interface Config {
   };
   workerRole: WorkerRole;
   queueConcurrency: Partial<Record<QueueName, number>>;
-  google: { oauthClientId: string | undefined; oauthClientSecret: string | undefined };
+  google: {
+    oidcIssuer: string;
+    oauthClientId: string | undefined;
+    oauthClientSecret: string | undefined;
+  };
   videoHost: "youtube_link" | "youtube_api" | "fake";
   driveCleanupMode: "NONE" | "TRASH_AFTER_INGEST";
   storage: {
@@ -232,6 +237,7 @@ export function loadConfig(env: Env = process.env): Config {
     workerRole: e.WORKER_ROLE,
     queueConcurrency,
     google: {
+      oidcIssuer: e.GOOGLE_OIDC_ISSUER,
       oauthClientId: e.GOOGLE_OAUTH_CLIENT_ID,
       oauthClientSecret: e.GOOGLE_OAUTH_CLIENT_SECRET,
     },

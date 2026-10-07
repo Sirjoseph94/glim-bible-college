@@ -1,5 +1,14 @@
 export { AccountMailer } from "./account-mailer";
 export { AUTH_POLICY, AuthService, type SignedIn } from "./auth.service";
+export {
+  GOOGLE_FLOW_COOKIE,
+  GOOGLE_FLOW_LIFETIME_MS,
+  GoogleSignInService,
+  safeReturnTo,
+  type GoogleFailure,
+  type GoogleIntent,
+  type GoogleOutcome,
+} from "./google-sign-in.service";
 export { IdentityModule } from "./identity.module";
 export { MeService } from "./me.service";
 export {

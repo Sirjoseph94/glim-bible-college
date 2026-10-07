@@ -4,6 +4,7 @@ import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import { buildApp } from "./app";
 import { createMailer } from "@glim/integrations/mail/factory";
+import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 
 const config = loadConfig();
 const logger = createLogger({ service: "api", level: config.logLevel });
@@ -20,6 +21,7 @@ const app = await buildApp({
   clock: systemClock,
   logger,
   mailer: createMailer(config),
+  identityProvider: createIdentityProvider(config),
 });
 await app.listen(config.port, "0.0.0.0");
 logger.info({ port: config.port }, "api listening");

@@ -3,6 +3,7 @@ import { AuthorizationModule } from "@glim/modules/authorization";
 import { Module } from "@nestjs/common";
 import { AccountMailer } from "./account-mailer";
 import { AuthService } from "./auth.service";
+import { GoogleSignInService } from "./google-sign-in.service";
 import { MeService } from "./me.service";
 import { SessionService } from "./session.service";
 import { SettingsService } from "./settings.service";
@@ -19,6 +20,7 @@ const services = [
   StaffAccountsService,
   MeService,
   UserAdminService,
+  GoogleSignInService,
 ];
 
 @Module({ imports: [AuditModule, AuthorizationModule], providers: services, exports: services })

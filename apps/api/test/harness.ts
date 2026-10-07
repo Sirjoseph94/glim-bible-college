@@ -2,6 +2,8 @@ import "reflect-metadata";
 import { createBoss, createPool, Db } from "@glim/db";
 import { createTestDatabase, type TestDatabase } from "@glim/db/testing";
 import { MemoryMailer } from "@glim/integrations/mail/memory";
+import { DisabledIdentityProvider } from "@glim/integrations/oidc/openid";
+import type { IdentityProvider } from "@glim/integrations/oidc/port";
 import { TestClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -33,7 +35,9 @@ function nextAddress(): string {
 }
 
 /** Boots the real API against a fresh Postgres 18 database (spec: Seam 1). */
-export async function createTestApp(options: { staticDir?: string } = {}): Promise<TestApp> {
+export async function createTestApp(
+  options: { staticDir?: string; identityProvider?: IdentityProvider } = {},
+): Promise<TestApp> {
   const database: TestDatabase = await createTestDatabase(inject("glim").postgresAdminUrl);
   const config = loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" });
   const boss = createBoss(database.appUrl, { max: 2 });
@@ -47,6 +51,7 @@ export async function createTestApp(options: { staticDir?: string } = {}): Promi
     boss,
     clock,
     mailer,
+    identityProvider: options.identityProvider ?? new DisabledIdentityProvider(),
     logger: createLogger({ service: "api-test", level: "silent" }),
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });

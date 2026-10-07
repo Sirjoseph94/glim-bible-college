@@ -89,10 +89,12 @@ export function buildOpenApiDocument(endpoints: readonly EndpointSpec[] = ENDPOI
         [status]:
           status === "204"
             ? { description: "No content" }
-            : {
-                description: "OK",
-                content: { "application/json": { schema: schemaOf(spec.response, "output") } },
-              },
+            : status === "302"
+              ? { description: "Redirect", headers: { location: { schema: { type: "string" } } } }
+              : {
+                  description: "OK",
+                  content: { "application/json": { schema: schemaOf(spec.response, "output") } },
+                },
         default: {
           description: "Error",
           content: { "application/json": { schema: errorEnvelope } },

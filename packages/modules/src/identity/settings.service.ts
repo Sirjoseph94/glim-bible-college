@@ -20,4 +20,13 @@ export class SettingsService {
     if (row === undefined) throw new Error("The settings row is missing; run the migrations.");
     return row;
   }
+
+  /** Google `hd` domains staff must sign in from; empty means no restriction (§8.1). */
+  async getStaffEmailDomains(): Promise<string[]> {
+    const [row] = await this.db.read
+      .select({ domains: schema.settings.staffEmailDomains })
+      .from(schema.settings)
+      .where(eq(schema.settings.id, 1));
+    return (row?.domains ?? []).map((d) => d.toLowerCase());
+  }
 }

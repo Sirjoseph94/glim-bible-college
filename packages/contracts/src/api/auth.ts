@@ -65,3 +65,42 @@ export const acceptInvite = endpoint({
   response: meSchema,
   successStatus: 200,
 });
+
+/** Errors the Google callback reports back to the SPA as `?error=` on the page it returns to. */
+export const GOOGLE_FAILURES = [
+  "GOOGLE_UNAVAILABLE",
+  "GOOGLE_SIGN_IN_FAILED",
+  "GOOGLE_EMAIL_UNVERIFIED",
+  "ACCOUNT_NOT_FOUND",
+  "GOOGLE_DOMAIN_NOT_ALLOWED",
+  "GOOGLE_ALREADY_LINKED",
+] as const;
+
+export const googleStart = endpoint({
+  method: "GET",
+  path: "/auth/google/start",
+  summary: "Redirect to Google to sign in (or, signed in, to link a Google account)",
+  tag: "Auth",
+  auth: "public",
+  rateLimit: "auth",
+  query: z.object({
+    intent: z.enum(["signin", "link"]).default("signin"),
+    returnTo: z.string().max(512).optional(),
+  }),
+  response: z.object({}),
+  successStatus: 302,
+});
+
+export const googleCallback = endpoint({
+  method: "GET",
+  path: "/auth/google/callback",
+  summary: "Google's redirect back: completes sign-in or linking, then redirects into the app",
+  tag: "Auth",
+  auth: "public",
+  rateLimit: "auth",
+  query: z
+    .object({ code: z.string().max(2048).optional(), state: z.string().max(512).optional() })
+    .loose(),
+  response: z.object({}),
+  successStatus: 302,
+});

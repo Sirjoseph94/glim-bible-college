@@ -29,11 +29,29 @@ const signedOutOnly = async ({ context }: { context: RouterContext }) => {
   if ((await context.queryClient.query(meQuery)) !== null) throw redirect({ to: "/" });
 };
 
+/** `?error=` from the Google callback (contracts: GOOGLE_FAILURES), shown on arrival. */
+const errorSearch = (search: Record<string, unknown>): { error?: string } =>
+  typeof search.error === "string" ? { error: search.error } : {};
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
+  validateSearch: errorSearch,
   beforeLoad: signedOutOnly,
   component: lazyRouteComponent(() => import("./routes/login"), "LoginPage"),
+});
+
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/profile",
+  validateSearch: (search: Record<string, unknown>): { error?: string; linked?: string } => ({
+    ...errorSearch(search),
+    ...(typeof search.linked === "string" ? { linked: search.linked } : {}),
+  }),
+  beforeLoad: async ({ context }) => {
+    if ((await context.queryClient.query(meQuery)) === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/profile"), "ProfilePage"),
 });
 
 const forgotRoute = createRoute({
@@ -90,6 +108,7 @@ const routeTree = rootRoute.addChildren([
   forgotRoute,
   resetRoute,
   inviteRoute,
+  profileRoute,
   adminUsersRoute,
   adminUserRoute,
   adminAuditRoute,

@@ -67,7 +67,7 @@ module.exports = {
       to: {
         path: "^packages/integrations/",
         pathNot:
-          "^packages/integrations/src/(live-provider|video-host|storage|mail|pdf)/port\\.ts$",
+          "^packages/integrations/src/(live-provider|video-host|storage|mail|pdf|oidc)/port\\.ts$",
       },
     },
     {
