@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { bytea, citext, enumCheck, inet, std, stdRo, tstz } from "./columns";
 
 /** Owner: identity (TRD §6.2). */
@@ -95,3 +104,23 @@ export const authTokens = pgTable(
 );
 
 export type UserRow = typeof users.$inferSelect;
+
+/** Owner: identity. Versioned and append-only: a change is a new row (§6.2). */
+export const policies = pgTable(
+  "policies",
+  {
+    ...stdRo(),
+    policyType: text("policy_type").notNull(),
+    scopeType: text("scope_type").notNull().default("INSTITUTION"),
+    scopeId: uuid("scope_id"),
+    policyVersion: integer("policy_version").notNull(),
+    config: jsonb().notNull(),
+    effectiveFrom: tstz("effective_from").notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (t) => [
+    enumCheck("policies.policy_type", t.policyType),
+    enumCheck("policies.scope_type", t.scopeType),
+    check("policies_scope_check", sql`(${t.scopeType} = 'INSTITUTION') = (${t.scopeId} IS NULL)`),
+  ],
+);

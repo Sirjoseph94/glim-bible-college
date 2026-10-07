@@ -50,6 +50,20 @@
       "when": 1791348688574,
       "tag": "0006_wp01_auth_tokens_fk_restrict",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791360378207,
+      "tag": "0007_wp03_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791360378803,
+      "tag": "0008_wp03_policies_version_index",
+      "breakpoints": true
     }
   ]
 }

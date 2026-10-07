@@ -1,22 +1,19 @@
 import type { users } from "@glim/contracts";
-import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
-import { meQuery } from "../api/session";
 import { STAFF_ROLE_LABELS, userQuery, type StaffRole } from "../api/users";
 import { Alert, Field, formText, SubmitButton } from "../components/form";
-import { formatTimestamp } from "../components/time";
+import { Time } from "../components/time";
 import { useSubmit } from "../components/use-submit";
 
 export function AdminUserPage() {
   const { userId } = useParams({ from: "/admin/users/$userId" });
-  const { data: me } = useSuspenseQuery(meQuery);
   const user = useQuery(userQuery(userId));
   const queryClient = useQueryClient();
   const { busy, error, run } = useSubmit();
   const [notice, setNotice] = useState<string | null>(null);
-  const timezone = me?.user.timezone ?? "Africa/Lagos";
 
   if (user.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
   if (user.isError) return <Alert tone="error">{user.error.message}</Alert>;
@@ -39,8 +36,7 @@ export function AdminUserPage() {
       <div>
         <h2 className="text-xl font-semibold">{u.displayName}</h2>
         <p className="text-slate-600">
-          {u.email} · {u.status.toLowerCase()} · last signed in{" "}
-          {formatTimestamp(u.lastLoginAt, timezone)}
+          {u.email} · {u.status.toLowerCase()} · last signed in <Time value={u.lastLoginAt} />
         </p>
       </div>
       {error ? <Alert tone="error">{error}</Alert> : null}
@@ -54,7 +50,7 @@ export function AdminUserPage() {
               <span>
                 {STAFF_ROLE_LABELS[r.role]}{" "}
                 <span className="text-xs text-slate-500">
-                  since {formatTimestamp(r.grantedAt, timezone)}
+                  since <Time value={r.grantedAt} withDate />
                 </span>
               </span>
               <button

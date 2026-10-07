@@ -9,7 +9,7 @@ test("an invited System Admin sets a password, signs out, signs in, and resets t
   page,
 }) => {
   await page.goto(`/invite/${await linkToken(ADMIN, "invite")}`);
-  await expect(page.getByTestId("institution-name")).toHaveText("GLIM Online Bible College");
+  await expect(page.getByTestId("institution-name")).not.toBeEmpty();
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();

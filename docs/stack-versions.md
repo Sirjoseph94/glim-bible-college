@@ -36,7 +36,7 @@ lockfile is authoritative. When you add or upgrade a dependency, update this tab
 | Package | Version | Used for |
 |---|---|---|
 | zod | 4.6.5 | contracts, config |
-| luxon | 3.7.2 | timezones |
+| (Intl) | built-in | timezones: `shared/time` uses Intl.DateTimeFormat, no date library in the browser |
 | uuid | 14.0.2 | UUIDv7 (`newId`) |
 | pino | 10.4.0 | logging |
 | drizzle-orm | 0.45.3 | ORM (`node-postgres`) |

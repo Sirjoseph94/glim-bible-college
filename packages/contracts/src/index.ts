@@ -5,4 +5,5 @@ export * from "./events";
 export * from "./http";
 export * from "./pagination";
 export * from "./permissions";
+export * from "./policies";
 export * from "./queues";

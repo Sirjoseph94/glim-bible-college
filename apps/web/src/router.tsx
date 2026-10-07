@@ -7,6 +7,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { meQuery } from "./api/session";
+import { LoginPage } from "./routes/login";
 import { RootLayout } from "./routes/root";
 
 interface RouterContext {
@@ -38,7 +39,8 @@ const loginRoute = createRoute({
   path: "/login",
   validateSearch: errorSearch,
   beforeLoad: signedOutOnly,
-  component: lazyRouteComponent(() => import("./routes/login"), "LoginPage"),
+  // The sign-in page is the first screen, so it ships in the entry chunk (TRD §18.3).
+  component: LoginPage,
 });
 
 const profileRoute = createRoute({
@@ -102,6 +104,13 @@ const adminAuditRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-audit"), "AdminAuditPage"),
 });
 
+const adminSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/settings",
+  beforeLoad: requireRole("SYSTEM_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-settings"), "AdminSettingsPage"),
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
@@ -112,6 +121,7 @@ const routeTree = rootRoute.addChildren([
   adminUsersRoute,
   adminUserRoute,
   adminAuditRoute,
+  adminSettingsRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

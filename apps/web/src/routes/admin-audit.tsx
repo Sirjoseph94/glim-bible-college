@@ -1,16 +1,13 @@
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { meQuery } from "../api/session";
 import { auditQuery } from "../api/users";
 import { Alert } from "../components/form";
-import { formatTimestamp } from "../components/time";
+import { Time } from "../components/time";
 
 export function AdminAuditPage() {
-  const { data: me } = useSuspenseQuery(meQuery);
   const [cursors, setCursors] = useState<string[]>([]);
   const cursor = cursors.at(-1);
   const log = useQuery(auditQuery(cursor === undefined ? {} : { cursor }));
-  const timezone = me?.user.timezone ?? "Africa/Lagos";
 
   return (
     <div className="space-y-4">
@@ -27,7 +24,7 @@ export function AdminAuditPage() {
                 <div className="flex flex-wrap justify-between gap-2">
                   <span className="font-medium">{entry.action}</span>
                   <span className="text-slate-500">
-                    {formatTimestamp(entry.createdAt, timezone)}
+                    <Time value={entry.createdAt} />
                   </span>
                 </div>
                 <div className="text-slate-600">

@@ -31,3 +31,12 @@ export async function signOut(queryClient: QueryClient): Promise<void> {
   setCsrfToken(null);
   queryClient.setQueryData(meQuery.queryKey, null);
 }
+
+/** Saves the user's name or timezone and refreshes what the app knows about them. */
+export async function updateMe(
+  queryClient: QueryClient,
+  change: { displayName?: string; timezone?: string },
+): Promise<void> {
+  const result = await api<typeof me.updateMe>("PATCH", "/me", { body: change });
+  queryClient.setQueryData(meQuery.queryKey, result);
+}

@@ -1,8 +1,10 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
-import { meQuery } from "../api/session";
-import { Alert } from "../components/form";
+import { meQuery, updateMe } from "../api/session";
+import { Alert, formText, SubmitButton } from "../components/form";
+import { Time } from "../components/time";
+import { useSubmit } from "../components/use-submit";
 import { GOOGLE_ERRORS, GoogleButton } from "../components/google";
 
 export function ProfilePage() {
@@ -25,9 +27,8 @@ export function ProfilePage() {
         <dd>{me.user.displayName}</dd>
         <dt className="text-slate-600">Email</dt>
         <dd>{me.user.email}</dd>
-        <dt className="text-slate-600">Timezone</dt>
-        <dd>{me.user.timezone}</dd>
       </dl>
+      <TimezoneForm current={me.user.timezone} />
       <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
         <h3 className="font-semibold">Google account</h3>
         {me.user.googleLinked ? (
@@ -49,5 +50,52 @@ export function ProfilePage() {
         )}
       </section>
     </div>
+  );
+}
+
+/** All IANA zones the browser knows, for the picker. */
+function knownZones(): string[] {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    return ["Africa/Lagos", "Europe/London", "America/New_York"];
+  }
+}
+
+function TimezoneForm({ current }: { current: string }) {
+  const queryClient = useQueryClient();
+  const { busy, error, run } = useSubmit();
+  return (
+    <form
+      className="space-y-2 rounded border border-slate-200 bg-white p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const timezone = formText(new FormData(event.currentTarget), "timezone");
+        void run(() => updateMe(queryClient, { timezone }));
+      }}
+    >
+      <label htmlFor="timezone" className="block font-semibold">
+        Your timezone
+      </label>
+      <p className="text-sm text-slate-600">
+        Times are shown in this zone, with Lagos time alongside when it differs. Right now it's{" "}
+        <Time value={new Date().toISOString()} withDate={false} />.
+      </p>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <input
+        id="timezone"
+        name="timezone"
+        list="timezones"
+        defaultValue={current}
+        className="block w-full rounded border border-slate-300 px-3 py-2"
+        required
+      />
+      <datalist id="timezones">
+        {knownZones().map((zone) => (
+          <option key={zone} value={zone} />
+        ))}
+      </datalist>
+      <SubmitButton busy={busy}>Save timezone</SubmitButton>
+    </form>
   );
 }

@@ -2,7 +2,7 @@ import type { EnumValue } from "@glim/contracts";
 import { Db, schema, type Database } from "@glim/db";
 import { domainError, err, ok, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export type UserStatus = EnumValue<"users.status">;
 
@@ -37,6 +37,24 @@ export class UserService {
     if (row === undefined)
       return err(domainError("CONFLICT", "A user with this email already exists."));
     return ok(toProfile(row));
+  }
+
+  /** A user changes their own display name or timezone (§5.1: set from the browser on first sign-in). */
+  async updateOwnProfile(
+    id: string,
+    change: { displayName?: string | undefined; timezone?: string | undefined },
+  ): Promise<void> {
+    if (change.displayName === undefined && change.timezone === undefined) return;
+    await this.db.withTx(({ db }) =>
+      db
+        .update(schema.users)
+        .set({
+          ...(change.displayName === undefined ? {} : { displayName: change.displayName }),
+          ...(change.timezone === undefined ? {} : { timezone: change.timezone }),
+          version: sql`${schema.users.version} + 1`,
+        })
+        .where(eq(schema.users.id, id)),
+    );
   }
 
   async findById(id: string): Promise<UserProfile | null> {

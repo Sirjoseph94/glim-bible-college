@@ -16,3 +16,5 @@ Where the build departs from `docs/TRD.md` on purpose, the reason is recorded he
 | Job retention (§17.1) | Archive after 7 days, delete after 30 | `deleteAfterSeconds` 30 days | pg-boss 12 has no archive table. |
 | `meeting-tick` (§17.2) | A cron with no queue in §17.1 | Queue `meeting.tick` | pg-boss schedules jobs onto a queue. Cron is registered only for queues that have a handler. |
 | Mail (§4.4) | `@sendgrid/mail` | SendGrid v3 REST over `fetch` | One request type; no SDK needed. |
+| Policies (§6.2) | Eight policy types | v1 edits ATTENDANCE, JOIN_WINDOW, RECORDING, NOTIFICATION, ADMISSIONS and GRADING_DEFAULTS; schemas and defaults in `packages/contracts/src/policies.ts` | GOOGLE_MEET and RETENTION belong to the integration slice. A type with no saved version uses its defaults (version 0). |
+| Time library (§4.4) | `luxon` | `Intl.DateTimeFormat` in `packages/shared/src/time.ts` (browser-safe subpath `@glim/shared/time`) | Keeps the browser bundle small. Server-side recurrence (ticket 24) brings its own library. |

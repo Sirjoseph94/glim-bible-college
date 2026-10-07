@@ -1,13 +1,23 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
-import { meQuery, signOut } from "../api/session";
+import { useEffect } from "react";
+import { meQuery, signOut, updateMe } from "../api/session";
+import { browserTimeZone } from "../components/time";
 
 export function RootLayout() {
   const institution = useQuery(institutionQuery);
   const me = useQuery(meQuery);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  // The first time someone signs in, adopt the browser's timezone (§5.1); they can change it later.
+  const needsTimezone = me.data !== undefined && me.data !== null && !me.data.user.timezoneSet;
+  useEffect(() => {
+    const zone = browserTimeZone();
+    if (needsTimezone && zone !== null)
+      void updateMe(queryClient, { timezone: zone }).catch(() => undefined);
+  }, [needsTimezone, queryClient]);
 
   return (
     <div className="min-h-dvh bg-slate-50 font-sans text-slate-900">
@@ -34,6 +44,9 @@ export function RootLayout() {
                 </Link>
                 <Link to="/admin/audit" className="underline">
                   Audit log
+                </Link>
+                <Link to="/admin/settings" className="underline">
+                  Settings
                 </Link>
               </>
             ) : null}

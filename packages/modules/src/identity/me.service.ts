@@ -33,6 +33,7 @@ export class MeService {
         googleLinked,
         // Viewers without their own zone see the institution's (§5.1).
         timezone: user.timezone ?? institution.timezone,
+        timezoneSet: user.timezone !== null,
       },
       institution,
       roles: { staff, isLecturer: false, isStudent: false, isApplicant: false },

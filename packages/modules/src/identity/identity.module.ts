@@ -5,6 +5,7 @@ import { AccountMailer } from "./account-mailer";
 import { AuthService } from "./auth.service";
 import { GoogleSignInService } from "./google-sign-in.service";
 import { MeService } from "./me.service";
+import { PolicyService } from "./policy.service";
 import { SessionService } from "./session.service";
 import { SettingsService } from "./settings.service";
 import { StaffAccountsService } from "./staff-accounts.service";
@@ -21,6 +22,7 @@ const services = [
   MeService,
   UserAdminService,
   GoogleSignInService,
+  PolicyService,
 ];
 
 @Module({ imports: [AuditModule, AuthorizationModule], providers: services, exports: services })

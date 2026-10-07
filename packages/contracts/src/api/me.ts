@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { STAFF_ROLES } from "../enums";
 import { endpoint } from "../http";
+import { timeZone } from "./settings";
 import { institutionSchema } from "./platform";
 
 /** `GET /me` (§8.4): navigation data only; every action is re-authorized on the server (INV-1). */
@@ -13,6 +14,8 @@ export const meSchema = z.object({
     googleLinked: z.boolean(),
     /** The viewer's IANA zone; the institution's when the user hasn't set one. */
     timezone: z.string(),
+    /** False until the user (or their browser, on first sign-in) has chosen a zone (§5.1). */
+    timezoneSet: z.boolean(),
   }),
   institution: institutionSchema,
   roles: z.object({
@@ -33,5 +36,20 @@ export const getMe = endpoint({
   summary: "The signed-in user, their roles and CSRF token",
   tag: "Me",
   auth: "session",
+  response: meSchema,
+});
+
+export const updateMe = endpoint({
+  method: "PATCH",
+  path: "/me",
+  summary: "Change your own name or timezone",
+  tag: "Me",
+  auth: "session",
+  body: z
+    .object({
+      displayName: z.string().trim().min(1).max(120).optional(),
+      timezone: timeZone.optional(),
+    })
+    .strict(),
   response: meSchema,
 });

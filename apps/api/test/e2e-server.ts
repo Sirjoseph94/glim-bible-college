@@ -55,6 +55,11 @@ await bootstrapSystemAdmin(app, E2E_ADMIN);
 for (const staff of [
   { email: "e2e-ops@glim.test", displayName: "Obi Ops", roles: ["SYSTEM_ADMIN" as const] },
   { email: "e2e-google@glim.test", displayName: "Gloria Google", roles: ["REGISTRAR" as const] },
+  {
+    email: "e2e-settings@glim.test",
+    displayName: "Sade Settings",
+    roles: ["SYSTEM_ADMIN" as const],
+  },
 ]) {
   await app.get(StaffAccountsService).inviteStaff(staff, SYSTEM_ACTOR);
 }

@@ -73,6 +73,22 @@ const SAMPLES: Record<string, Sample> = {
     };
   },
   "GET /audit-logs": () => Promise.resolve({ url: "/api/v1/audit-logs" }),
+  "GET /settings": () => Promise.resolve({ url: "/api/v1/settings" }),
+  // A stale If-Match keeps allowed callers from changing shared state; they get 412, not 403/404.
+  "PATCH /settings": () =>
+    Promise.resolve({
+      url: "/api/v1/settings",
+      payload: { name: "x" },
+      headers: { "if-match": '"999"' },
+    }),
+  "GET /policies": () => Promise.resolve({ url: "/api/v1/policies" }),
+  "GET /policies/:type": () => Promise.resolve({ url: "/api/v1/policies/NOTIFICATION" }),
+  "PUT /policies/:type": () =>
+    Promise.resolve({
+      url: "/api/v1/policies/NOTIFICATION",
+      payload: { config: {} },
+      headers: { "if-match": '"999"' },
+    }),
 };
 
 const key = (e: EndpointSpec) => `${e.method} ${e.path}`;
