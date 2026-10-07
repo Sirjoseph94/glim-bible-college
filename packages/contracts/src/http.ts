@@ -36,7 +36,7 @@ export interface EndpointSpec {
 }
 
 /** Resource types whose owning module registers a ResourceContextLoader (§7.2). */
-export type ResourceType = "user";
+export type ResourceType = "user" | "programme" | "course" | "curriculum";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

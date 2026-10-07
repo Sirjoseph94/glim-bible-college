@@ -1,5 +1,8 @@
 import { ENDPOINTS, type EndpointSpec } from "@glim/contracts";
+import { CoursesService, CurriculaService, ProgrammesService } from "@glim/modules/academic";
+import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { AuthorizationService } from "@glim/modules/authorization";
+import { unwrap } from "@glim/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "./harness";
 import {
@@ -89,7 +92,94 @@ const SAMPLES: Record<string, Sample> = {
       payload: { config: {} },
       headers: { "if-match": '"999"' },
     }),
+  "GET /programmes": () => Promise.resolve({ url: "/api/v1/programmes" }),
+  "POST /programmes": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/programmes",
+      payload: {
+        code: `P${String(n)}`,
+        name: "Programme",
+        awardType: "CERTIFICATE",
+        durationSemesters: 2,
+        levels: 1,
+      },
+    });
+  },
+  "PATCH /programmes/:id": async (t) => ({
+    url: `/api/v1/programmes/${(await fixtures(t)).programmeId}`,
+    payload: { name: "Renamed" },
+    headers: { "if-match": '"999"' },
+  }),
+  "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
+  "POST /courses": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/courses",
+      payload: { code: `C${String(n)}`, title: "Course", credits: "2" },
+    });
+  },
+  "PATCH /courses/:id": async (t) => ({
+    url: `/api/v1/courses/${(await fixtures(t)).courseId}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+  }),
+  "GET /curricula": () => Promise.resolve({ url: "/api/v1/curricula" }),
+  "GET /curricula/:id": async (t) => ({
+    url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}`,
+  }),
+  "POST /curricula": async (t) => ({
+    url: "/api/v1/curricula",
+    payload: { programmeId: (await fixtures(t)).programmeId, effectiveFrom: "2026-09-01" },
+  }),
+  "PATCH /curricula/:id": async (t) => ({
+    url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}`,
+    payload: { minElectiveCredits: "1" },
+    headers: { "if-match": '"999"' },
+  }),
+  "PUT /curricula/:id/courses": async (t) => ({
+    url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/courses`,
+    payload: { placements: [] },
+    headers: { "if-match": '"999"' },
+  }),
+  // An empty draft can't be activated (409), so allowed callers never change shared state.
+  "POST /curricula/:id/activate": async (t) => ({
+    url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/activate`,
+  }),
+  "POST /curricula/:id/clone": async (t) => ({
+    url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
+    payload: { effectiveFrom: "2027-09-01" },
+  }),
 };
+
+let shared: { programmeId: string; courseId: string; curriculumId: string } | undefined;
+/** One programme, course and (empty, draft) curriculum for the academic samples. */
+async function fixtures(t: TestApp) {
+  if (shared !== undefined) return shared;
+  const programme = unwrap(
+    await t.app
+      .get(ProgrammesService)
+      .create(
+        { code: "AUTHZ", name: "Authz", awardType: "DIPLOMA", durationSemesters: 4, levels: 2 },
+        SYSTEM_ACTOR,
+      ),
+  );
+  const course = unwrap(
+    await t.app
+      .get(CoursesService)
+      .create({ code: "AUTHZ1", title: "Authz", description: null, credits: "2.0" }, SYSTEM_ACTOR),
+  );
+  const curriculum = unwrap(
+    await t.app
+      .get(CurriculaService)
+      .create(
+        { programmeId: programme.id, effectiveFrom: "2026-09-01", minElectiveCredits: "0.0" },
+        SYSTEM_ACTOR,
+      ),
+  );
+  shared = { programmeId: programme.id, courseId: course.id, curriculumId: curriculum.id };
+  return shared;
+}
 
 const key = (e: EndpointSpec) => `${e.method} ${e.path}`;
 const protectedEndpoints = (ENDPOINTS as readonly EndpointSpec[]).filter(

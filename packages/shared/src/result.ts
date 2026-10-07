@@ -66,3 +66,6 @@ export function unwrap<T>(result: Result<T, DomainError>): T {
     ...(headers === undefined ? {} : { headers }),
   });
 }
+
+/** A partial update as parsed from a request: every field optional, and `undefined` means "leave it". */
+export type Patch<T> = { [K in keyof T]?: T[K] | undefined };

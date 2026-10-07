@@ -64,6 +64,13 @@
       "when": 1791360378803,
       "tag": "0008_wp03_policies_version_index",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791361397536,
+      "tag": "0009_wp02_programmes_courses_curricula",
+      "breakpoints": true
     }
   ]
 }

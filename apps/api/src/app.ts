@@ -5,6 +5,7 @@ import fastifyCookie from "@fastify/cookie";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
+import { AcademicModule } from "@glim/modules/academic";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule, SESSION_COOKIE, SessionService } from "@glim/modules/identity";
@@ -23,6 +24,7 @@ import { helmetOptions } from "./common/security";
 import { BOSS } from "./common/tokens";
 import { AuthController } from "./http/identity/auth.controller";
 import { GoogleController } from "./http/identity/google.controller";
+import { AcademicController } from "./http/academic/academic.controller";
 import { AuditController } from "./http/audit/audit.controller";
 import { MeController } from "./http/identity/me.controller";
 import { SettingsController } from "./http/settings/settings.controller";
@@ -43,7 +45,13 @@ export class AppModule {
   static forRoot(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      imports: [PlatformModule.forRoot(deps), AuditModule, AuthorizationModule, IdentityModule],
+      imports: [
+        PlatformModule.forRoot(deps),
+        AuditModule,
+        AuthorizationModule,
+        IdentityModule,
+        AcademicModule,
+      ],
       controllers: [
         InstitutionController,
         OpenApiController,
@@ -54,6 +62,7 @@ export class AppModule {
         UsersController,
         AuditController,
         SettingsController,
+        AcademicController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

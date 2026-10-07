@@ -62,6 +62,11 @@ for (const staff of [
     displayName: "Sade Settings",
     roles: ["SYSTEM_ADMIN" as const],
   },
+  {
+    email: "e2e-academic@glim.test",
+    displayName: "Ade Academic",
+    roles: ["ACADEMIC_ADMIN" as const],
+  },
 ]) {
   await app.get(StaffAccountsService).inviteStaff(staff, SYSTEM_ACTOR);
 }

@@ -76,11 +76,11 @@ const inviteRoute = createRoute({
 
 /** Staff screens: the server authorizes every call; this only keeps the UI tidy (INV-1). */
 const requireRole =
-  (role: string) =>
+  (...roles: string[]) =>
   async ({ context }: { context: RouterContext }) => {
     const me = await context.queryClient.query(meQuery);
     if (me === null) throw redirect({ to: "/login" });
-    if (!(me.roles.staff as readonly string[]).includes(role)) throw redirect({ to: "/" });
+    if (!me.roles.staff.some((r) => roles.includes(r))) throw redirect({ to: "/" });
   };
 
 const adminUsersRoute = createRoute({
@@ -111,6 +111,20 @@ const adminSettingsRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-settings"), "AdminSettingsPage"),
 });
 
+const adminAcademicRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/academic",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-academic"), "AdminAcademicPage"),
+});
+
+const adminCurriculumRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/curricula/$curriculumId",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-curriculum"), "AdminCurriculumPage"),
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
@@ -122,6 +136,8 @@ const routeTree = rootRoute.addChildren([
   adminUserRoute,
   adminAuditRoute,
   adminSettingsRoute,
+  adminAcademicRoute,
+  adminCurriculumRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

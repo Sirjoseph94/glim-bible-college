@@ -21,7 +21,7 @@ export function RootLayout() {
 
   return (
     <div className="min-h-dvh bg-slate-50 font-sans text-slate-900">
-      <header className="flex items-center justify-between gap-4 bg-brand px-4 py-3 text-white">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-brand px-4 py-3 text-white">
         {institution.data ? (
           <h1 className="text-lg font-semibold" data-testid="institution-name">
             {institution.data.name}
@@ -30,13 +30,18 @@ export function RootLayout() {
           <div className="h-7 w-56 animate-pulse rounded bg-white/20" aria-label="Loading" />
         )}
         {me.data ? (
-          <nav className="flex items-center gap-3 text-sm">
+          <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <Link to="/" className="underline">
               Home
             </Link>
             <Link to="/profile" className="underline">
               Profile
             </Link>
+            {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "ACADEMIC_ADMIN") ? (
+              <Link to="/admin/academic" className="underline">
+                Academic
+              </Link>
+            ) : null}
             {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
               <>
                 <Link to="/admin/users" className="underline">

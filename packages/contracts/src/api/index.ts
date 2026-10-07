@@ -1,3 +1,4 @@
+import * as academic from "./academic";
 import * as audit from "./audit";
 import * as auth from "./auth";
 import * as me from "./me";
@@ -5,7 +6,7 @@ import * as platform from "./platform";
 import * as settings from "./settings";
 import * as users from "./users";
 
-export { audit, auth, me, platform, settings, users };
+export { academic, audit, auth, me, platform, settings, users };
 
 /** Every endpoint, for the OpenAPI document and the route-coverage test. */
 export const ENDPOINTS = [
@@ -33,7 +34,21 @@ export const ENDPOINTS = [
   settings.listPolicies,
   settings.getPolicy,
   settings.putPolicy,
+  academic.listProgrammes,
+  academic.createProgramme,
+  academic.updateProgramme,
+  academic.listCourses,
+  academic.createCourse,
+  academic.updateCourse,
+  academic.listCurricula,
+  academic.getCurriculum,
+  academic.createCurriculum,
+  academic.updateCurriculum,
+  academic.putPlacements,
+  academic.activateCurriculum,
+  academic.cloneCurriculum,
 ] as const;
+export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { AuditLogItem } from "./audit";
 export type { Me } from "./me";
 export type { PolicyView, Settings } from "./settings";
