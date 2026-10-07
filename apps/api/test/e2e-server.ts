@@ -7,6 +7,7 @@ import { createTestDatabase, prepareTemplate } from "@glim/db/testing";
 import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
+import { createObjectStorage } from "@glim/integrations/storage/factory";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock } from "@glim/shared";
@@ -48,6 +49,7 @@ const app = await buildApp({
     clientSecret: google.clientSecret,
     allowHttp: true,
   }),
+  objectStorage: createObjectStorage(config),
   staticDir: fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });
 await bootstrapSystemAdmin(app, E2E_ADMIN);

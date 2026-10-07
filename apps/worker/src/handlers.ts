@@ -1,5 +1,6 @@
 import type { DomainEvent, QueueName } from "@glim/contracts";
 import { SessionService } from "@glim/modules/identity";
+import { BackupService } from "@glim/modules/ops";
 import type { INestApplicationContext } from "@nestjs/common";
 import type { Job } from "pg-boss";
 import { createDispatcher, type SubscriberRegistry } from "./subscribers";
@@ -16,8 +17,10 @@ export interface HandlerDeps {
 export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const dispatch = createDispatcher(deps.subscribers);
   const sessions = deps.context.get(SessionService);
+  const backup = deps.context.get(BackupService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
     "auth.session-cleanup": () => sessions.deleteEnded(),
+    "db.logical-backup": () => backup.run(),
   };
 }

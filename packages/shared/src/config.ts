@@ -36,6 +36,7 @@ const REQUIRED_IN_PRODUCTION = [
   "STORAGE_ACCESS_KEY",
   "STORAGE_SECRET_KEY",
   "MAIL_FROM",
+  "BACKUP_AGE_RECIPIENT",
   "GOOGLE_OAUTH_CLIENT_ID",
   "GOOGLE_OAUTH_CLIENT_SECRET",
 ] as const;
@@ -98,6 +99,8 @@ const envSchema = z.object({
   SESSION_SECRET: optionalText,
   CSRF_SECRET: optionalText,
   BACKUP_AGE_RECIPIENT: optionalText,
+  /** The pg_dump binary for the weekly logical backup; must match the server's major version (18). */
+  PG_DUMP_PATH: z.string().min(1).default("pg_dump"),
 
   TEST_POSTGRES_URL: optionalText,
   TEST_S3_ENDPOINT: optionalText,
@@ -151,7 +154,7 @@ export interface Config {
     smtpUrl: string | undefined;
   };
   auth: { sessionSecret: string; csrfSecret: string };
-  backupAgeRecipient: string | undefined;
+  backup: { ageRecipient: string | undefined; pgDumpPath: string };
   features: { directUpload: boolean; phoneDialIn: boolean };
   /** Test harness overrides: use an existing server instead of starting Testcontainers. */
   testing: { postgresUrl: string | undefined; s3Endpoint: string | undefined };
@@ -259,7 +262,7 @@ export function loadConfig(env: Env = process.env): Config {
       smtpUrl: e.SMTP_URL ?? (production ? undefined : DEV.SMTP_URL),
     },
     auth: { sessionSecret: pick("SESSION_SECRET"), csrfSecret: pick("CSRF_SECRET") },
-    backupAgeRecipient: e.BACKUP_AGE_RECIPIENT,
+    backup: { ageRecipient: e.BACKUP_AGE_RECIPIENT, pgDumpPath: e.PG_DUMP_PATH },
     features: { directUpload: e.FEATURE_DIRECT_UPLOAD, phoneDialIn: e.FEATURE_PHONE_DIAL_IN },
     testing: { postgresUrl: e.TEST_POSTGRES_URL, s3Endpoint: e.TEST_S3_ENDPOINT },
   };

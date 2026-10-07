@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/test-results
+**/playwright-report
+apps/api/static
+.git
+.scratch
+.agents
+.claude
+docs
+.env
+.env.*

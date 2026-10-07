@@ -19,6 +19,7 @@ const production = {
   MAIL_FROM: "GLIM Bible College <no-reply@glim.edu.ng>",
   GOOGLE_OAUTH_CLIENT_ID: "client.apps.googleusercontent.com",
   GOOGLE_OAUTH_CLIENT_SECRET: "google-secret",
+  BACKUP_AGE_RECIPIENT: "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq",
 };
 
 describe("loadConfig", () => {

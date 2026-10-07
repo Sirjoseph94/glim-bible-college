@@ -2,10 +2,13 @@ import "reflect-metadata";
 import type { Db } from "@glim/db";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
+import { createObjectStorage } from "@glim/integrations/storage/factory";
+import type { ObjectStorage } from "@glim/integrations/storage/port";
 import type { Mailer } from "@glim/integrations/mail/port";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
+import { OpsModule } from "@glim/modules/ops";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
 import type { Clock } from "@glim/shared";
 import { loadConfig, type Config } from "@glim/shared/config";
@@ -18,7 +21,13 @@ class WorkerModule {
   static forRoot(deps: PlatformDeps): DynamicModule {
     return {
       module: WorkerModule,
-      imports: [PlatformModule.forRoot(deps), AuditModule, AuthorizationModule, IdentityModule],
+      imports: [
+        PlatformModule.forRoot(deps),
+        AuditModule,
+        AuthorizationModule,
+        IdentityModule,
+        OpsModule,
+      ],
     };
   }
 }
@@ -30,6 +39,7 @@ export function createWorkerContext(deps: {
   logger: Logger;
   config?: Config;
   mailer?: Mailer;
+  objectStorage?: ObjectStorage;
 }): Promise<INestApplicationContext> {
   const config = deps.config ?? loadConfig({ NODE_ENV: "test" });
   return NestFactory.createApplicationContext(
@@ -38,6 +48,7 @@ export function createWorkerContext(deps: {
       config,
       mailer: deps.mailer ?? createMailer(config),
       identityProvider: createIdentityProvider(config),
+      objectStorage: deps.objectStorage ?? createObjectStorage(config),
     }),
     { logger: false },
   );

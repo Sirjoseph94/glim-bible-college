@@ -11,6 +11,7 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
+import { createObjectStorage } from "@glim/integrations/storage/factory";
 
 const { values } = parseArgs({ options: { email: { type: "string" }, name: { type: "string" } } });
 if (values.email === undefined || values.name === undefined) {
@@ -32,6 +33,7 @@ const app = await NestFactory.createApplicationContext(
     logger,
     mailer: createMailer(config),
     identityProvider: createIdentityProvider(config),
+    objectStorage: createObjectStorage(config),
   }),
   { logger: false },
 );

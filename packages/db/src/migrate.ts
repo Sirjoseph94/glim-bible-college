@@ -52,6 +52,10 @@ export async function migrateDatabase(options: MigrateOptions): Promise<void> {
       ALTER DEFAULT PRIVILEGES IN SCHEMA ${BOSS_SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role};
       ALTER DEFAULT PRIVILEGES IN SCHEMA ${BOSS_SCHEMA} GRANT USAGE, SELECT ON SEQUENCES TO ${role};
       ALTER DEFAULT PRIVILEGES IN SCHEMA ${BOSS_SCHEMA} GRANT EXECUTE ON FUNCTIONS TO ${role};
+      -- The weekly logical backup runs as the app role and must include the migration journal.
+      GRANT USAGE ON SCHEMA drizzle TO ${role};
+      GRANT SELECT ON ALL TABLES IN SCHEMA drizzle TO ${role};
+      GRANT SELECT ON ALL SEQUENCES IN SCHEMA drizzle TO ${role};
     `);
   } finally {
     await pool.end();

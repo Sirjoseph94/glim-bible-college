@@ -4,6 +4,7 @@ import { createTestDatabase, type TestDatabase } from "@glim/db/testing";
 import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { DisabledIdentityProvider } from "@glim/integrations/oidc/openid";
 import type { IdentityProvider } from "@glim/integrations/oidc/port";
+import { S3ObjectStorage } from "@glim/integrations/storage/s3";
 import { TestClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -52,6 +53,12 @@ export async function createTestApp(
     clock,
     mailer,
     identityProvider: options.identityProvider ?? new DisabledIdentityProvider(),
+    objectStorage: new S3ObjectStorage({
+      endpoint: inject("glim").s3.endpoint,
+      region: "us-east-1",
+      accessKeyId: inject("glim").s3.accessKey,
+      secretAccessKey: inject("glim").s3.secretKey,
+    }),
     logger: createLogger({ service: "api-test", level: "silent" }),
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });

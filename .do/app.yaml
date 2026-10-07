@@ -1,0 +1,94 @@
+# App Platform spec for production (TRD §22.2, ADR-0002). Rendered by .github/workflows/deploy.yml with
+# envsubst: ${IMAGE_TAG} and every ${SECRET_*} come from GitHub Actions secrets, never this file.
+# Verify bindable variable names and instance sizes against spike S-17 (docs/spikes/S-17-app-platform.md).
+name: glim
+region: lon
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+databases:
+  - name: db
+    engine: PG
+    version: "18"
+    production: true
+    cluster_name: glim-db
+    db_name: glim
+    db_user: glim_app
+
+# Shared by every component. Secrets are encrypted at rest by App Platform.
+envs:
+  - { key: NODE_ENV, value: production, scope: RUN_AND_BUILD_TIME }
+  - { key: APP_ORIGIN, value: "${APP_ORIGIN}" }
+  - { key: INSTITUTION_DEFAULT_TZ, value: Africa/Lagos }
+  - { key: CLIENT_IP_HEADER, value: do-connecting-ip }
+  - { key: LOG_LEVEL, value: info }
+  # Transaction-mode pool "glim-tx" for queries; the direct URL for pg-boss and pg_dump (§5.2).
+  - { key: DATABASE_URL, value: "${db.glim-tx.DATABASE_URL}" }
+  - { key: DATABASE_URL_DIRECT, value: "${db.DATABASE_URL}" }
+  - { key: DATABASE_URL_MIGRATOR, value: "${SECRET_DATABASE_URL_MIGRATOR}", type: SECRET }
+  - { key: DB_CONNECTION_BUDGET, value: "50" }
+  - { key: API_INSTANCE_COUNT, value: "2" }
+  - { key: WORKER_INSTANCE_COUNT, value: "1" }
+  - { key: STORAGE_ENDPOINT, value: https://lon1.digitaloceanspaces.com }
+  - { key: STORAGE_REGION, value: lon1 }
+  - { key: STORAGE_BUCKET, value: "${STORAGE_BUCKET}" }
+  - { key: STORAGE_BACKUP_BUCKET, value: "${STORAGE_BACKUP_BUCKET}" }
+  - { key: STORAGE_ACCESS_KEY, value: "${SECRET_STORAGE_ACCESS_KEY}", type: SECRET }
+  - { key: STORAGE_SECRET_KEY, value: "${SECRET_STORAGE_SECRET_KEY}", type: SECRET }
+  - { key: MAIL_PROVIDER, value: sendgrid }
+  - { key: MAIL_FROM, value: "${MAIL_FROM}" }
+  - { key: SENDGRID_API_KEY, value: "${SECRET_SENDGRID_API_KEY}", type: SECRET }
+  - { key: SENDGRID_WEBHOOK_PUBLIC_KEY, value: "${SENDGRID_WEBHOOK_PUBLIC_KEY}" }
+  - { key: GOOGLE_OAUTH_CLIENT_ID, value: "${GOOGLE_OAUTH_CLIENT_ID}" }
+  - { key: GOOGLE_OAUTH_CLIENT_SECRET, value: "${SECRET_GOOGLE_OAUTH_CLIENT_SECRET}", type: SECRET }
+  - { key: SESSION_SECRET, value: "${SECRET_SESSION_SECRET}", type: SECRET }
+  - { key: CSRF_SECRET, value: "${SECRET_CSRF_SECRET}", type: SECRET }
+  - { key: BACKUP_AGE_RECIPIENT, value: "${BACKUP_AGE_RECIPIENT}" }
+  - { key: VIDEO_HOST, value: youtube_link }
+  - { key: DRIVE_CLEANUP_MODE, value: NONE }
+
+services:
+  - name: api
+    image:
+      registry_type: DOCR
+      repository: glim
+      tag: "${IMAGE_TAG}"
+    run_command: pnpm --filter @glim/api start
+    http_port: 8080
+    instance_count: 2
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      http_path: /readyz
+      initial_delay_seconds: 20
+      period_seconds: 10
+      failure_threshold: 3
+    routes:
+      - path: /
+    envs:
+      - { key: DB_POOL_API, value: "8" }
+
+workers:
+  - name: worker
+    image:
+      registry_type: DOCR
+      repository: glim
+      tag: "${IMAGE_TAG}"
+    run_command: pnpm --filter @glim/worker start
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-2gb
+    envs:
+      - { key: WORKER_ROLE, value: all }
+      - { key: DB_POOL_WORKER, value: "6" }
+      - { key: DB_POOL_BOSS, value: "4" }
+
+jobs:
+  # Drizzle + pg-boss migrations as glim_migrator, before any new code runs (§22.5, §22.6).
+  - name: migrate
+    kind: PRE_DEPLOY
+    image:
+      registry_type: DOCR
+      repository: glim
+      tag: "${IMAGE_TAG}"
+    run_command: pnpm --filter @glim/db migrate
+    instance_size_slug: apps-s-1vcpu-0.5gb

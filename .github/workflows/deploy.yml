@@ -1,0 +1,107 @@
+name: Deploy
+
+# Runs after CI passes on main (TRD §22.5): build and push the image, deploy staging (the migrate
+# job runs first as PRE_DEPLOY), smoke-test it, then deploy production once a reviewer approves
+# the "production" environment.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: registry.digitalocean.com/glim
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  image:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1800
+      - run: docker build -f docker/Dockerfile -t "$REGISTRY/glim:$IMAGE_TAG" .
+      - name: Container scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/glim:${{ env.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - run: docker push "$REGISTRY/glim:$IMAGE_TAG"
+
+  staging:
+    needs: image
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Deploy
+        env:
+          STAGING_APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          STORAGE_BUCKET: ${{ vars.STORAGE_BUCKET }}
+          STORAGE_BACKUP_BUCKET: ${{ vars.STORAGE_BACKUP_BUCKET }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          SENDGRID_WEBHOOK_PUBLIC_KEY: ${{ vars.SENDGRID_WEBHOOK_PUBLIC_KEY }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+          SECRET_DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
+          SECRET_STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
+          SECRET_STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
+          SECRET_SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SECRET_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SECRET_SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          SECRET_CSRF_SECRET: ${{ secrets.CSRF_SECRET }}
+        run: |
+          scripts/render-app-spec.sh .do/app.staging.yaml > "$RUNNER_TEMP/app.yaml"
+          doctl apps update "${{ vars.APP_ID }}" --spec "$RUNNER_TEMP/app.yaml" --wait
+      - name: Smoke check
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 6 "${{ vars.APP_ORIGIN }}/readyz"
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    # Required reviewers on this GitHub environment are the manual approval gate.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Deploy
+        env:
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          STORAGE_BUCKET: ${{ vars.STORAGE_BUCKET }}
+          STORAGE_BACKUP_BUCKET: ${{ vars.STORAGE_BACKUP_BUCKET }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          SENDGRID_WEBHOOK_PUBLIC_KEY: ${{ vars.SENDGRID_WEBHOOK_PUBLIC_KEY }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+          SECRET_DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
+          SECRET_STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
+          SECRET_STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
+          SECRET_SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SECRET_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SECRET_SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          SECRET_CSRF_SECRET: ${{ secrets.CSRF_SECRET }}
+        run: |
+          scripts/render-app-spec.sh .do/app.yaml > "$RUNNER_TEMP/app.yaml"
+          doctl apps update "${{ vars.APP_ID }}" --spec "$RUNNER_TEMP/app.yaml" --wait
+      - name: Smoke check
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 6 "${{ vars.APP_ORIGIN }}/readyz"

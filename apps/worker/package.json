@@ -6,7 +6,8 @@
     "dev": "tsx watch --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "test:integration": "vitest run -c vitest.integration.config.ts"
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "start": "tsx --tsconfig ../../tsconfig.base.json src/main.ts"
   },
   "dependencies": {
     "@glim/contracts": "workspace:*",
@@ -19,9 +20,10 @@
     "@nestjs/core": "12.1.2",
     "pg-boss": "12.37.0",
     "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2"
+    "rxjs": "7.8.2",
+    "tsx": "4.23.15"
   },
   "devDependencies": {
-    "tsx": "4.23.15"
+    "age-encryption": "0.3.1"
   }
 }

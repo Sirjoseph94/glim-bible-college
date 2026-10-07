@@ -9,7 +9,8 @@
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "build": "node scripts/copy-static.mjs",
     "admin:bootstrap": "tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env src/bin/bootstrap-admin.ts",
-    "e2e:serve": "APP_ORIGIN=http://localhost:4173 PORT=4173 tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env test/e2e-server.ts"
+    "e2e:serve": "APP_ORIGIN=http://localhost:4173 PORT=4173 tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env test/e2e-server.ts",
+    "start": "tsx --tsconfig ../../tsconfig.base.json src/main.ts"
   },
   "dependencies": {
     "@fastify/compress": "9.2.0",
@@ -30,12 +31,12 @@
     "pg-boss": "12.37.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "tsx": "4.23.15"
   },
   "devDependencies": {
     "@glim/web": "workspace:*",
     "@nestjs/testing": "12.1.2",
-    "@testcontainers/postgresql": "12.2.0",
-    "tsx": "4.23.15"
+    "@testcontainers/postgresql": "12.2.0"
   }
 }

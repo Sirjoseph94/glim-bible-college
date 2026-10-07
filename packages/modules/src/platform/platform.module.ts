@@ -1,6 +1,7 @@
 import { Db } from "@glim/db";
 import { MAILER, type Mailer } from "@glim/integrations/mail/port";
 import { IDENTITY_PROVIDER, type IdentityProvider } from "@glim/integrations/oidc/port";
+import { OBJECT_STORAGE, type ObjectStorage } from "@glim/integrations/storage/port";
 import { CLOCK, type Clock } from "@glim/shared";
 import { CONFIG, type Config } from "@glim/shared/config";
 import { LOGGER, type Logger } from "@glim/telemetry";
@@ -15,6 +16,8 @@ export interface PlatformDeps {
   mailer: Mailer;
   /** Google sign-in (OIDC); a disabled provider when no client is configured. */
   identityProvider: IdentityProvider;
+  /** DO Spaces / MinIO. */
+  objectStorage: ObjectStorage;
 }
 
 @Global()
@@ -28,6 +31,7 @@ export class PlatformModule {
       { provide: LOGGER, useValue: deps.logger },
       { provide: MAILER, useValue: deps.mailer },
       { provide: IDENTITY_PROVIDER, useValue: deps.identityProvider },
+      { provide: OBJECT_STORAGE, useValue: deps.objectStorage },
     ];
     return { module: PlatformModule, providers, exports: providers.map((p) => p.provide) };
   }

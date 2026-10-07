@@ -39,7 +39,7 @@ export default async function setup(project: TestProject): Promise<() => Promise
       .withEnvironment({
         MINIO_ROOT_USER: "minioadmin",
         MINIO_ROOT_PASSWORD: "minioadmin",
-        MINIO_DEFAULT_BUCKETS: "glim-files",
+        MINIO_DEFAULT_BUCKETS: "glim-files,glim-backups",
       })
       .withExposedPorts(9000)
       .withWaitStrategy(Wait.forHttp("/minio/health/live", 9000))

@@ -5,6 +5,7 @@ import { createLogger } from "@glim/telemetry";
 import { buildApp } from "./app";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
+import { createObjectStorage } from "@glim/integrations/storage/factory";
 
 const config = loadConfig();
 const logger = createLogger({ service: "api", level: config.logLevel });
@@ -22,6 +23,7 @@ const app = await buildApp({
   logger,
   mailer: createMailer(config),
   identityProvider: createIdentityProvider(config),
+  objectStorage: createObjectStorage(config),
 });
 await app.listen(config.port, "0.0.0.0");
 logger.info({ port: config.port }, "api listening");
