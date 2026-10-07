@@ -99,7 +99,10 @@ function SessionCard(props: {
 }) {
   const { session } = props;
   return (
-    <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
+    <section
+      aria-label={session.name}
+      className="space-y-3 rounded border border-slate-200 bg-white p-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold">
           {session.name}{" "}

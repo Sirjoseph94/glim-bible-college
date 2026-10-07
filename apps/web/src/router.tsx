@@ -164,6 +164,22 @@ const teachRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/teach"), "TeachPage"),
 });
 
+const applyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/apply",
+  component: lazyRouteComponent(() => import("./routes/apply"), "ApplyPage"),
+});
+
+const admissionsIntakesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admissions/intakes",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ADMISSIONS_OFFICER"),
+  component: lazyRouteComponent(
+    () => import("./routes/admissions-intakes"),
+    "AdmissionsIntakesPage",
+  ),
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
@@ -182,6 +198,8 @@ const routeTree = rootRoute.addChildren([
   adminOfferingRoute,
   adminLecturersRoute,
   teachRoute,
+  applyRoute,
+  admissionsIntakesRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

@@ -6,6 +6,7 @@ import {
   ProgrammesService,
   RoomsService,
 } from "@glim/modules/academic";
+import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { assignmentHasCapability, AuthorizationService, MATRIX } from "@glim/modules/authorization";
 import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
@@ -289,6 +290,28 @@ const SAMPLES: Record<string, Sample> = {
     );
     return { url: `/api/v1/course-offerings/${offeringId}/lecturers/${rows[0]?.id ?? ""}` };
   },
+  "GET /intakes": () => Promise.resolve({ url: "/api/v1/intakes" }),
+  "POST /intakes": async (t) => ({
+    url: "/api/v1/intakes",
+    // The fixture session already has an intake, so allowed callers get a 409.
+    payload: {
+      code: "2090",
+      academicSessionId: (await intakeFixture(t)).sessionId,
+      opensOn: "2089-11-01",
+      closesOn: "2090-06-30",
+    },
+  }),
+  "PATCH /intakes/:id": async (t) => ({
+    url: `/api/v1/intakes/${(await intakeFixture(t)).intakeId}`,
+    payload: { offerAcceptanceDays: 14 },
+    headers: { "if-match": '"999"' },
+  }),
+  "POST /intakes/:id/open": async (t) => ({
+    url: `/api/v1/intakes/${(await intakeFixture(t)).intakeId}/open`,
+  }),
+  "POST /intakes/:id/close": async (t) => ({
+    url: `/api/v1/intakes/${(await intakeFixture(t)).intakeId}/close`,
+  }),
   "POST /curricula/:id/clone": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
     payload: { effectiveFrom: "2027-09-01" },
@@ -332,6 +355,26 @@ async function lecturerFixture(t: TestApp) {
   );
   lecturerShared = { lecturerId: lecturer.id };
   return lecturerShared;
+}
+
+let intakeShared: { sessionId: string; intakeId: string } | undefined;
+async function intakeFixture(t: TestApp) {
+  if (intakeShared !== undefined) return intakeShared;
+  const { sessionId } = await calendarFixtures(t);
+  const intake = unwrap(
+    await t.app.get(IntakesService).create(
+      {
+        code: "2091",
+        academicSessionId: sessionId,
+        opensOn: "2089-11-01",
+        closesOn: "2090-06-30",
+        offerAcceptanceDays: 21,
+      },
+      SYSTEM_ACTOR,
+    ),
+  );
+  intakeShared = { sessionId, intakeId: intake.id };
+  return intakeShared;
 }
 
 let calendarShared: { sessionId: string; semesterId: string; roomId: string } | undefined;

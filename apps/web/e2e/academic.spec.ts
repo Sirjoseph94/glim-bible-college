@@ -49,18 +49,20 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await page.getByLabel("Ends (June)").fill("2027-06-30");
   await page.getByRole("button", { name: "Plan session" }).click();
   await expect(page.getByRole("heading", { name: /2026\/2027 Session · planned/ })).toBeVisible();
-  await page.getByRole("button", { name: "Activate session" }).click();
+  // Scoped to this session: other specs plan sessions of their own.
+  const session = page.getByRole("region", { name: "2026/2027 Session" });
+  await session.getByRole("button", { name: "Activate session" }).click();
   await expect(page.getByRole("heading", { name: /2026\/2027 Session · active/ })).toBeVisible();
 
-  await page.getByText("Add semester 1").click();
-  await page.getByLabel("Starts", { exact: true }).fill("2026-09-07");
-  await page.getByLabel("Ends", { exact: true }).fill("2027-01-29");
-  await page.getByLabel("Exams start").fill("2027-01-11");
-  await page.getByLabel("Exams end").fill("2027-01-22");
-  await page.getByRole("button", { name: "Add semester" }).click();
-  await expect(page.getByText("First Semester (S1) · planned")).toBeVisible();
-  await expect(page.getByText("Mon, 11 Jan 2027")).toBeVisible();
-  await page.getByRole("button", { name: "Open registration" }).click();
+  await session.getByText("Add semester 1").click();
+  await session.getByLabel("Starts", { exact: true }).fill("2026-09-07");
+  await session.getByLabel("Ends", { exact: true }).fill("2027-01-29");
+  await session.getByLabel("Exams start").fill("2027-01-11");
+  await session.getByLabel("Exams end").fill("2027-01-22");
+  await session.getByRole("button", { name: "Add semester" }).click();
+  await expect(session.getByText("First Semester (S1) · planned")).toBeVisible();
+  await expect(session.getByText("Mon, 11 Jan 2027")).toBeVisible();
+  await session.getByRole("button", { name: "Open registration" }).click();
   await expect(page.getByText("First Semester (S1) · registration")).toBeVisible();
 
   await page.getByLabel("Room code").fill("R1");

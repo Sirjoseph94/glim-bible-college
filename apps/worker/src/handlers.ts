@@ -1,4 +1,5 @@
 import type { DomainEvent, QueueName } from "@glim/contracts";
+import { IntakesService } from "@glim/modules/admissions";
 import { SessionService } from "@glim/modules/identity";
 import { BackupService } from "@glim/modules/ops";
 import type { INestApplicationContext } from "@nestjs/common";
@@ -18,9 +19,11 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const dispatch = createDispatcher(deps.subscribers);
   const sessions = deps.context.get(SessionService);
   const backup = deps.context.get(BackupService);
+  const intakes = deps.context.get(IntakesService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
     "auth.session-cleanup": () => sessions.deleteEnded(),
     "db.logical-backup": () => backup.run(),
+    "admissions.intake-status": () => intakes.syncStatuses({ userId: null, type: "JOB" }),
   };
 }

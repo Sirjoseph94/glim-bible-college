@@ -45,7 +45,8 @@ export type ResourceType =
   | "semester"
   | "room"
   | "course-offering"
-  | "lecturer";
+  | "lecturer"
+  | "intake";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

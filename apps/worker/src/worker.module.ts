@@ -5,6 +5,7 @@ import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
 import type { ObjectStorage } from "@glim/integrations/storage/port";
 import type { Mailer } from "@glim/integrations/mail/port";
+import { AdmissionsModule } from "@glim/modules/admissions";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
@@ -27,6 +28,7 @@ class WorkerModule {
         AuthorizationModule,
         IdentityModule,
         OpsModule,
+        AdmissionsModule,
       ],
     };
   }

@@ -6,6 +6,7 @@ import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { AcademicModule } from "@glim/modules/academic";
+import { AdmissionsModule } from "@glim/modules/admissions";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule, SESSION_COOKIE, SessionService } from "@glim/modules/identity";
@@ -26,6 +27,7 @@ import { BOSS } from "./common/tokens";
 import { AuthController } from "./http/identity/auth.controller";
 import { GoogleController } from "./http/identity/google.controller";
 import { AcademicController } from "./http/academic/academic.controller";
+import { IntakesController } from "./http/admissions/intakes.controller";
 import { CalendarController } from "./http/academic/calendar.controller";
 import { LecturersController } from "./http/lecturing/lecturers.controller";
 import { OfferingsController } from "./http/lecturing/offerings.controller";
@@ -56,6 +58,7 @@ export class AppModule {
         IdentityModule,
         AcademicModule,
         LecturingModule,
+        AdmissionsModule,
       ],
       controllers: [
         InstitutionController,
@@ -71,6 +74,7 @@ export class AppModule {
         CalendarController,
         OfferingsController,
         LecturersController,
+        IntakesController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

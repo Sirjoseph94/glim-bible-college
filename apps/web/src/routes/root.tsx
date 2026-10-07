@@ -34,6 +34,11 @@ export function RootLayout() {
             <Link to="/" className="underline">
               Home
             </Link>
+            {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "ADMISSIONS_OFFICER") ? (
+              <Link to="/admissions/intakes" className="underline">
+                Admissions
+              </Link>
+            ) : null}
             {me.data.roles.isLecturer ? (
               <Link to="/teach" className="underline">
                 My offerings

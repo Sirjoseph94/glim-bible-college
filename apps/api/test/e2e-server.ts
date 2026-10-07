@@ -1,3 +1,4 @@
+import type { StaffRole } from "@glim/contracts";
 // The stack Playwright drives (ticket 03): the real API and SPA on a fresh database, with an
 // in-memory mailer whose messages are readable on a separate, test-only port.
 import "reflect-metadata";
@@ -8,6 +9,7 @@ import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { CalendarService } from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock } from "@glim/shared";
@@ -54,22 +56,25 @@ const app = await buildApp({
 });
 await bootstrapSystemAdmin(app, E2E_ADMIN);
 // More invited staff, so each spec starts from its own account and none depends on another.
-for (const staff of [
-  { email: "e2e-ops@glim.test", displayName: "Obi Ops", roles: ["SYSTEM_ADMIN" as const] },
-  { email: "e2e-google@glim.test", displayName: "Gloria Google", roles: ["REGISTRAR" as const] },
-  {
-    email: "e2e-settings@glim.test",
-    displayName: "Sade Settings",
-    roles: ["SYSTEM_ADMIN" as const],
-  },
-  {
-    email: "e2e-academic@glim.test",
-    displayName: "Ade Academic",
-    roles: ["ACADEMIC_ADMIN" as const],
-  },
-]) {
-  await app.get(StaffAccountsService).inviteStaff(staff, SYSTEM_ACTOR);
+const E2E_STAFF: [email: string, displayName: string, role: StaffRole][] = [
+  ["e2e-ops@glim.test", "Obi Ops", "SYSTEM_ADMIN"],
+  ["e2e-google@glim.test", "Gloria Google", "REGISTRAR"],
+  ["e2e-settings@glim.test", "Sade Settings", "SYSTEM_ADMIN"],
+  ["e2e-academic@glim.test", "Ade Academic", "ACADEMIC_ADMIN"],
+  ["e2e-admissions@glim.test", "Amaka Admissions", "ADMISSIONS_OFFICER"],
+];
+for (const [email, displayName, role] of E2E_STAFF) {
+  await app
+    .get(StaffAccountsService)
+    .inviteStaff({ email, displayName, roles: [role] }, SYSTEM_ACTOR);
 }
+// A planned Academic Session for the admissions spec's intake.
+await app
+  .get(CalendarService)
+  .createSession(
+    { code: "2030/2031", name: "2030/2031 Session", startsOn: "2030-09-01", endsOn: "2031-06-30" },
+    SYSTEM_ACTOR,
+  );
 await app.listen(config.port, "127.0.0.1");
 
 const mailbox = Fastify();
