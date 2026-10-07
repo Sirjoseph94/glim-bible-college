@@ -6,6 +6,7 @@ import {
   domainError,
   err,
   ok,
+  toLocalDate,
   type Clock,
   type DomainResult,
 } from "@glim/shared";
@@ -45,6 +46,11 @@ export class SettingsService {
   async getInstitution(): Promise<Institution> {
     const { name, timezone } = await this.get();
     return { name, timezone };
+  }
+
+  /** Today's date in the institution's timezone (§5.1: calendar dates are institution dates). */
+  async today(): Promise<string> {
+    return toLocalDate(this.clock.now(), (await this.getInstitution()).timezone);
   }
 
   /** Google `hd` domains staff must sign in from; empty means no restriction (§8.1). */

@@ -1,5 +1,5 @@
 import type { Me } from "@glim/contracts";
-import { RoleService } from "@glim/modules/authorization";
+import { AuthorizationService, RoleService } from "@glim/modules/authorization";
 import { Inject, Injectable } from "@nestjs/common";
 import { GoogleSignInService } from "./google-sign-in.service";
 import type { ActiveSession } from "./session.service";
@@ -14,15 +14,17 @@ export class MeService {
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(RoleService) private readonly roles: RoleService,
     @Inject(GoogleSignInService) private readonly google: GoogleSignInService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
   ) {}
 
   /** Null when the session's user no longer exists. */
   async forSession(session: ActiveSession): Promise<Me | null> {
-    const [user, institution, staff, googleLinked] = await Promise.all([
+    const [user, institution, staff, googleLinked, derived] = await Promise.all([
       this.users.findById(session.userId),
       this.settings.getInstitution(),
       this.roles.activeRoles(session.userId),
       this.google.isLinked(session.userId),
+      this.authorization.derivedRoles(session.userId),
     ]);
     if (user === null) return null;
     return {
@@ -36,7 +38,7 @@ export class MeService {
         timezoneSet: user.timezone !== null,
       },
       institution,
-      roles: { staff, isLecturer: false, isStudent: false, isApplicant: false },
+      roles: { staff, isLecturer: derived.isLecturer, isStudent: false, isApplicant: false },
       csrfToken: session.csrfToken,
       featureFlags: {},
     };

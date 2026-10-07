@@ -34,6 +34,11 @@ export function RootLayout() {
             <Link to="/" className="underline">
               Home
             </Link>
+            {me.data.roles.isLecturer ? (
+              <Link to="/teach" className="underline">
+                My offerings
+              </Link>
+            ) : null}
             <Link to="/profile" className="underline">
               Profile
             </Link>
@@ -44,6 +49,12 @@ export function RootLayout() {
                 </Link>
                 <Link to="/admin/calendar" className="underline">
                   Calendar
+                </Link>
+                <Link to="/admin/offerings" className="underline">
+                  Offerings
+                </Link>
+                <Link to="/admin/lecturers" className="underline">
+                  Lecturers
                 </Link>
               </>
             ) : null}

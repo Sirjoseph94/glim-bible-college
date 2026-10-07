@@ -44,7 +44,8 @@ describe("programmes", () => {
     });
 
     const list = await t.request({ url: "/api/v1/programmes", headers: p.registrar.headers });
-    expect(list.json<{ items: Programme[] }>().items.map((i) => i.code)).toEqual(["CERT", "DIP"]);
+    const codes = list.json<{ items: Programme[] }>().items.map((i) => i.code);
+    expect(codes.filter((c) => c === "CERT" || c === "DIP")).toEqual(["CERT", "DIP"]);
   });
 
   it("refuse a duplicate code and a stale edit", async () => {

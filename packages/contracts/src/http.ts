@@ -37,7 +37,15 @@ export interface EndpointSpec {
 
 /** Resource types whose owning module registers a ResourceContextLoader (§7.2). */
 export type ResourceType =
-  "user" | "programme" | "course" | "curriculum" | "academic-session" | "semester" | "room";
+  | "user"
+  | "programme"
+  | "course"
+  | "curriculum"
+  | "academic-session"
+  | "semester"
+  | "room"
+  | "course-offering"
+  | "lecturer";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

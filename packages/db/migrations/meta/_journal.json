@@ -85,6 +85,20 @@
       "when": 1791361937448,
       "tag": "0011_wp02_calendar_exclusions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791362463769,
+      "tag": "0012_wp04_offerings_and_lecturing",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791362464403,
+      "tag": "0013_wp04_offering_access_view",
+      "breakpoints": true
     }
   ]
 }

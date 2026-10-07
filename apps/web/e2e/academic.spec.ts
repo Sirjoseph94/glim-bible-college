@@ -68,4 +68,31 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await page.getByLabel("Seats (optional)").fill("40");
   await page.getByRole("button", { name: "Add Room" }).click();
   await expect(page.getByText("40 seats")).toBeVisible();
+
+  await page.getByRole("link", { name: "Lecturers" }).click();
+  await page.getByLabel("Email").fill("lecturer.e2e@glim.test");
+  await page.getByLabel("Title (e.g. Rev, Dr)").fill("Rev");
+  await page.getByLabel("Given name").fill("Tunde");
+  await page.getByLabel("Family name").fill("Bello");
+  await page.getByRole("button", { name: "Add Lecturer" }).click();
+  await expect(page.getByText("Rev Tunde Bello was invited by email.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Offerings" }).click();
+  await page.getByText("Offer a course this semester").click();
+  await page.getByLabel("Course").selectOption({ label: "BIB101 Old Testament Survey" });
+  await page.getByLabel("Primary Lecturer").selectOption({ label: "Rev Tunde Bello" });
+  await page.getByRole("button", { name: "Create offering" }).click();
+  await expect(page.getByText("Rev Tunde Bello · Primary")).toBeVisible();
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByText(/· published/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await page.goto(`/invite/${await linkToken("lecturer.e2e@glim.test", "invite")}`);
+  await page.getByLabel("New password (at least 12 characters)").fill("lecturer passphrase 2026");
+  await page.getByLabel("Confirm the new password").fill("lecturer passphrase 2026");
+  await page.getByRole("button", { name: "Set password and sign in" }).click();
+  await page.getByRole("link", { name: "My offerings" }).click();
+  await expect(page.getByText("BIB101 Old Testament Survey")).toBeVisible();
+  await expect(page.getByText("Rev Tunde Bello (Primary Lecturer)")).toBeVisible();
 });

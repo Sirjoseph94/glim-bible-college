@@ -1,7 +1,9 @@
 export {
+  assignmentHasCapability,
   AuthorizationService,
   Principal,
   type Decision,
+  type OfferingAssignment,
   type ResourceContext,
   type ResourceContextLoader,
   type ResourceRef,

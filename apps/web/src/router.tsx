@@ -132,6 +132,38 @@ const adminCalendarRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-calendar"), "AdminCalendarPage"),
 });
 
+const adminOfferingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/offerings",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-offerings"), "AdminOfferingsPage"),
+});
+
+const adminOfferingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/offerings/$offeringId",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-offerings"), "AdminOfferingPage"),
+});
+
+const adminLecturersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/lecturers",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-offerings"), "AdminLecturersPage"),
+});
+
+const teachRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/teach",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+    if (!me.roles.isLecturer) throw redirect({ to: "/" });
+  },
+  component: lazyRouteComponent(() => import("./routes/teach"), "TeachPage"),
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   loginRoute,
@@ -146,6 +178,10 @@ const routeTree = rootRoute.addChildren([
   adminAcademicRoute,
   adminCurriculumRoute,
   adminCalendarRoute,
+  adminOfferingsRoute,
+  adminOfferingRoute,
+  adminLecturersRoute,
+  teachRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

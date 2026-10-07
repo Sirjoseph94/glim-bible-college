@@ -26,3 +26,9 @@ export {
   type ProgrammeRow,
 } from "./programmes.service";
 export { RoomsService, type RoomRow } from "./rooms.service";
+export {
+  OfferingsService,
+  type OfferingInput,
+  type OfferingRow,
+  type PublishRequirement,
+} from "./offerings.service";

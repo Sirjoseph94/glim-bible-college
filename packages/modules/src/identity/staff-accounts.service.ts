@@ -59,7 +59,11 @@ export class StaffAccountsService {
     return this.sendInvite(created);
   }
 
-  private async createInvited(
+  /**
+   * Creates an invited account inside the caller's transaction, for modules that create a
+   * profile with it (e.g. a Lecturer). Send the invite with `sendInvite` once that commits.
+   */
+  async createInvited(
     db: Database,
     input: Recipient & { roles: StaffRole[] },
     actor: AuditActor,
@@ -86,7 +90,7 @@ export class StaffAccountsService {
   }
 
   /** Emails the invite once the account is committed (tokens are never stored in plaintext). */
-  private async sendInvite(
+  async sendInvite(
     created: DomainResult<{ user: UserProfile; token: string }>,
   ): Promise<DomainResult<InvitedStaff>> {
     if (!created.ok) return created;

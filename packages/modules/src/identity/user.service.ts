@@ -57,6 +57,11 @@ export class UserService {
     );
   }
 
+  async findByEmail(email: string, db: Database = this.db.read): Promise<UserProfile | null> {
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.email, email.trim()));
+    return row === undefined ? null : toProfile(row);
+  }
+
   async findById(id: string): Promise<UserProfile | null> {
     const [row] = await this.db.read.select().from(schema.users).where(eq(schema.users.id, id));
     return row === undefined ? null : toProfile(row);

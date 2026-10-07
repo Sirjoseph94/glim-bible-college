@@ -3,10 +3,12 @@ import {
   check,
   date,
   integer,
+  jsonb,
   numeric,
   pgTable,
   smallint,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -171,5 +173,36 @@ export const rooms = pgTable(
   (t) => [
     enumCheck("rooms.status", t.status),
     check("rooms_capacity_check", sql`${t.capacity} IS NULL OR ${t.capacity} > 0`),
+  ],
+);
+
+/** Owner: academic. A course taught in a semester (TRD §6.3). */
+export const courseOfferings = pgTable(
+  "course_offerings",
+  {
+    ...std(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "restrict" }),
+    semesterId: uuid("semester_id")
+      .notNull()
+      .references(() => semesters.id, { onDelete: "restrict" }),
+    sectionCode: text("section_code").notNull().default("01"),
+    titleOverride: text("title_override"),
+    capacity: integer(),
+    status: text().notNull().default("DRAFT"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    policyOverrides: jsonb("policy_overrides")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+  },
+  (t) => [
+    enumCheck("course_offerings.status", t.status),
+    uniqueIndex("course_offerings_course_semester_section").on(
+      t.courseId,
+      t.semesterId,
+      t.sectionCode,
+    ),
+    check("course_offerings_capacity_check", sql`${t.capacity} IS NULL OR ${t.capacity} > 0`),
   ],
 );

@@ -7,16 +7,19 @@ import {
   RoomsService,
 } from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
-import { AuthorizationService } from "@glim/modules/authorization";
+import { assignmentHasCapability, AuthorizationService, MATRIX } from "@glim/modules/authorization";
+import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
 import { unwrap } from "@glim/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "./harness";
 import {
   createPersonas,
   createUser,
-  PERSONA_ROLES,
+  PERSONA_SPECS,
+  type OfferingKey,
   type Persona,
   type PersonaName,
+  type Personas,
 } from "./personas";
 
 /**
@@ -28,6 +31,8 @@ interface SampleRequest {
   url: string;
   payload?: unknown;
   headers?: Record<string, string>;
+  /** The persona-world offering the request is about, so the lecturer path can be predicted. */
+  offering?: OfferingKey;
 }
 
 type Sample = (t: TestApp) => Promise<SampleRequest>;
@@ -217,11 +222,117 @@ const SAMPLES: Record<string, Sample> = {
     payload: { name: "Renamed" },
     headers: { "if-match": '"999"' },
   }),
+  "GET /lecturers": () => Promise.resolve({ url: "/api/v1/lecturers" }),
+  "POST /lecturers": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/lecturers",
+      payload: {
+        email: `newlecturer${String(n)}@authz.glim.test`,
+        givenName: "New",
+        familyName: "Lecturer",
+      },
+    });
+  },
+  "PATCH /lecturers/:id": async (t) => ({
+    url: `/api/v1/lecturers/${(await lecturerFixture(t)).lecturerId}`,
+    payload: { title: "Rev" },
+    headers: { "if-match": '"999"' },
+  }),
+  "POST /course-offerings": async (t) => {
+    n++;
+    return {
+      url: "/api/v1/course-offerings",
+      payload: {
+        courseId: (await fixtures(t)).courseId,
+        semesterId: personas.world.semesterId,
+        sectionCode: `A${String(n)}`,
+      },
+    };
+  },
+  "GET /course-offerings/:id": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}`,
+      offering: "O1",
+    }),
+  "GET /course-offerings/:id/lecturers": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/lecturers`,
+      offering: "O1",
+    }),
+  // Writes act on a fresh offering, so allowed callers never change O1 and O2.
+  "PATCH /course-offerings/:id": async (t) => ({
+    url: `/api/v1/course-offerings/${await freshOffering(t)}`,
+    payload: { capacity: 30 },
+    headers: { "if-match": '"999"' },
+  }),
+  "POST /course-offerings/:id/publish": async (t) => ({
+    url: `/api/v1/course-offerings/${await freshOffering(t)}/publish`,
+  }),
+  "POST /course-offerings/:id/cancel": async (t) => ({
+    url: `/api/v1/course-offerings/${await freshOffering(t)}/cancel`,
+    payload: { reason: "Not running this year" },
+  }),
+  "POST /course-offerings/:id/lecturers": async (t) => ({
+    url: `/api/v1/course-offerings/${await freshOffering(t)}/lecturers`,
+    payload: { lecturerId: (await lecturerFixture(t)).lecturerId, role: "CO_LECTURER" },
+  }),
+  "DELETE /course-offerings/:id/lecturers/:assignmentId": async (t) => {
+    const offeringId = await freshOffering(t);
+    const { lecturerId } = await lecturerFixture(t);
+    unwrap(
+      await t.app.get(AssignmentsService).assign(offeringId, lecturerId, "ASSISTANT", SYSTEM_ACTOR),
+    );
+    const { rows } = await t.db.pool.query<{ id: string }>(
+      "SELECT id FROM lecturer_assignments WHERE course_offering_id = $1 AND status = 'ACTIVE'",
+      [offeringId],
+    );
+    return { url: `/api/v1/course-offerings/${offeringId}/lecturers/${rows[0]?.id ?? ""}` };
+  },
   "POST /curricula/:id/clone": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
     payload: { effectiveFrom: "2027-09-01" },
   }),
 };
+
+/** A new draft offering of the fixture course in the persona world's semester. */
+async function freshOffering(t: TestApp): Promise<string> {
+  n++;
+  return unwrap(
+    await t.app.get(AssignmentsService).createOfferingWithLecturers(
+      {
+        courseId: (await fixtures(t)).courseId,
+        semesterId: personas.world.semesterId,
+        sectionCode: `F${String(n)}`,
+        titleOverride: null,
+        capacity: null,
+        lecturers: [],
+      },
+      SYSTEM_ACTOR,
+    ),
+  );
+}
+
+let lecturerShared: { lecturerId: string } | undefined;
+async function lecturerFixture(t: TestApp) {
+  if (lecturerShared !== undefined) return lecturerShared;
+  const user = await createUser(t, { email: "fixture-lecturer@authz.glim.test" });
+  const { lecturer } = unwrap(
+    await t.app.get(LecturersService).create(
+      {
+        email: user.email,
+        title: null,
+        givenName: "Fixture",
+        familyName: "Lecturer",
+        kind: "GUEST",
+        staffCode: null,
+      },
+      SYSTEM_ACTOR,
+    ),
+  );
+  lecturerShared = { lecturerId: lecturer.id };
+  return lecturerShared;
+}
 
 let calendarShared: { sessionId: string; semesterId: string; roomId: string } | undefined;
 /** A planned session (2090/2091) with one semester, and a Room, for the calendar samples. */
@@ -292,7 +403,26 @@ const protectedEndpoints = (ENDPOINTS as readonly EndpointSpec[]).filter(
 );
 
 let t: TestApp;
-let personas: Record<PersonaName, Persona>;
+let personas: Personas;
+
+/**
+ * What matrix.json says should happen (the oracle): staff path by role, lecturer path by the
+ * persona's assignment on the request's offering (§7.4).
+ */
+function expectedAllowed(
+  persona: Persona,
+  permission: NonNullable<EndpointSpec["permission"]>,
+  offering?: OfferingKey,
+): boolean {
+  if (AuthorizationService.staffGrants(persona.roles, permission)) return true;
+  const capability = MATRIX.permissions[permission].lecturer;
+  if (capability === undefined) return false;
+  if (capability === "*") return Object.keys(persona.teaches).length > 0;
+  const role = offering === undefined ? undefined : persona.teaches[offering];
+  return (
+    role !== undefined && assignmentHasCapability({ role, capabilityOverrides: {} }, capability)
+  );
+}
 
 beforeAll(async () => {
   t = await createTestApp();
@@ -320,7 +450,7 @@ describe.each(protectedEndpoints.map((e) => [key(e), e] as const))("%s", (_name,
     expect(res.statusCode).toBe(401);
   });
 
-  it.each(Object.keys(PERSONA_ROLES) as PersonaName[])(
+  it.each(Object.keys(PERSONA_SPECS) as PersonaName[])(
     "as %s: allowed exactly when matrix.json grants it",
     async (name) => {
       const sample = await SAMPLES[key(endpoint)]?.(t);
@@ -332,7 +462,7 @@ describe.each(protectedEndpoints.map((e) => [key(e), e] as const))("%s", (_name,
         payload: sample.payload,
         headers: { ...persona.headers, ...sample.headers },
       });
-      const granted = AuthorizationService.staffGrants(persona.roles, endpoint.permission);
+      const granted = expectedAllowed(persona, endpoint.permission, sample.offering);
       if (granted) {
         expect([401, 403, 404], `${name} should be allowed: ${res.body}`).not.toContain(
           res.statusCode,

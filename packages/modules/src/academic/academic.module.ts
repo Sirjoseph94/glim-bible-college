@@ -8,6 +8,7 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { CalendarService } from "./calendar.service";
 import { CoursesService } from "./courses.service";
 import { CurriculaService } from "./curricula.service";
+import { OfferingsService } from "./offerings.service";
 import { ProgrammesService } from "./programmes.service";
 import { RoomsService } from "./rooms.service";
 
@@ -34,6 +35,13 @@ class AcademicResources implements OnModuleInit {
     );
     this.authorization.registerLoader("semester", exists(schema.semesters, schema.semesters.id));
     this.authorization.registerLoader("room", exists(schema.rooms, schema.rooms.id));
+    // An offering is its own access context: lecturers' and students' rights hang off it (§7.2).
+    this.authorization.registerLoader("course-offering", async (key) => {
+      if (!isUuid(key)) return null;
+      const o = schema.courseOfferings;
+      const [row] = await this.db.read.select({ id: o.id }).from(o).where(eq(o.id, key));
+      return row === undefined ? null : { offeringId: row.id };
+    });
   }
 }
 
@@ -43,6 +51,7 @@ const services = [
   CurriculaService,
   CalendarService,
   RoomsService,
+  OfferingsService,
 ];
 
 @Module({
