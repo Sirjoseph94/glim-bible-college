@@ -1,0 +1,22 @@
+{
+  "name": "@glim/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@glim/contracts": "workspace:*",
+    "luxon": "3.7.2",
+    "uuid": "14.0.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/luxon": "3.7.6"
+  }
+}

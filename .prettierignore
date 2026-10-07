@@ -1,0 +1,11 @@
+pnpm-lock.yaml
+dist
+coverage
+.scratch
+.agents
+.claude
+docs
+apps/api/static
+packages/db/migrations
+*.md
+skills-lock.json

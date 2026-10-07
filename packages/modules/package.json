@@ -1,0 +1,19 @@
+{
+  "name": "@glim/modules",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@glim/contracts": "workspace:*",
+    "@glim/db": "workspace:*",
+    "@glim/integrations": "workspace:*",
+    "@glim/shared": "workspace:*",
+    "@glim/telemetry": "workspace:*"
+  }
+}
