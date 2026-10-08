@@ -26,8 +26,12 @@ describe("uploading a passport photo", () => {
     expect(pdf.statusCode).toBe(400);
     const huge = await startUpload(p.applicant.headers, { sizeBytes: 2 * 1024 * 1024 + 1 });
     expect(huge.statusCode).toBe(400);
-    const material = await startUpload(p.applicant.headers, { purpose: "MATERIAL" });
-    expect(material.statusCode).toBe(400);
+    // Course materials are for course staff to upload.
+    const material = await startUpload(p.applicant.headers, {
+      purpose: "MATERIAL",
+      mime: "application/pdf",
+    });
+    expect(material.statusCode).toBe(403);
   });
 
   it("goes straight to the bucket with a presigned URL, and is available once the size checks out", async () => {

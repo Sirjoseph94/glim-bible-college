@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
+  MULTIPART_PART_BYTES,
+  MULTIPART_THRESHOLD_BYTES,
   UPLOAD_PURPOSES,
   type FileView,
   type Permission,
   type UploadPurpose,
+  type UploadTarget,
 } from "@glim/contracts";
 import { Db, schema, type Database } from "@glim/db";
 import { OBJECT_STORAGE, type ObjectStorage } from "@glim/integrations/storage/port";
@@ -16,10 +19,17 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 type FileRow = typeof schema.files.$inferSelect;
 
 /** Who besides the owner may fetch a file of each purpose, and where it is kept in the bucket. */
-const PURPOSE_RULES: Record<UploadPurpose, { readPermission: Permission; prefix: string }> = {
+const PURPOSE_RULES: Record<UploadPurpose, { readPermission?: Permission; prefix: string }> = {
   PASSPORT_PHOTO: { readPermission: "admissions:application:read", prefix: "passport-photos" },
   IMPORT: { readPermission: "identity:import:run", prefix: "imports" },
+  // Students download materials through the material, which checks their course (§14.1).
+  MATERIAL: { prefix: "materials" },
 };
+
+/** Part URLs stay valid long enough for a slow connection to send a 100 MB file. */
+const PART_URL_SECONDS = 60 * 60;
+
+type Multipart = Extract<UploadTarget, { method: "MULTIPART" }>;
 
 const UPLOAD_URL_SECONDS = 15 * 60;
 /** TRD §14.1: downloads redirect to a 5-minute presigned GET. */
@@ -60,9 +70,11 @@ export class FilesService {
   ): Promise<
     DomainResult<{
       file: FileView;
-      upload: { method: "PUT"; url: string; headers: Record<string, string>; expiresAt: string };
+      upload: UploadTarget;
     }>
   > {
+    if (input.purpose === "MATERIAL" && !(await this.mayUploadMaterials(ownerUserId)))
+      return err(domainError("FORBIDDEN", "Only course staff can upload course materials."));
     const limits = UPLOAD_PURPOSES[input.purpose];
     if (!(limits.mimes as readonly string[]).includes(input.mime))
       return err(
@@ -82,6 +94,14 @@ export class FilesService {
       );
     const now = this.clock.now();
     const storageKey = `${PURPOSE_RULES[input.purpose].prefix}/${randomUUID()}`;
+    const multipart = input.sizeBytes > MULTIPART_THRESHOLD_BYTES;
+    const uploadId = multipart
+      ? await this.storage.createMultipart({
+          bucket: this.config.storage.bucket,
+          key: storageKey,
+          contentType: input.mime,
+        })
+      : null;
     const [row] = await this.db.withTx(({ db }) =>
       db
         .insert(schema.files)
@@ -92,12 +112,15 @@ export class FilesService {
           originalName: input.name,
           mime: input.mime,
           sizeBytes: input.sizeBytes,
+          uploadId,
           createdAt: now,
           updatedAt: now,
         })
         .returning(),
     );
     if (row === undefined) throw new Error("file insert returned nothing");
+    if (uploadId !== null)
+      return ok({ file: fileView(row), upload: await this.partTargets(row, uploadId, []) });
     const url = await this.storage.presignPut({
       bucket: this.config.storage.bucket,
       key: storageKey,
@@ -116,6 +139,92 @@ export class FilesService {
     });
   }
 
+  /** Lecturers and staff whose role manages course content (§7.3); attaching checks the course. */
+  private async mayUploadMaterials(userId: string): Promise<boolean> {
+    const principal = this.authorization.principal(userId);
+    if (AuthorizationService.staffGrants(await principal.roles(), "content:material:manage"))
+      return true;
+    return principal.isLecturer();
+  }
+
+  /**
+   * Fresh part URLs for the owner's unfinished multipart upload, with the parts already stored,
+   * so an interrupted upload carries on from there.
+   */
+  async resume(id: string, userId: string): Promise<DomainResult<Multipart>> {
+    const f = schema.files;
+    const [row] = await this.db.read
+      .select()
+      .from(f)
+      .where(and(eq(f.id, id), eq(f.ownerUserId, userId)));
+    if (row?.status !== "PENDING_UPLOAD" || row.uploadId === null) return notFound();
+    const stored = await this.storage.listParts({
+      bucket: this.config.storage.bucket,
+      key: row.storageKey,
+      uploadId: row.uploadId,
+    });
+    return ok(
+      await this.partTargets(
+        row,
+        row.uploadId,
+        stored.map((p) => p.partNumber),
+      ),
+    );
+  }
+
+  private async partTargets(
+    row: FileRow,
+    uploadId: string,
+    uploadedPartNumbers: number[],
+  ): Promise<Multipart> {
+    const count = Math.ceil(row.sizeBytes / MULTIPART_PART_BYTES);
+    const parts = [];
+    for (let partNumber = 1; partNumber <= count; partNumber++)
+      parts.push({
+        partNumber,
+        url: await this.storage.presignUploadPart({
+          bucket: this.config.storage.bucket,
+          key: row.storageKey,
+          uploadId,
+          partNumber,
+          expiresInSeconds: PART_URL_SECONDS,
+        }),
+      });
+    return {
+      method: "MULTIPART",
+      partSizeBytes: MULTIPART_PART_BYTES,
+      parts,
+      uploadedPartNumbers,
+      expiresAt: new Date(this.clock.now().getTime() + PART_URL_SECONDS * 1000).toISOString(),
+    };
+  }
+
+  /**
+   * Joins a multipart upload's parts once every one is stored with the expected size. Parts are
+   * listed from the bucket, so the browser never needs to read ETags.
+   */
+  private async joinParts(row: FileRow, uploadId: string): Promise<string | null> {
+    const bucket = this.config.storage.bucket;
+    const stored = await this.storage.listParts({ bucket, key: row.storageKey, uploadId });
+    const count = Math.ceil(row.sizeBytes / MULTIPART_PART_BYTES);
+    const complete =
+      stored.length === count &&
+      stored.every(
+        (p, i) =>
+          p.partNumber === i + 1 &&
+          p.sizeBytes ===
+            (i + 1 < count ? MULTIPART_PART_BYTES : row.sizeBytes - MULTIPART_PART_BYTES * i),
+      );
+    if (!complete) return "Some of the file hasn't arrived yet. Resume the upload and try again.";
+    await this.storage.completeMultipart({
+      bucket,
+      key: row.storageKey,
+      uploadId,
+      parts: stored.map((p) => ({ partNumber: p.partNumber, etag: p.etag })),
+    });
+    return null;
+  }
+
   /** Makes an upload available once the bytes are in the bucket with the declared size. */
   async complete(id: string, userId: string): Promise<DomainResult<FileView>> {
     const f = schema.files;
@@ -126,6 +235,10 @@ export class FilesService {
     if (row === undefined || row.status === "DELETED") return notFound();
     if (row.status === "AVAILABLE") return ok(fileView(row));
     const bucket = this.config.storage.bucket;
+    if (row.uploadId !== null) {
+      const problem = await this.joinParts(row, row.uploadId);
+      if (problem !== null) return err(domainError("VALIDATION_FAILED", problem));
+    }
     const stored = await this.storage.head({ bucket, key: row.storageKey });
     if (stored === null)
       return err(domainError("VALIDATION_FAILED", "The upload didn't arrive. Please try again."));
@@ -136,7 +249,12 @@ export class FilesService {
     const [updated] = await this.db.withTx(({ db }) =>
       db
         .update(f)
-        .set({ status: "AVAILABLE", updatedAt: this.clock.now(), version: sql`${f.version} + 1` })
+        .set({
+          status: "AVAILABLE",
+          uploadId: null,
+          updatedAt: this.clock.now(),
+          version: sql`${f.version} + 1`,
+        })
         .where(eq(f.id, id))
         .returning(),
     );
@@ -154,7 +272,7 @@ export class FilesService {
     if (row.ownerUserId !== userId) {
       const rule = PURPOSE_RULES[row.purpose as UploadPurpose] as
         (typeof PURPOSE_RULES)[UploadPurpose] | undefined;
-      if (rule === undefined) return null;
+      if (rule?.readPermission === undefined) return null;
       const decision = await this.authorization.authorize(
         this.authorization.principal(userId),
         rule.readPermission,

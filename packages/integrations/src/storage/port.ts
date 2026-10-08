@@ -29,6 +29,32 @@ export interface ObjectStorage {
     sizeBytes: number;
     expiresInSeconds: number;
   }): Promise<string>;
+  /**
+   * Starts a multipart upload for large files (TRD §14.1: resumable above 8 MB). The browser PUTs
+   * each part to a presigned URL; parts already stored can be listed, so an interrupted upload
+   * resumes where it stopped.
+   */
+  createMultipart(input: { bucket: string; key: string; contentType: string }): Promise<string>;
+  presignUploadPart(input: {
+    bucket: string;
+    key: string;
+    uploadId: string;
+    partNumber: number;
+    expiresInSeconds: number;
+  }): Promise<string>;
+  /** The parts stored so far, in order. */
+  listParts(input: {
+    bucket: string;
+    key: string;
+    uploadId: string;
+  }): Promise<{ partNumber: number; etag: string; sizeBytes: number }[]>;
+  completeMultipart(input: {
+    bucket: string;
+    key: string;
+    uploadId: string;
+    parts: { partNumber: number; etag: string }[];
+  }): Promise<void>;
+  abortMultipart(input: { bucket: string; key: string; uploadId: string }): Promise<void>;
   /** A short-lived URL that downloads the object as an attachment named `fileName`. */
   presignGet(input: {
     bucket: string;

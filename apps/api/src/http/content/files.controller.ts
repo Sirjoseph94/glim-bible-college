@@ -34,6 +34,14 @@ export class FilesController {
     return unwrap(await this.files.complete(params.id, session.userId));
   }
 
+  @Endpoint(files.resumeUpload)
+  async resume(
+    @Params(files.resumeUpload) params: IdParams,
+    @CurrentSession() session: ActiveSession,
+  ): Promise<Reply<typeof files.resumeUpload>> {
+    return unwrap(await this.files.resume(params.id, session.userId));
+  }
+
   @Endpoint(files.downloadFile)
   async download(
     @Params(files.downloadFile) params: IdParams,

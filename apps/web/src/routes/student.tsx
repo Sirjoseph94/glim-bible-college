@@ -8,6 +8,7 @@ import type {
 } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { CourseAnnouncements, CourseMaterials } from "../components/course-content";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
 import { useSubmit } from "../components/use-submit";
@@ -186,6 +187,18 @@ export function CoursesPage() {
                 {o.lecturers.map((l) => l.lecturerName).join(", ")}
               </div>
             ) : null}
+            <details className="text-sm">
+              <summary className="cursor-pointer text-slate-700">Announcements</summary>
+              <div className="mt-2">
+                <CourseAnnouncements offeringId={o.id} manage={false} />
+              </div>
+            </details>
+            <details className="text-sm">
+              <summary className="cursor-pointer text-slate-700">Materials</summary>
+              <div className="mt-2">
+                <CourseMaterials offeringId={o.id} manage={false} />
+              </div>
+            </details>
             <CourseRecordings offeringId={o.id} />
             {myAttendance.data?.courses
               .filter((c) => c.offeringId === o.id)

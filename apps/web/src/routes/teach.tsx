@@ -9,6 +9,7 @@ import type {
 import { zonedToInstant } from "@glim/shared/time";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { CourseAnnouncements, CourseMaterials } from "../components/course-content";
 import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import { meQuery } from "../api/session";
@@ -692,6 +693,7 @@ function OfferingItem({ offering }: { offering: Offering }) {
   const [scheduling, setScheduling] = useState(false);
   const [showMeetings, setShowMeetings] = useState(false);
   const [showRecordings, setShowRecordings] = useState(false);
+  const [showContent, setShowContent] = useState(false);
   return (
     <li className="space-y-2 rounded border border-slate-200 bg-white p-3">
       <div className="font-medium">
@@ -726,6 +728,23 @@ function OfferingItem({ offering }: { offering: Offering }) {
         {showRecordings ? "Hide recordings" : "Recordings"}
       </button>
       {showRecordings ? <OfferingRecordings offeringId={offering.id} /> : null}
+      <button
+        type="button"
+        className="block text-sm text-brand underline"
+        onClick={() => {
+          setShowContent((v) => !v);
+        }}
+      >
+        {showContent ? "Hide materials and announcements" : "Materials and announcements"}
+      </button>
+      {showContent ? (
+        <div className="space-y-4">
+          <h4 className="font-medium">Announcements</h4>
+          <CourseAnnouncements offeringId={offering.id} manage />
+          <h4 className="font-medium">Materials</h4>
+          <CourseMaterials offeringId={offering.id} manage />
+        </div>
+      ) : null}
       {offering.status === "COMPLETED" || offering.status === "CANCELLED" ? null : scheduling ? (
         <ScheduleMeetingForm
           offering={offering}

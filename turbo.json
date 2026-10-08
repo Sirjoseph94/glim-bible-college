@@ -5,8 +5,12 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "static/**"]
     },
-    "typecheck": {},
-    "test": {},
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
+    "test": {
+      "dependsOn": ["^test"]
+    },
     "test:integration": {
       "cache": false
     },

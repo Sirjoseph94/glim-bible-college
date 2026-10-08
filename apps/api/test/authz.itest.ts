@@ -10,6 +10,7 @@ import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { VideosService } from "@glim/modules/video";
+import { FilesService, MaterialsService } from "@glim/modules/content";
 import { FAKE_CHANNEL_URL } from "@glim/integrations/video-host/fake";
 import { assignmentHasCapability, AuthorizationService, MATRIX } from "@glim/modules/authorization";
 import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
@@ -596,6 +597,60 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/videos/${await playableVideoFixture(t)}/recheck`,
     offering: "O1",
   }),
+  "GET /course-offerings/:id/materials": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/materials`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/materials": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/materials`,
+      payload: { kind: "TEXT", title: "Notes", bodyMd: "Read John 1." },
+      headers: { "idempotency-key": `authz-material-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "PATCH /course-materials/:id": async (t) => ({
+    url: `/api/v1/course-materials/${await materialFixture(t)}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
+  // A fresh material each call, so every allowed caller really archives one.
+  "DELETE /course-materials/:id": async (t) => ({
+    url: `/api/v1/course-materials/${await materialFixture(t, `delete-${String(++n)}`)}`,
+    offering: "O1",
+  }),
+  "GET /course-materials/:id/download": async (t) => ({
+    url: `/api/v1/course-materials/${await fileMaterialFixture(t)}/download`,
+    offering: "O1",
+  }),
+  "GET /course-offerings/:id/announcements": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/announcements`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/announcements": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/announcements`,
+      payload: { title: "Hello", bodyMd: "Welcome." },
+      headers: { "idempotency-key": `authz-announce-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  "PATCH /announcements/:id": async (t) => ({
+    url: `/api/v1/announcements/${await announcementFixture(t)}`,
+    payload: { pinned: true },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
+  "DELETE /announcements/:id": async (t) => ({
+    url: `/api/v1/announcements/${await announcementFixture(t, `delete-${String(++n)}`)}`,
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -717,6 +772,65 @@ async function deletableVideoFixture(t: TestApp): Promise<string> {
   );
   deletableShared = created.id;
   return deletableShared;
+}
+
+const materialShared = new Map<string, string>();
+/** A published TEXT material on O1 (one per key, so deletes don't disturb other samples). */
+async function materialFixture(t: TestApp, key = "shared"): Promise<string> {
+  const known = materialShared.get(key);
+  if (known !== undefined) return known;
+  const created = unwrap(
+    await t.app
+      .get(MaterialsService)
+      .create(
+        personas.world.offerings.O1,
+        { kind: "TEXT", title: `Fixture ${key}`, bodyMd: "Text." },
+        personas.l1Primary.userId,
+      ),
+  );
+  materialShared.set(key, created.id);
+  return created.id;
+}
+
+let fileMaterialShared: string | undefined;
+/** A published FILE material on O1. */
+async function fileMaterialFixture(t: TestApp): Promise<string> {
+  if (fileMaterialShared !== undefined) return fileMaterialShared;
+  const file = await t.app.get(FilesService).store({
+    ownerUserId: personas.l1Primary.userId,
+    purpose: "MATERIAL",
+    name: "notes.pdf",
+    mime: "application/pdf",
+    bytes: Buffer.from("%PDF-1.4 notes"),
+  });
+  const created = unwrap(
+    await t.app
+      .get(MaterialsService)
+      .create(
+        personas.world.offerings.O1,
+        { kind: "FILE", title: "Fixture file", fileId: file.id },
+        personas.l1Primary.userId,
+      ),
+  );
+  fileMaterialShared = created.id;
+  return fileMaterialShared;
+}
+
+const announcementShared = new Map<string, string>();
+async function announcementFixture(t: TestApp, key = "shared"): Promise<string> {
+  const known = announcementShared.get(key);
+  if (known !== undefined) return known;
+  const created = unwrap(
+    await t.app
+      .get(MaterialsService)
+      .announce(
+        personas.world.offerings.O1,
+        { title: `Fixture ${key}`, bodyMd: "Text." },
+        personas.l1Primary.userId,
+      ),
+  );
+  announcementShared.set(key, created.id);
+  return created.id;
 }
 
 async function freshOffering(t: TestApp): Promise<string> {

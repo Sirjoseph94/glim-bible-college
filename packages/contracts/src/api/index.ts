@@ -15,6 +15,7 @@ import * as platform from "./platform";
 import * as reports from "./reports";
 import * as settings from "./settings";
 import * as users from "./users";
+import * as content from "./content";
 import * as video from "./video";
 
 export {
@@ -35,6 +36,7 @@ export {
   reports,
   settings,
   users,
+  content,
   video,
 };
 
@@ -66,6 +68,15 @@ export const ENDPOINTS = [
   attendance.overrideAttendance,
   attendance.clearAttendanceOverride,
   attendance.getAttendanceReport,
+  content.listMaterials,
+  content.createMaterial,
+  content.updateMaterial,
+  content.deleteMaterial,
+  content.downloadMaterial,
+  content.listAnnouncements,
+  content.createAnnouncement,
+  content.updateAnnouncement,
+  content.deleteAnnouncement,
   video.listVideos,
   video.getVideo,
   video.addVideo,
@@ -166,6 +177,7 @@ export const ENDPOINTS = [
   files.createUpload,
   files.completeUpload,
   files.downloadFile,
+  files.resumeUpload,
   imports.startImport,
   imports.listImports,
   imports.getImport,
@@ -191,7 +203,14 @@ export type {
 } from "./attendance";
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
-export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";
+export {
+  MULTIPART_PART_BYTES,
+  MULTIPART_THRESHOLD_BYTES,
+  UPLOAD_PURPOSES,
+  type FileView,
+  type UploadPurpose,
+  type UploadTarget,
+} from "./files";
 export { IMPORT_KINDS, type ImportJob, type ImportKind } from "./imports";
 export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollment";
 export type { Me } from "./me";
@@ -205,4 +224,5 @@ export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";
 export type { UserDetail, UserListItem } from "./users";
+export type { Announcement, Material } from "./content";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";

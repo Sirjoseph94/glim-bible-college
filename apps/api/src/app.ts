@@ -42,6 +42,7 @@ import { ImportsController } from "./http/imports/imports.controller";
 import { ClassMeetingsController } from "./http/meetings/class-meetings.controller";
 import { RollCallController } from "./http/attendance/roll-call.controller";
 import { VideosController } from "./http/video/videos.controller";
+import { MaterialsController } from "./http/content/materials.controller";
 import { IntakesController } from "./http/admissions/intakes.controller";
 import { AdmissionsReportsController } from "./http/admissions/reports.controller";
 import { ReviewController } from "./http/admissions/review.controller";
@@ -108,6 +109,7 @@ export class AppModule {
         ClassMeetingsController,
         RollCallController,
         VideosController,
+        MaterialsController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

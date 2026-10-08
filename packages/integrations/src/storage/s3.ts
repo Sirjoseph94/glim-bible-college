@@ -1,14 +1,19 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
   CreateBucketCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   HeadBucketCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
+  ListPartsCommand,
   NoSuchKey,
   NotFound,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -105,6 +110,75 @@ export class S3ObjectStorage implements ObjectStorage {
         expiresIn: input.expiresInSeconds,
         signableHeaders: new Set(["content-type", "content-length"]),
       },
+    );
+  }
+
+  async createMultipart(input: Parameters<ObjectStorage["createMultipart"]>[0]): Promise<string> {
+    const res = await this.client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        ContentType: input.contentType,
+      }),
+    );
+    if (res.UploadId === undefined) throw new Error("CreateMultipartUpload returned no UploadId");
+    return res.UploadId;
+  }
+
+  presignUploadPart(input: Parameters<ObjectStorage["presignUploadPart"]>[0]): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new UploadPartCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+        PartNumber: input.partNumber,
+      }),
+      { expiresIn: input.expiresInSeconds },
+    );
+  }
+
+  async listParts(input: Parameters<ObjectStorage["listParts"]>[0]) {
+    const parts: { partNumber: number; etag: string; sizeBytes: number }[] = [];
+    let marker: string | undefined;
+    for (;;) {
+      const res = await this.client.send(
+        new ListPartsCommand({
+          Bucket: input.bucket,
+          Key: input.key,
+          UploadId: input.uploadId,
+          ...(marker === undefined ? {} : { PartNumberMarker: marker }),
+        }),
+      );
+      for (const part of res.Parts ?? [])
+        if (part.PartNumber !== undefined && part.ETag !== undefined)
+          parts.push({ partNumber: part.PartNumber, etag: part.ETag, sizeBytes: part.Size ?? 0 });
+      if (res.IsTruncated !== true || res.NextPartNumberMarker === undefined) break;
+      marker = res.NextPartNumberMarker;
+    }
+    return parts.sort((a, b) => a.partNumber - b.partNumber);
+  }
+
+  async completeMultipart(input: Parameters<ObjectStorage["completeMultipart"]>[0]): Promise<void> {
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+        MultipartUpload: {
+          Parts: input.parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
+        },
+      }),
+    );
+  }
+
+  async abortMultipart(input: Parameters<ObjectStorage["abortMultipart"]>[0]): Promise<void> {
+    await this.client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+      }),
     );
   }
 
