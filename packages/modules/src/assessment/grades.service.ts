@@ -9,17 +9,32 @@ import {
   ok,
   parseDecimal,
   type Clock,
+  type DomainError,
   type DomainResult,
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 type GradeRow = typeof schema.grades.$inferSelect;
+type AssessmentRow = typeof schema.assessments.$inferSelect;
+type GradeSource = Grade["source"];
+type GradeStatus = Grade["status"];
 
 export interface GradeInput {
   score: string | null;
   feedbackMd?: string | null | undefined;
   reason?: string | undefined;
+  excused?: boolean | undefined;
+}
+
+/** What a grade becomes; `feedbackMd` undefined keeps the current feedback. */
+interface NextGrade {
+  score: string | null;
+  status: GradeStatus;
+  source: GradeSource;
+  feedbackMd?: string | null | undefined;
+  gradedBy: string | null;
+  releasedAt?: Date | null | undefined;
 }
 
 const SCORE = /^\d{1,5}(\.\d{1,2})?$/;
@@ -29,9 +44,26 @@ const toHundredths = (value: string) => parseDecimal(value, 2);
 const fromHundredths = (value: number) => formatDecimal(value, 2);
 
 /**
+ * Checks a score typed by a person against the column's maximum and normalises it ("7.5" →
+ * "7.50"). Returns the error message when it isn't a valid score.
+ */
+export function normaliseScore(
+  text: string,
+  maxScore: string,
+): { score: string } | { message: string; code: "invalid" | "too_big" } {
+  const trimmed = text.trim();
+  if (!SCORE.test(trimmed))
+    return { message: "Use a number with at most two decimal places.", code: "invalid" };
+  const hundredths = toHundredths(trimmed);
+  if (hundredths > toHundredths(maxScore))
+    return { message: `The score can't be more than ${maxScore}.`, code: "too_big" };
+  return { score: fromHundredths(hundredths) };
+}
+
+/**
  * Grades (owner: assessment, TRD §14.2): one per assessment and student. Every change writes the
- * grade history and the audit log in the same transaction. Grades stay DRAFT until released
- * (ticket 35), so students don't see them yet.
+ * grade history and the audit log in the same transaction. Grades stay DRAFT, unseen by students,
+ * until the column is released; a released grade that changes stays released and needs a reason.
  */
 @Injectable()
 export class GradesService {
@@ -42,8 +74,9 @@ export class GradesService {
   ) {}
 
   /**
-   * Sets a score (0 to the assessment's maximum, two decimal places) and feedback. `expectedVersion`
-   * is the grade's version, or 0 when the caller believes there is no grade yet.
+   * Sets a score (0 to the assessment's maximum, two decimal places) and feedback, or excuses the
+   * student. `expectedVersion` is the grade's version, or 0 when the caller believes there is no
+   * grade yet.
    */
   async put(
     assessmentId: string,
@@ -52,112 +85,56 @@ export class GradesService {
     input: GradeInput,
     actor: AuditActor & { userId: string },
   ): Promise<DomainResult<Grade>> {
-    return this.db.withTxResult(async ({ db }) => {
+    return this.db.withTxResult<Grade, DomainError>(async ({ db }) => {
       const a = schema.assessments;
       const [assessment] = await db.select().from(a).where(eq(a.id, assessmentId));
       if (assessment === undefined) return err(domainError("NOT_FOUND", "Not found."));
-      const ce = schema.courseEnrollments;
-      const [enrolled] = await db
-        .select({ id: ce.id })
-        .from(ce)
-        .where(
-          and(
-            eq(ce.courseOfferingId, assessment.courseOfferingId),
-            eq(ce.studentId, studentId),
-            inArray(ce.status, ["ENROLLED", "COMPLETED"]),
-          ),
-        );
-      if (enrolled === undefined) return err(domainError("NOT_FOUND", "Not found."));
+      if (!(await this.onCourse(db, assessment.courseOfferingId, studentId)))
+        return err(domainError("NOT_FOUND", "Not found."));
 
       let score: string | null = null;
-      if (input.score !== null) {
-        if (!SCORE.test(input.score))
+      if (input.score !== null && input.excused !== true) {
+        const checked = normaliseScore(input.score, assessment.maxScore);
+        if ("message" in checked)
           return err(
-            domainError("VALIDATION_FAILED", "Use a number with at most two decimal places.", {
-              fieldErrors: [{ path: "body.score", code: "invalid", message: "Not a score." }],
+            domainError("VALIDATION_FAILED", checked.message, {
+              fieldErrors: [{ path: "body.score", code: checked.code, message: checked.message }],
             }),
           );
-        const hundredths = toHundredths(input.score);
-        if (hundredths > toHundredths(assessment.maxScore))
-          return err(
-            domainError(
-              "VALIDATION_FAILED",
-              `The score can't be more than ${assessment.maxScore}.`,
-              { fieldErrors: [{ path: "body.score", code: "too_big", message: "Too high." }] },
-            ),
-          );
-        score = fromHundredths(hundredths);
+        score = checked.score;
       }
 
-      const g = schema.grades;
-      const [current] = await db
-        .select()
-        .from(g)
-        .where(and(eq(g.assessmentId, assessmentId), eq(g.studentId, studentId)))
-        .for("update");
+      const current = await this.lock(db, assessmentId, studentId);
       if ((current?.version ?? 0) !== expectedVersion)
         return err(
           domainError("VERSION_MISMATCH", "Someone else changed this grade. Reload and try again."),
         );
-      const now = this.clock.now();
-      const source = assessment.kind === "ASSIGNMENT" ? "SUBMISSION" : "MANUAL";
-      let row: GradeRow | undefined;
-      if (current === undefined) {
-        [row] = await db
-          .insert(g)
-          .values({
-            courseOfferingId: assessment.courseOfferingId,
-            assessmentId,
-            studentId,
-            score,
-            source,
-            feedbackMd: input.feedbackMd ?? null,
-            gradedBy: actor.userId,
-            gradedAt: now,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning();
-      } else {
-        [row] = await db
-          .update(g)
-          .set({
-            score,
-            source,
-            ...(input.feedbackMd === undefined ? {} : { feedbackMd: input.feedbackMd }),
-            gradedBy: actor.userId,
-            gradedAt: now,
-            updatedAt: now,
-            version: sql`${g.version} + 1`,
-          })
-          .where(eq(g.id, current.id))
-          .returning();
-      }
-      if (row === undefined) throw new Error("grade write returned nothing");
-      await db.insert(schema.gradeChanges).values({
-        gradeId: row.id,
-        oldScore: current?.score ?? null,
-        newScore: score,
-        oldStatus: current?.status ?? null,
-        newStatus: row.status,
-        oldSource: current?.source ?? null,
-        newSource: source,
+      const status: GradeStatus =
+        input.excused === true ? "EXCUSED" : current?.status === "RELEASED" ? "RELEASED" : "DRAFT";
+      const changesRecord =
+        current !== undefined && (current.score !== score || current.status !== status);
+      if (current?.status === "RELEASED" && changesRecord && input.reason === undefined)
+        return err(
+          domainError("VALIDATION_FAILED", "Say why a released grade is changing.", {
+            fieldErrors: [{ path: "body.reason", code: "required", message: "Give a reason." }],
+          }),
+        );
+      const row = await this.write(db, {
+        assessment,
+        studentId,
+        current,
+        next: {
+          score,
+          status,
+          source: assessment.kind === "ASSIGNMENT" ? "SUBMISSION" : "MANUAL",
+          feedbackMd: input.feedbackMd,
+          gradedBy: actor.userId,
+          releasedAt: status === "RELEASED" ? current?.releasedAt : null,
+        },
         changedBy: actor.userId,
         reason: input.reason ?? null,
-        createdAt: now,
-      });
-      // Scores only: feedback text stays out of the audit log.
-      await this.audit.record(db, actor, {
         action: "assessment.grade.updated",
-        resourceType: "grade",
-        resourceId: row.id,
-        metadata: {
-          assessmentId,
-          studentId,
-          oldScore: current?.score ?? null,
-          newScore: score,
-          ...(input.reason === undefined ? {} : { reason: input.reason }),
-        },
+        actor,
       });
       return ok(toGrade(row));
     });
@@ -180,26 +157,97 @@ export class GradesService {
       actor: AuditActor;
     },
   ): Promise<void> {
-    const g = schema.grades;
     const score = fromHundredths(input.scoreX100);
-    const [current] = await db
+    const current = await this.lock(db, input.assessmentId, input.studentId);
+    if (current?.score === score && current.source === input.source) return;
+    const [assessment] = await db
+      .select()
+      .from(schema.assessments)
+      .where(eq(schema.assessments.id, input.assessmentId));
+    if (assessment === undefined) throw new Error("grade for a missing assessment");
+    await this.write(db, {
+      assessment,
+      studentId: input.studentId,
+      current,
+      next: {
+        score,
+        // An excused student who takes the quiz anyway gets a score that waits for release.
+        status: current?.status === "RELEASED" ? "RELEASED" : "DRAFT",
+        source: input.source,
+        gradedBy: current?.gradedBy ?? null,
+        releasedAt: current?.status === "RELEASED" ? current.releasedAt : null,
+      },
+      changedBy: input.changedBy,
+      reason: null,
+      action: "assessment.grade.computed",
+      actor: input.actor,
+    });
+  }
+
+  /** Whether the student is (or was, COMPLETED) on the offering. */
+  async onCourse(db: Database, offeringId: string, studentId: string): Promise<boolean> {
+    const ce = schema.courseEnrollments;
+    const [enrolled] = await db
+      .select({ id: ce.id })
+      .from(ce)
+      .where(
+        and(
+          eq(ce.courseOfferingId, offeringId),
+          eq(ce.studentId, studentId),
+          inArray(ce.status, ["ENROLLED", "COMPLETED"]),
+        ),
+      )
+      .limit(1);
+    return enrolled !== undefined;
+  }
+
+  /** The grade row, locked for the rest of the transaction. */
+  async lock(db: Database, assessmentId: string, studentId: string): Promise<GradeRow | undefined> {
+    const g = schema.grades;
+    const [row] = await db
       .select()
       .from(g)
-      .where(and(eq(g.assessmentId, input.assessmentId), eq(g.studentId, input.studentId)))
+      .where(and(eq(g.assessmentId, assessmentId), eq(g.studentId, studentId)))
       .for("update");
-    if (current?.score === score && current.source === input.source) return;
+    return row;
+  }
+
+  /**
+   * The one write path for grades: inserts or updates the row, then appends the grade history and
+   * the audit entry in the same transaction. Feedback text stays out of the audit log.
+   */
+  async write(
+    db: Database,
+    input: {
+      assessment: AssessmentRow;
+      studentId: string;
+      current: GradeRow | undefined;
+      next: NextGrade;
+      changedBy: string;
+      reason: string | null;
+      action: string;
+      actor: AuditActor;
+    },
+  ): Promise<GradeRow> {
+    const { assessment, current, next } = input;
+    const g = schema.grades;
     const now = this.clock.now();
+    const graded = next.score !== current?.score || next.source !== current.source;
     const [row] =
       current === undefined
         ? await db
             .insert(g)
             .values({
-              courseOfferingId: input.courseOfferingId,
-              assessmentId: input.assessmentId,
+              courseOfferingId: assessment.courseOfferingId,
+              assessmentId: assessment.id,
               studentId: input.studentId,
-              score,
-              source: input.source,
+              score: next.score,
+              source: next.source,
+              status: next.status,
+              feedbackMd: next.feedbackMd ?? null,
+              gradedBy: next.gradedBy,
               gradedAt: now,
+              releasedAt: next.releasedAt ?? null,
               createdAt: now,
               updatedAt: now,
             })
@@ -207,9 +255,13 @@ export class GradesService {
         : await db
             .update(g)
             .set({
-              score,
-              source: input.source,
-              gradedAt: now,
+              score: next.score,
+              source: next.source,
+              status: next.status,
+              ...(next.feedbackMd === undefined ? {} : { feedbackMd: next.feedbackMd }),
+              gradedBy: next.gradedBy,
+              ...(graded ? { gradedAt: now } : {}),
+              releasedAt: next.releasedAt ?? null,
               updatedAt: now,
               version: sql`${g.version} + 1`,
             })
@@ -219,26 +271,31 @@ export class GradesService {
     await db.insert(schema.gradeChanges).values({
       gradeId: row.id,
       oldScore: current?.score ?? null,
-      newScore: score,
+      newScore: row.score,
       oldStatus: current?.status ?? null,
       newStatus: row.status,
       oldSource: current?.source ?? null,
-      newSource: input.source,
+      newSource: row.source,
       changedBy: input.changedBy,
+      reason: input.reason,
       createdAt: now,
     });
     await this.audit.record(db, input.actor, {
-      action: "assessment.grade.computed",
+      action: input.action,
       resourceType: "grade",
       resourceId: row.id,
       metadata: {
-        assessmentId: input.assessmentId,
+        assessmentId: assessment.id,
         studentId: input.studentId,
         oldScore: current?.score ?? null,
-        newScore: score,
-        source: input.source,
+        newScore: row.score,
+        oldStatus: current?.status ?? null,
+        newStatus: row.status,
+        source: row.source,
+        ...(input.reason === null ? {} : { reason: input.reason }),
       },
     });
+    return row;
   }
 }
 

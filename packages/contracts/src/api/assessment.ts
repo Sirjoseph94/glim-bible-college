@@ -297,8 +297,10 @@ export const putGrade = endpoint({
     .object({
       score: z.string().trim().nullable(),
       feedbackMd: z.string().trim().max(20_000).nullable().optional(),
-      /** Why a recorded score is changing (kept in the grade history). */
+      /** Why a recorded score is changing (kept in the grade history); required once released. */
       reason: z.string().trim().min(1).max(500).optional(),
+      /** Excuse the student from this assessment (no score; left out of the final result). */
+      excused: z.boolean().optional(),
     })
     .strict(),
   response: gradeSchema,
@@ -664,4 +666,177 @@ export const markQuizResponse = endpoint({
     })
     .strict(),
   response: quizAttemptSchema,
+});
+
+// ---- gradebook and release (§14.2) ----
+
+export const gradebookColumnSchema = z.object({
+  assessmentId: z.uuid(),
+  kind: z.enum(ENUMS["assessments.kind"]),
+  title: z.string(),
+  maxScore: z.string(),
+  weight: z.string(),
+  status: z.enum(ENUMS["assessments.status"]),
+  dueAt: z.iso.datetime().nullable(),
+  /** Scored grades still DRAFT: what releasing would show to students. */
+  unreleased: z.number().int(),
+  released: z.number().int(),
+  version: z.number().int(),
+});
+
+export type GradebookColumn = z.infer<typeof gradebookColumnSchema>;
+
+export const gradebookCellSchema = gradeSchema.extend({ assessmentId: z.uuid() });
+
+export const gradebookRowSchema = z.object({
+  studentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string().nullable(),
+  studyMode: z.enum(ENUMS["programme_enrollments.study_mode"]),
+  /** One per column that has a grade. */
+  grades: z.array(gradebookCellSchema),
+});
+
+export type GradebookRow = z.infer<typeof gradebookRowSchema>;
+
+export const gradebookSchema = z.object({
+  columns: z.array(gradebookColumnSchema),
+  rows: z.array(gradebookRowSchema),
+  /** Weights of the published and closed columns; finalization needs exactly "100.00". */
+  weightTotal: z.string(),
+  weightsValid: z.boolean(),
+});
+
+export type Gradebook = z.infer<typeof gradebookSchema>;
+
+export const getGradebook = endpoint({
+  method: "GET",
+  path: "/course-offerings/:id/gradebook",
+  summary: "Every column and every enrolled student's grades, with the weight total",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:read",
+  resource: { type: "course-offering", param: "id" },
+  params: idParams,
+  response: gradebookSchema,
+});
+
+export const createGradebookColumn = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/assessments",
+  summary: "Add a hand-entered gradebook column (e.g. participation)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:assignment:manage",
+  resource: { type: "course-offering", param: "id" },
+  idempotent: true,
+  params: idParams,
+  body: z
+    .object({
+      title: z.string().trim().min(1).max(200),
+      maxScore: decimalText(100_000, 1),
+      weight: decimalText(10_000),
+    })
+    .strict(),
+  response: gradebookColumnSchema,
+  successStatus: 201,
+});
+
+export const updateGradebookColumn = endpoint({
+  method: "PATCH",
+  path: "/assessments/:id",
+  summary: "Rename a gradebook column or change its weight (If-Match: the column's version)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:assignment:manage",
+  resource: { type: "assessment", param: "id" },
+  ifMatch: true,
+  params: idParams,
+  body: z
+    .object({
+      title: z.string().trim().min(1).max(200).optional(),
+      weight: decimalText(10_000).optional(),
+    })
+    .strict(),
+  response: gradebookColumnSchema,
+});
+
+export const releaseGrades = endpoint({
+  method: "POST",
+  path: "/assessments/:id/release",
+  summary:
+    "Release the column's scored DRAFT grades to students (grades entered later wait for the next release)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:release",
+  resource: { type: "assessment", param: "id" },
+  idempotent: true,
+  params: idParams,
+  response: z.object({ released: z.number().int(), column: gradebookColumnSchema }),
+  successStatus: 200,
+});
+
+export const gradeImportRowSchema = z.object({
+  line: z.number().int(),
+  matricNumber: z.string(),
+  studentName: z.string().nullable(),
+  oldScore: z.string().nullable(),
+  newScore: z.string().nullable(),
+  outcome: z.enum(["created", "updated", "unchanged", "error"]),
+  message: z.string().nullable(),
+});
+
+export const importGrades = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/grades/import",
+  summary:
+    "Import one column's scores from CSV (matric_number, score, feedback); a dry run changes nothing, and nothing is saved if any row has an error",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:update",
+  resource: { type: "course-offering", param: "id" },
+  params: idParams,
+  body: z
+    .object({
+      assessmentId: z.uuid(),
+      csv: z.string().min(1).max(1_000_000),
+      dryRun: z.boolean(),
+    })
+    .strict(),
+  response: z.object({
+    applied: z.boolean(),
+    rows: z.array(gradeImportRowSchema),
+    created: z.number().int(),
+    updated: z.number().int(),
+    unchanged: z.number().int(),
+    errors: z.number().int(),
+  }),
+  successStatus: 200,
+});
+
+export const myGradeSchema = z.object({
+  assessmentId: z.uuid(),
+  kind: z.enum(ENUMS["assessments.kind"]),
+  title: z.string(),
+  maxScore: z.string(),
+  weight: z.string(),
+  score: z.string().nullable(),
+  excused: z.boolean(),
+  /** Rendered and sanitized on the server. */
+  feedbackHtml: z.string().nullable(),
+  releasedAt: z.iso.datetime().nullable(),
+});
+
+export type MyGrade = z.infer<typeof myGradeSchema>;
+
+export const getMyGrades = endpoint({
+  method: "GET",
+  path: "/course-offerings/:id/my-grades",
+  summary: "The caller's released grades on a course (nothing still in draft)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:read",
+  resource: { type: "course-offering", param: "id", ownPart: true },
+  params: idParams,
+  response: z.object({ items: z.array(myGradeSchema) }),
 });

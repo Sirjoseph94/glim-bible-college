@@ -17,7 +17,7 @@ function size(bytes: number): string {
 }
 
 /** HTML from the server, rendered from Markdown and sanitized there with an allow-list (§14.1). */
-function SafeHtml({ html }: { html: string }) {
+export function SafeHtml({ html }: { html: string }) {
   return (
     <div
       className="prose-sm space-y-2 [&_a]:text-blue-700 [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"

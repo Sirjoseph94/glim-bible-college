@@ -9,6 +9,7 @@ import type {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { CourseAssignments } from "../components/assignments";
+import { MyGrades } from "../components/grades";
 import { CourseQuizzes } from "../components/quizzes";
 import { CourseAnnouncements, CourseMaterials } from "../components/course-content";
 import { api } from "../api/client";
@@ -205,6 +206,12 @@ export function CoursesPage() {
               <summary className="cursor-pointer text-slate-700">Quizzes</summary>
               <div className="mt-2">
                 <CourseQuizzes offeringId={o.id} manage={false} />
+              </div>
+            </details>
+            <details className="text-sm">
+              <summary className="cursor-pointer text-slate-700">Grades</summary>
+              <div className="mt-2">
+                <MyGrades offeringId={o.id} />
               </div>
             </details>
             <details className="text-sm">

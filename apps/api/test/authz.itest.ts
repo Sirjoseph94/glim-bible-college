@@ -685,6 +685,51 @@ const SAMPLES: Record<string, Sample> = {
       offering: "O1",
     };
   },
+  "GET /course-offerings/:id/gradebook": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/gradebook`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/assessments": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/assessments`,
+      payload: { title: "Participation", maxScore: "10", weight: "0" },
+      headers: { "idempotency-key": `authz-column-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "PATCH /assessments/:id": async (t) => ({
+    url: `/api/v1/assessments/${(await assignmentFixture(t)).assessmentId}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
+  "POST /assessments/:id/release": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/assessments/${(await assignmentFixture(t)).assessmentId}/release`,
+      headers: { "idempotency-key": `authz-release-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  // A dry run, so allowed callers change nothing.
+  "POST /course-offerings/:id/grades/import": async (t) => ({
+    url: `/api/v1/course-offerings/${personas.world.offerings.O1}/grades/import`,
+    payload: {
+      assessmentId: (await assignmentFixture(t)).assessmentId,
+      csv: "matric_number,score\nNOBODY,1\n",
+      dryRun: true,
+    },
+    offering: "O1",
+  }),
+  "GET /course-offerings/:id/my-grades": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/my-grades`,
+      offering: "O1",
+      ownPart: true,
+    }),
   "GET /course-offerings/:id/questions": () =>
     Promise.resolve({
       url: `/api/v1/course-offerings/${personas.world.offerings.O1}/questions`,

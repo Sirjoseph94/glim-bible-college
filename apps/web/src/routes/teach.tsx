@@ -761,6 +761,13 @@ function OfferingItem({ offering }: { offering: Offering }) {
         {showQuizzes ? "Hide quizzes" : "Quizzes"}
       </button>
       {showQuizzes ? <CourseQuizzes offeringId={offering.id} manage /> : null}
+      <Link
+        to="/teach/offerings/$offeringId/gradebook"
+        params={{ offeringId: offering.id }}
+        className="block text-sm text-brand underline"
+      >
+        Gradebook
+      </Link>
       {showContent ? (
         <div className="space-y-4">
           <h4 className="font-medium">Announcements</h4>

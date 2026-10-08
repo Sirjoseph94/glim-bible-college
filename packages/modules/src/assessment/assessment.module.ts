@@ -1,9 +1,11 @@
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
 import { ContentModule } from "@glim/modules/content";
+import { NotificationsModule } from "@glim/modules/notifications";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { AssignmentsService } from "./assignments.service";
+import { GradebookService } from "./gradebook.service";
 import { GradesService } from "./grades.service";
 import { QuizAttemptsService } from "./quiz-attempts.service";
 import { QuizzesService } from "./quizzes.service";
@@ -49,13 +51,14 @@ const services = [
   AssignmentsService,
   SubmissionsService,
   GradesService,
+  GradebookService,
   QuizzesService,
   QuizAttemptsService,
 ];
 
 /** Assessment (TRD §14.2): gradebook columns, assignments, submissions and grades. */
 @Module({
-  imports: [AuditModule, AuthorizationModule, ContentModule],
+  imports: [AuditModule, AuthorizationModule, ContentModule, NotificationsModule],
   providers: [...services, AssessmentResources],
   exports: services,
 })

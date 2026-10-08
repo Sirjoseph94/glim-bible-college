@@ -312,7 +312,8 @@ export function GradeAssignmentPage() {
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Grade: {a.title}</h2>
       <p className="text-sm text-slate-600">
-        Out of {a.maxScore}. Grades stay hidden from students until they're released.
+        Out of {a.maxScore}. Grades stay hidden from students until you release them in the
+        gradebook.
       </p>
       <ul className="space-y-3">
         {list.data.items.map((item) => (
@@ -385,6 +386,7 @@ function GradeRow({
           const data = new FormData(e.currentTarget);
           const score = formText(data, "score").trim();
           const feedback = formText(data, "feedback").trim();
+          const reason = formText(data, "reason").trim();
           setDone(false);
           void run(async () => {
             await api<typeof assessment.putGrade>("PUT", "/assessments/:id/grades/:studentId", {
@@ -392,6 +394,7 @@ function GradeRow({
               body: {
                 score: score === "" ? null : score,
                 feedbackMd: feedback === "" ? null : feedback,
+                ...(reason === "" ? {} : { reason }),
               },
               headers: { "if-match": `"${String(item.grade?.version ?? 0)}"` },
             });
@@ -419,6 +422,19 @@ function GradeRow({
             className="block w-full rounded border border-slate-300 px-3 py-2"
           />
         </label>
+        {item.grade?.status === "RELEASED" ? (
+          <label className="block">
+            <span className="block font-medium text-slate-700">
+              Reason for changing a released grade
+            </span>
+            <input
+              name="reason"
+              maxLength={500}
+              className="block w-full rounded border border-slate-300 px-3 py-2"
+              aria-invalid={fieldErrors.reason === undefined ? undefined : true}
+            />
+          </label>
+        ) : null}
         <button
           type="submit"
           disabled={busy}
