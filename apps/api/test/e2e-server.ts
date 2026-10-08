@@ -9,10 +9,15 @@ import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { S3ObjectStorage } from "@glim/integrations/storage/s3";
-import { CalendarService, ProgrammesService } from "@glim/modules/academic";
+import {
+  CalendarService,
+  CoursesService,
+  CurriculaService,
+  ProgrammesService,
+} from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { StaffAccountsService } from "@glim/modules/identity";
-import { systemClock } from "@glim/shared";
+import { systemClock, unwrap } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import Fastify from "fastify";
@@ -76,16 +81,51 @@ for (const [email, displayName, role] of E2E_STAFF) {
     .inviteStaff({ email, displayName, roles: [role] }, SYSTEM_ACTOR);
 }
 // A programme applicants can choose, and a planned Academic Session for the admissions spec's intake.
-await app.get(ProgrammesService).create(
-  {
-    code: "DMIN",
-    name: "Diploma in Ministry",
-    awardType: "DIPLOMA",
-    durationSemesters: 4,
-    levels: 2,
-  },
-  SYSTEM_ACTOR,
+const ministry = unwrap(
+  await app.get(ProgrammesService).create(
+    {
+      code: "DMIN",
+      name: "Diploma in Ministry",
+      awardType: "DIPLOMA",
+      durationSemesters: 4,
+      levels: 2,
+    },
+    SYSTEM_ACTOR,
+  ),
 );
+// Students enroll on the programme's active curriculum when they accept an offer.
+const pastoral = unwrap(
+  await app
+    .get(CoursesService)
+    .create(
+      { code: "PAS101", title: "Pastoral Care", description: null, credits: "3.0" },
+      SYSTEM_ACTOR,
+    ),
+);
+const curricula = app.get(CurriculaService);
+const draft = unwrap(
+  await curricula.create(
+    { programmeId: ministry.id, effectiveFrom: "2030-09-01", minElectiveCredits: "0.0" },
+    SYSTEM_ACTOR,
+  ),
+);
+unwrap(
+  await curricula.replacePlacements(
+    draft.id,
+    draft.version,
+    [
+      {
+        courseId: pastoral.id,
+        levelNo: 1,
+        semesterNo: 1,
+        courseType: "COMPULSORY",
+        creditOverride: null,
+      },
+    ],
+    SYSTEM_ACTOR,
+  ),
+);
+unwrap(await curricula.activate(draft.id, SYSTEM_ACTOR));
 await app
   .get(CalendarService)
   .createSession(

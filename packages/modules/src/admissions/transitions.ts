@@ -9,6 +9,7 @@ const VERBS: Partial<Record<ApplicationStatus, string>> = {
   ADMITTED: "admitted",
   REJECTED: "rejected",
   WITHDRAWN: "withdrawn",
+  ACCEPTED: "accepted",
 };
 
 /**

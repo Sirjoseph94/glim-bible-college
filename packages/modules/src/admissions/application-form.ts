@@ -1,5 +1,6 @@
 import type { Application, ApplicationSection } from "@glim/contracts";
-import type { schema } from "@glim/db";
+import type { Database, schema } from "@glim/db";
+import type { StudentsService } from "@glim/modules/enrollment";
 
 type ApplicationRow = typeof schema.applications.$inferSelect;
 
@@ -142,5 +143,19 @@ export function formAnswers(
       r.photoFileId === null
         ? null
         : { fileId: r.photoFileId, downloadPath: `/api/v1/files/${r.photoFileId}/download` },
+  };
+}
+
+/** The offer (once admitted) and the Matric Number (once accepted), for both views. */
+export async function offerAndEnrollment(
+  r: ApplicationRow,
+  db: Database,
+  students: StudentsService,
+): Promise<Pick<Application, "offer" | "enrollment">> {
+  const matricNumber =
+    r.status === "ACCEPTED" ? await students.matricForApplication(r.id, db) : null;
+  return {
+    offer: r.offerExpiresAt === null ? null : { expiresAt: r.offerExpiresAt.toISOString() },
+    enrollment: matricNumber === null ? null : { matricNumber },
   };
 }

@@ -333,6 +333,15 @@ const SAMPLES: Record<string, Sample> = {
       owner: "applicant",
     };
   },
+  // The fixture is a draft, so the owner gets a 409 (no offer to accept) and nothing changes.
+  "POST /applications/:id/accept": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/applications/${await applicationFixture(t)}/accept`,
+      headers: { "idempotency-key": `authz-accept-${String(n).padStart(8, "0")}` },
+      owner: "applicant",
+    };
+  },
   "POST /applications/:id/withdraw": async (t) => ({
     url: `/api/v1/applications/${await applicationFixture(t)}/withdraw`,
     owner: "applicant",

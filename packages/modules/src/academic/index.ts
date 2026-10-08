@@ -5,6 +5,7 @@ export {
   type SemesterDates,
   type SemesterRow,
 } from "./calendar.service";
+export { CohortsService } from "./cohorts.service";
 export {
   CoursesService,
   type CourseChange,

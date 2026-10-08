@@ -6,6 +6,7 @@ import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { CalendarService } from "./calendar.service";
+import { CohortsService } from "./cohorts.service";
 import { CoursesService } from "./courses.service";
 import { CurriculaService } from "./curricula.service";
 import { OfferingsService } from "./offerings.service";
@@ -52,6 +53,7 @@ const services = [
   CalendarService,
   RoomsService,
   OfferingsService,
+  CohortsService,
 ];
 
 @Module({

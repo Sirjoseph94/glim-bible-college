@@ -41,7 +41,7 @@ export class MeService {
       roles: {
         staff,
         isLecturer: derived.isLecturer,
-        isStudent: false,
+        isStudent: derived.isStudent,
         isApplicant: derived.isApplicant,
       },
       csrfToken: session.csrfToken,

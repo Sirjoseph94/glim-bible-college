@@ -152,12 +152,24 @@ export class AuthorizationService {
   }
 
   /** Roles derived from data rather than assignments (§7.1), for navigation (`GET /me`). */
-  async derivedRoles(userId: string): Promise<{ isLecturer: boolean; isApplicant: boolean }> {
-    const [isLecturer, isApplicant] = await Promise.all([
+  async derivedRoles(
+    userId: string,
+  ): Promise<{ isLecturer: boolean; isStudent: boolean; isApplicant: boolean }> {
+    const [isLecturer, isStudent, isApplicant] = await Promise.all([
       this.isActiveLecturer(userId),
+      this.isActiveStudent(userId),
       this.ownsAnApplication(userId),
     ]);
-    return { isLecturer, isApplicant };
+    return { isLecturer, isStudent, isApplicant };
+  }
+
+  private async isActiveStudent(userId: string): Promise<boolean> {
+    const s = schema.students;
+    const [row] = await this.db.read
+      .select({ id: s.id })
+      .from(s)
+      .where(and(eq(s.userId, userId), eq(s.status, "ACTIVE")));
+    return row !== undefined;
   }
 
   private async ownsAnApplication(userId: string): Promise<boolean> {

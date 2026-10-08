@@ -76,6 +76,16 @@ export class CurriculaService {
     this.usage = usage;
   }
 
+  /** The programme's ACTIVE curriculum, which new enrollments start on (§9.1); null if none. */
+  async activeFor(programmeId: string, db: Database = this.db.read): Promise<string | null> {
+    const c = schema.curricula;
+    const [row] = await db
+      .select({ id: c.id })
+      .from(c)
+      .where(and(eq(c.programmeId, programmeId), eq(c.status, "ACTIVE")));
+    return row?.id ?? null;
+  }
+
   async list(programmeId?: string): Promise<(CurriculumRow & { placementCount: number })[]> {
     const c = schema.curricula;
     const cc = schema.curriculumCourses;

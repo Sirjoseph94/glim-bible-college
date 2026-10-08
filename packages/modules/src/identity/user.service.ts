@@ -3,6 +3,7 @@ import { Db, schema, type Database } from "@glim/db";
 import { domainError, err, ok, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { eq, sql } from "drizzle-orm";
+import { generateReferralCode } from "./referral-codes";
 
 export type UserStatus = EnumValue<"users.status">;
 
@@ -65,6 +66,28 @@ export class UserService {
   async findById(id: string): Promise<UserProfile | null> {
     const [row] = await this.db.read.select().from(schema.users).where(eq(schema.users.id, id));
     return row === undefined ? null : toProfile(row);
+  }
+
+  /**
+   * The user's personal referral code (TRD §10.6), created on first need: on acceptance, import
+   * or staff creation. Codes are random, so a clash is retried.
+   */
+  async ensureReferralCode(db: Database, userId: string): Promise<string> {
+    const u = schema.users;
+    const [current] = await db
+      .select({ code: u.referralCode })
+      .from(u)
+      .where(eq(u.id, userId))
+      .for("update");
+    if (current === undefined) throw new Error("ensureReferralCode: no such user");
+    if (current.code !== null) return current.code;
+    for (;;) {
+      const code = generateReferralCode();
+      const [taken] = await db.select({ id: u.id }).from(u).where(eq(u.referralCode, code));
+      if (taken !== undefined) continue;
+      await db.update(u).set({ referralCode: code }).where(eq(u.id, userId));
+      return code;
+    }
   }
 }
 

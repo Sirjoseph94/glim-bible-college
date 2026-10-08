@@ -8,6 +8,7 @@ import { Db, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { AuthorizationService } from "@glim/modules/authorization";
 import { PolicyService, SettingsService } from "@glim/modules/identity";
+import { StudentsService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import {
   CLOCK,
@@ -23,7 +24,7 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, gt, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
-import { formAnswers, missingFields } from "./application-form";
+import { formAnswers, missingFields, offerAndEnrollment } from "./application-form";
 import { selectApplications } from "./application-query";
 import { recordTransition } from "./transitions";
 
@@ -48,6 +49,7 @@ export class ReviewService {
     @Inject(PolicyService) private readonly policies: PolicyService,
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(StudentsService) private readonly students: StudentsService,
   ) {}
 
   /** Submitted applications, oldest first (rolling review), filtered and searchable. */
@@ -304,6 +306,7 @@ export class ReviewService {
       missing: missingFields(r),
       submittedAt: iso(r.submittedAt),
       withdrawnAt: iso(r.withdrawnAt),
+      ...(await offerAndEnrollment(r, db, this.students)),
       timeline: events
         .filter((e) => e.note === null)
         .map((e) => ({ status: e.toStatus as ApplicationStatus, at: e.createdAt.toISOString() })),

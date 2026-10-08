@@ -1,5 +1,5 @@
 import { applications, type BodyOf, type ParamsOf } from "@glim/contracts";
-import { ApplicationsService } from "@glim/modules/admissions";
+import { AcceptanceService, ApplicationsService } from "@glim/modules/admissions";
 import type { AuditActor } from "@glim/modules/audit";
 import type { ActiveSession } from "@glim/modules/identity";
 import { AppError, unwrap } from "@glim/shared";
@@ -13,7 +13,10 @@ type IdParams = ParamsOf<typeof applications.getApplication>;
 /** The applicant's own application (TRD §10.2); the guard has already checked ownership. */
 @Controller()
 export class ApplicationsController {
-  constructor(@Inject(ApplicationsService) private readonly applications: ApplicationsService) {}
+  constructor(
+    @Inject(ApplicationsService) private readonly applications: ApplicationsService,
+    @Inject(AcceptanceService) private readonly acceptance: AcceptanceService,
+  ) {}
 
   @Endpoint(applications.startApplication)
   async start(
@@ -68,5 +71,14 @@ export class ApplicationsController {
     return unwrap(
       await this.applications.withdraw(params.id, { ...actor, userId: session.userId }),
     );
+  }
+
+  @Endpoint(applications.acceptOffer)
+  async accept(
+    @Params(applications.acceptOffer) params: IdParams,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof applications.acceptOffer>> {
+    return unwrap(await this.acceptance.accept(params.id, { ...actor, userId: session.userId }));
   }
 }

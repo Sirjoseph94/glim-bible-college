@@ -127,6 +127,13 @@
       "when": 1791444094142,
       "tag": "0017_wp_platform_idempotency_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791445877839,
+      "tag": "0018_wp_enrollment_students",
+      "breakpoints": true
     }
   ]
 }

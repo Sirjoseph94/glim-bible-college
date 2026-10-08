@@ -3,6 +3,7 @@ import { Db, PG, pgError, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { FilesService } from "@glim/modules/content";
 import { PolicyService, SettingsService, UserService } from "@glim/modules/identity";
+import { StudentsService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import {
   CLOCK,
@@ -15,7 +16,7 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
-import { ageOn, formAnswers, missingFields } from "./application-form";
+import { ageOn, formAnswers, missingFields, offerAndEnrollment } from "./application-form";
 import { selectApplications } from "./application-query";
 import { recordTransition } from "./transitions";
 
@@ -42,6 +43,7 @@ export class ApplicationsService {
     @Inject(UserService) private readonly users: UserService,
     @Inject(FilesService) private readonly files: FilesService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(StudentsService) private readonly students: StudentsService,
   ) {}
 
   /** Starts a draft in the open intake; that makes the user an Applicant (§7.1). */
@@ -437,7 +439,8 @@ export class ApplicationsService {
     });
   }
 
-  private async view(db: Database, id: string): Promise<DomainResult<Application>> {
+  /** The applicant's view of an application, read with the caller's connection. */
+  async view(db: Database, id: string): Promise<DomainResult<Application>> {
     const [found] = await selectApplications(eq(schema.applications.id, id), db);
     if (found === undefined) return notFound();
     const { application: r, intake, programme } = found;
@@ -470,6 +473,7 @@ export class ApplicationsService {
       minimumAgeYears: config.minimumAgeYears,
       submittedAt: iso(r.submittedAt),
       withdrawnAt: iso(r.withdrawnAt),
+      ...(await offerAndEnrollment(r, db, this.students)),
       timeline: timeline.map((e) => ({
         status: e.status as Application["status"],
         at: e.at.toISOString(),

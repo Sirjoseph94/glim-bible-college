@@ -1,7 +1,7 @@
 import type { applications } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   applicationQuery,
   ENDED,
@@ -83,6 +83,30 @@ function StatusView({ id }: { id: string }) {
             Continue your application
           </Link>
         ) : null}
+        {a.status === "ADMITTED" && a.offer !== null ? (
+          <Offer
+            applicationId={a.id}
+            expiresAt={a.offer.expiresAt}
+            programmeName={a.programme.name}
+          />
+        ) : null}
+        {a.status === "ACCEPTED" && a.enrollment !== null ? (
+          <div className="space-y-2">
+            <p className="text-lg">
+              Welcome to GLIM! Your Matric Number is <strong>{a.enrollment.matricNumber}</strong>.
+            </p>
+            <p className="text-sm text-slate-600">
+              We've emailed you the next steps. Keep signing in with this Google account; your
+              courses appear here when registration opens for your first semester.
+            </p>
+          </div>
+        ) : null}
+        {a.status === "LAPSED" ? (
+          <p className="text-sm text-slate-600">
+            Your offer lapsed because it wasn't accepted in time. If you'd still like to study with
+            us, contact Admissions, who can reopen it.
+          </p>
+        ) : null}
         {a.status === "SUBMITTED" ? (
           <p className="text-sm text-slate-600">
             We've emailed you a receipt. We review applications as they arrive and will email you
@@ -149,6 +173,74 @@ function StatusView({ id }: { id: string }) {
           )}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+/** Days and hours left, e.g. "6 days, 3 hours"; under an hour, minutes. */
+function remaining(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  const days = Math.floor(minutes / (24 * 60));
+  const hours = Math.floor((minutes % (24 * 60)) / 60);
+  const plural = (n: number, unit: string) => `${String(n)} ${unit}${n === 1 ? "" : "s"}`;
+  if (days > 0) return `${plural(days, "day")}, ${plural(hours, "hour")}`;
+  if (hours > 0) return `${plural(hours, "hour")}, ${plural(minutes % 60, "minute")}`;
+  return plural(minutes, "minute");
+}
+
+/** The offer with its countdown (spec stories 22, 24); accepting makes them a student at once. */
+function Offer({
+  applicationId,
+  expiresAt,
+  programmeName,
+}: {
+  applicationId: string;
+  expiresAt: string;
+  programmeName: string;
+}) {
+  const queryClient = useQueryClient();
+  const { busy, error, run } = useSubmit();
+  const [now, setNow] = useState(() => Date.now());
+  // One key per acceptance attempt, so a retried request can't enroll twice.
+  const key = useRef(crypto.randomUUID());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 60_000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+  const left = new Date(expiresAt).getTime() - now;
+
+  return (
+    <div className="space-y-3 rounded border border-green-200 bg-green-50 p-3">
+      <p>
+        Congratulations! You've been offered a place on the <strong>{programmeName}</strong>.
+      </p>
+      <p className="text-sm">
+        Accept by <Time value={expiresAt} />{" "}
+        {left > 0 ? <strong>({remaining(left)} left)</strong> : null}
+      </p>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <button
+        type="button"
+        disabled={busy || left <= 0}
+        onClick={() =>
+          void run(async () => {
+            const accepted = await api<typeof applications.acceptOffer>(
+              "POST",
+              "/applications/:id/accept",
+              { params: { id: applicationId }, headers: { "idempotency-key": key.current } },
+            );
+            queryClient.setQueryData(applicationQuery(applicationId).queryKey, accepted);
+            await queryClient.invalidateQueries({ queryKey: ["me"] });
+          })
+        }
+        className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
+      >
+        {busy ? "Accepting…" : "Accept offer"}
+      </button>
     </div>
   );
 }

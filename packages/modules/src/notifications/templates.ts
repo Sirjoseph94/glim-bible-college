@@ -76,6 +76,20 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
     });
   },
 
+  "admissions.application.accepted": ({ data, appOrigin }) =>
+    email({
+      subject: `Welcome to GLIM Online Bible College: your Matric Number is ${str(data.matricNumber)}`,
+      category: "application-accepted",
+      paragraphs: [
+        `Dear ${str(data.name)},`,
+        `Welcome to GLIM Online Bible College! You've accepted your place on the ${str(data.programmeName)}, starting in the ${str(data.academicSessionName)}.`,
+        `Your Matric Number is ${str(data.matricNumber)}. Please quote it whenever you contact the college.`,
+        "Next steps: sign in with the same Google account you applied with. Your courses appear when registration opens for your first semester, and we'll email you before classes begin.",
+        `Your personal referral code is ${str(data.referralCode)}. Share it with anyone you encourage to apply.`,
+      ],
+      link: { label: "Sign in to GLIM", url: `${appOrigin}/` },
+    }),
+
   // Neutral wording; the officer's internal note is never part of it (spec story 33).
   "admissions.application.rejected": ({ data, appOrigin }) =>
     email({

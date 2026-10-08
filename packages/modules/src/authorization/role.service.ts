@@ -104,6 +104,16 @@ export class RoleService {
     return out;
   }
 
+  /** The users who currently hold a role, e.g. to notify every Academic Admin. */
+  async holders(role: StaffRole, db: Database = this.db.read): Promise<string[]> {
+    const t = schema.roleAssignments;
+    const rows = await db
+      .selectDistinct({ userId: t.userId })
+      .from(t)
+      .where(and(eq(t.role, role), isNull(t.revokedAt)));
+    return rows.map((r) => r.userId);
+  }
+
   async anyoneHolds(role: StaffRole, db: Database = this.db.read): Promise<boolean> {
     const t = schema.roleAssignments;
     const [row] = await db

@@ -177,6 +177,16 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
     .toBe("Your offer of a place at GLIM Online Bible College");
   await applicant.reload();
   await expect(applicant.getByText("Status: Admitted: offer made")).toBeVisible();
+  await expect(applicant.getByText(/days, \d+ hours? left/)).toBeVisible();
+
+  // Accepting makes them a student with a Matric Number at once, and a welcome email follows.
+  await applicant.getByRole("button", { name: "Accept offer" }).click();
+  await expect(applicant.getByText("Your Matric Number is GLIM/DMIN/2030/0001")).toBeVisible();
+  await expect
+    .poll(async () => (await lastEmail("chioma.applicant@gmail.com"))?.subject, {
+      timeout: 15_000,
+    })
+    .toBe("Welcome to GLIM Online Bible College: your Matric Number is GLIM/DMIN/2030/0001");
 
   await page.getByRole("link", { name: "Admissions" }).click();
   await page.getByRole("link", { name: "Intakes" }).click();

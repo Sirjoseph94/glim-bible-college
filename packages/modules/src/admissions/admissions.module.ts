@@ -1,12 +1,15 @@
 import { Db, schema } from "@glim/db";
+import { AcademicModule } from "@glim/modules/academic";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
 import { ContentModule } from "@glim/modules/content";
+import { EnrollmentModule } from "@glim/modules/enrollment";
 import { IdentityModule } from "@glim/modules/identity";
 import { NotificationsModule } from "@glim/modules/notifications";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { eq } from "drizzle-orm";
+import { AcceptanceService } from "./acceptance.service";
 import { ApplicationsService } from "./applications.service";
 import { IntakesService } from "./intakes.service";
 import { ReviewService } from "./review.service";
@@ -40,10 +43,18 @@ class AdmissionsResources implements OnModuleInit {
   }
 }
 
-const services = [IntakesService, ApplicationsService, ReviewService];
+const services = [IntakesService, ApplicationsService, ReviewService, AcceptanceService];
 
 @Module({
-  imports: [AuditModule, AuthorizationModule, ContentModule, IdentityModule, NotificationsModule],
+  imports: [
+    AcademicModule,
+    AuditModule,
+    AuthorizationModule,
+    ContentModule,
+    EnrollmentModule,
+    IdentityModule,
+    NotificationsModule,
+  ],
   providers: [...services, AdmissionsResources],
   exports: services,
 })

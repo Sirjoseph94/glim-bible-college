@@ -208,6 +208,10 @@ export const applicationSchema = z.object({
   minimumAgeYears: z.number().int(),
   submittedAt: z.iso.datetime().nullable(),
   withdrawnAt: z.iso.datetime().nullable(),
+  /** The offer, once admitted: accept it by `expiresAt` (§10.3). */
+  offer: z.object({ expiresAt: z.iso.datetime() }).nullable(),
+  /** Once the offer is accepted: the Matric Number the applicant was given. */
+  enrollment: z.object({ matricNumber: z.string() }).nullable(),
   /** Status history, oldest first (application_events; never any notes). */
   timeline: z.array(
     z.object({ status: z.enum(ENUMS["applications.status"]), at: z.iso.datetime() }),
@@ -362,3 +366,18 @@ type QueueStatus = Exclude<(typeof ENUMS)["applications.status"][number], "DRAFT
 export const QUEUE_STATUSES = ENUMS["applications.status"].filter(
   (s): s is QueueStatus => s !== "DRAFT",
 );
+
+export const acceptOffer = endpoint({
+  method: "POST",
+  path: "/applications/:id/accept",
+  summary:
+    "Accept the offer before it expires: the applicant becomes a student with a Matric Number",
+  tag: "Applications",
+  auth: "session",
+  permission: "admissions:application:own-accept",
+  resource: { type: "application", param: "id" },
+  idempotent: true,
+  params: idParams,
+  response: applicationSchema,
+  successStatus: 200,
+});
