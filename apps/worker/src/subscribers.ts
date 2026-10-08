@@ -14,6 +14,13 @@ export type SubscriberRegistry = Partial<Record<DomainEventName, Subscriber[]>>;
 export function createSubscribers(context: INestApplicationContext): SubscriberRegistry {
   const db = context.get(Db);
   return {
+    // Year 1 → Year 2 progression when an Academic Session is activated (§9.1, D-03).
+    "academic.session.activated": [
+      async (event) => {
+        const { sessionId } = event.payload as { sessionId: string };
+        await db.withTx(({ boss }) => boss.send("academic.progression", { sessionId }));
+      },
+    ],
     // Compulsory courses are registered when a semester opens registration (§9.3).
     "academic.semester.registration-opened": [
       async (event) => {

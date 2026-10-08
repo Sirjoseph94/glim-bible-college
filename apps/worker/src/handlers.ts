@@ -2,7 +2,7 @@ import type { DomainEvent, QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService, UserAdminService } from "@glim/modules/identity";
 import { ImportsService } from "@glim/modules/imports";
-import { RegistrationService } from "@glim/modules/enrollment";
+import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService } from "@glim/modules/ops";
 import type { INestApplicationContext } from "@nestjs/common";
@@ -27,6 +27,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const offers = deps.context.get(OffersService);
   const purge = deps.context.get(PurgeService);
   const registration = deps.context.get(RegistrationService);
+  const progression = deps.context.get(ProgressionService);
   const imports = deps.context.get(ImportsService);
   const userAdmin = deps.context.get(UserAdminService);
   return {
@@ -43,6 +44,8 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
         userId: null,
         type: "JOB",
       }),
+    "academic.progression": (job) =>
+      progression.run((job.data as { sessionId: string }).sessionId),
     "semester.open-registration": (job) =>
       registration.openRegistration((job.data as { semesterId: string }).semesterId),
     "notify.send": (job) =>

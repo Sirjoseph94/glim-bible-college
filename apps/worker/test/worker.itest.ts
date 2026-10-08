@@ -91,6 +91,26 @@ describe("worker", () => {
     expect(seen).toEqual([{ semesterId: "00000000-0000-7000-8000-000000000001" }]);
   });
 
+  it("hands an activated Academic Session to the academic.progression queue", async () => {
+    await db.withTx(({ boss }) =>
+      boss.publish(
+        "academic.session.activated",
+        { sessionId: "00000000-0000-7000-8000-000000000002" },
+        { occurredAt: new Date() },
+      ),
+    );
+    const seen: unknown[] = [];
+    const dispatch = createHandlers({ context, subscribers: createSubscribers(context) })[
+      "domain-event"
+    ];
+    if (dispatch === undefined) throw new Error("no domain-event handler");
+    await drainQueues(sendBoss, {
+      "domain-event": dispatch,
+      "academic.progression": (job) => Promise.resolve(void seen.push(job.data)),
+    });
+    expect(seen).toEqual([{ sessionId: "00000000-0000-7000-8000-000000000002" }]);
+  });
+
   it("redelivers a job to another worker when the first dies mid-job", async () => {
     let firstAttemptStarted = false;
     const redelivered = vi.fn();

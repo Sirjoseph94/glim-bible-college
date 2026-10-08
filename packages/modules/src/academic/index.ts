@@ -3,6 +3,7 @@ export {
   CalendarService,
   type AcademicSessionRow,
   type SemesterDates,
+  type SemesterCloseStep,
   type SemesterRow,
 } from "./calendar.service";
 export { CohortsService } from "./cohorts.service";

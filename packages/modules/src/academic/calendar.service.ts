@@ -13,7 +13,7 @@ import {
   type Patch,
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 export type AcademicSessionRow = typeof schema.academicSessions.$inferSelect;
 export type SemesterRow = typeof schema.semesters.$inferSelect;
@@ -28,6 +28,12 @@ export interface SemesterDates {
   examsStartOn?: string | null | undefined;
   examsEndOn?: string | null | undefined;
 }
+
+/**
+ * Work another module does when a semester closes, inside the closing transaction (each module
+ * writes only its own tables, §4.3). Enrollment registers one to complete course enrollments.
+ */
+export type SemesterCloseStep = (db: Database, semesterId: string, now: Date) => Promise<void>;
 
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
 const stale = (what: string) =>
@@ -60,11 +66,18 @@ function fromDatabase(error: unknown): DomainError | null {
 /** Academic Sessions and semesters, with their lifecycles (TRD §9.1, C-32). */
 @Injectable()
 export class CalendarService {
+  private readonly closeSteps: SemesterCloseStep[] = [];
+
   constructor(
     @Inject(Db) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+
+  /** Registers work to run in the transaction that closes a semester. */
+  onSemesterClose(step: SemesterCloseStep): void {
+    this.closeSteps.push(step);
+  }
 
   // ---- Academic Sessions ----
 
@@ -285,9 +298,21 @@ export class CalendarService {
     return this.transition(id, "REGISTRATION", "ACTIVE", actor);
   }
 
-  /** ACTIVE → CLOSED. Completing offerings and computing results (ticket 22) react to `academic.semester.closed`. */
+  /**
+   * ACTIVE → CLOSED (§9.1). In the same transaction the semester's running offerings become
+   * COMPLETED and the registered close steps run (enrollment completes ENROLLED course
+   * enrollments). Cancelled and never-published offerings are left as they are.
+   */
   closeSemester(id: string, actor: AuditActor): Promise<DomainResult<SemesterRow>> {
-    return this.transition(id, "ACTIVE", "CLOSED", actor);
+    return this.transition(id, "ACTIVE", "CLOSED", actor, undefined, async (db) => {
+      const now = this.clock.now();
+      const o = schema.courseOfferings;
+      await db
+        .update(o)
+        .set({ status: "COMPLETED", completedAt: now, updatedAt: now })
+        .where(and(eq(o.semesterId, id), inArray(o.status, ["PUBLISHED", "ACTIVE"])));
+      for (const step of this.closeSteps) await step(db, id, now);
+    });
   }
 
   private transition(
@@ -296,6 +321,7 @@ export class CalendarService {
     to: SemesterStatus,
     actor: AuditActor,
     precondition?: (db: Database, semester: SemesterRow) => Promise<DomainError | null>,
+    effect?: (db: Database) => Promise<void>,
   ): Promise<DomainResult<SemesterRow>> {
     return this.guarded(async ({ db, boss }) => {
       const current = await this.lockSemester(db, id);
@@ -308,6 +334,7 @@ export class CalendarService {
       const problem = precondition ? await precondition(db, current) : null;
       if (problem) return err(problem);
       const row = await this.setSemester(db, id, { status: to });
+      if (effect) await effect(db);
       await this.audit.record(db, actor, {
         action: `academic.semester.${to.toLowerCase()}`,
         resourceType: "semester",

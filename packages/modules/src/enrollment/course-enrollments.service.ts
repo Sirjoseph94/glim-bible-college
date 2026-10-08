@@ -215,6 +215,41 @@ export class CourseEnrollmentsService {
     });
   }
 
+  /**
+   * Semester close (§9.1): every ENROLLED course enrollment in the semester becomes COMPLETED,
+   * with its history. Runs inside the closing transaction. COMPLETED keeps read-only access to the
+   * offering while the programme enrollment is active (C-25, `v_offering_access`).
+   */
+  async completeForSemester(db: Database, semesterId: string, now: Date): Promise<void> {
+    const ce = schema.courseEnrollments;
+    const completed = await db
+      .update(ce)
+      .set({ status: "COMPLETED", updatedAt: now, version: sql`${ce.version} + 1` })
+      .where(
+        and(
+          eq(ce.status, "ENROLLED"),
+          inArray(
+            ce.courseOfferingId,
+            db
+              .select({ id: schema.courseOfferings.id })
+              .from(schema.courseOfferings)
+              .where(eq(schema.courseOfferings.semesterId, semesterId)),
+          ),
+        ),
+      )
+      .returning({ id: ce.id });
+    if (completed.length === 0) return;
+    await db.insert(schema.courseEnrollmentEvents).values(
+      completed.map((row) => ({
+        courseEnrollmentId: row.id,
+        fromStatus: "ENROLLED",
+        toStatus: "COMPLETED",
+        reason: "Semester closed",
+        createdAt: now,
+      })),
+    );
+  }
+
   /** Who owns a semester or course enrollment, for authorization (§7.2). */
   async ownerOfSemesterEnrollment(id: string): Promise<string | null> {
     const [row] = await this.db.read
