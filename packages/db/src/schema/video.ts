@@ -49,6 +49,8 @@ export const videos = pgTable(
     publishedAt: tstz("published_at"),
     deletedAt: tstz("deleted_at"),
     deleteAfter: tstz("delete_after"),
+    /** What a restore puts back (§13.6). */
+    statusBeforeDelete: text("status_before_delete"),
     deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     youtubeDeleteRemindedAt: tstz("youtube_delete_reminded_at"),
     addedBy: uuid("added_by").references(() => users.id, { onDelete: "set null" }),

@@ -30,3 +30,16 @@ export async function nextGoogleSignIn(user: {
   });
   if (!res.ok) throw new Error("Could not queue the Google sign-in");
 }
+
+/** What the fake YouTube says about a video from now on. */
+export async function scriptYouTube(
+  videoId: string,
+  status: "AVAILABLE" | "PRIVATE_OR_RESTRICTED" | "NOT_FOUND",
+): Promise<void> {
+  const res = await fetch(`${MAILBOX}/youtube/script`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoId, status }),
+  });
+  if (!res.ok) throw new Error("Could not script the fake YouTube");
+}

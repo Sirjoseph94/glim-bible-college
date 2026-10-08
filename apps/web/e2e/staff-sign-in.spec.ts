@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
 
 const ADMIN = "e2e-admin@glim.test";

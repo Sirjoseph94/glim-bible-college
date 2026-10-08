@@ -1,12 +1,17 @@
-import { video, type BodyOf, type ParamsOf } from "@glim/contracts";
+import { video, type BodyOf, type ParamsOf, type QueryOf } from "@glim/contracts";
 import type { AuditActor } from "@glim/modules/audit";
 import type { ActiveSession } from "@glim/modules/identity";
-import { PlaybackService, VideosService } from "@glim/modules/video";
+import {
+  AvailabilityService,
+  PlaybackService,
+  VideoAdminService,
+  VideosService,
+} from "@glim/modules/video";
 import { AppError, unwrap } from "@glim/shared";
 import { Controller, Inject, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import { Actor, CurrentSession } from "../../common/auth.guard";
-import { Body, Endpoint, IfMatch, Params } from "../../common/endpoint";
+import { Body, Endpoint, IfMatch, Params, Query } from "../../common/endpoint";
 import type { Reply } from "../../common/response.interceptor";
 
 /** Course videos (TRD §13). */
@@ -15,6 +20,8 @@ export class VideosController {
   constructor(
     @Inject(VideosService) private readonly videos: VideosService,
     @Inject(PlaybackService) private readonly playback: PlaybackService,
+    @Inject(VideoAdminService) private readonly admin: VideoAdminService,
+    @Inject(AvailabilityService) private readonly availability: AvailabilityService,
   ) {}
 
   @Endpoint(video.listVideos)
@@ -108,5 +115,54 @@ export class VideosController {
     @CurrentSession() session: ActiveSession,
   ): Promise<Reply<typeof video.saveProgress>> {
     return unwrap(await this.playback.saveProgress(params.id, session.userId, body));
+  }
+
+  @Endpoint(video.recheckVideo)
+  async recheck(
+    @Params(video.recheckVideo) params: ParamsOf<typeof video.recheckVideo>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof video.recheckVideo>> {
+    return unwrap(await this.availability.recheck(params.id, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(video.listAdminVideos)
+  async adminList(
+    @Query(video.listAdminVideos) query: QueryOf<typeof video.listAdminVideos>,
+  ): Promise<Reply<typeof video.listAdminVideos>> {
+    return this.admin.list(query);
+  }
+
+  @Endpoint(video.replaceVideoLink)
+  async replaceLink(
+    @Params(video.replaceVideoLink) params: ParamsOf<typeof video.replaceVideoLink>,
+    @Body(video.replaceVideoLink) body: BodyOf<typeof video.replaceVideoLink>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof video.replaceVideoLink>> {
+    return unwrap(
+      await this.admin.replaceLink(params.id, body.youtubeUrl, {
+        ...actor,
+        userId: session.userId,
+      }),
+    );
+  }
+
+  @Endpoint(video.deleteVideo)
+  async delete(
+    @Params(video.deleteVideo) params: ParamsOf<typeof video.deleteVideo>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof video.deleteVideo>> {
+    return unwrap(await this.admin.delete(params.id, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(video.restoreVideo)
+  async restore(
+    @Params(video.restoreVideo) params: ParamsOf<typeof video.restoreVideo>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof video.restoreVideo>> {
+    return unwrap(await this.admin.restore(params.id, { ...actor, userId: session.userId }));
   }
 }

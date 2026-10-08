@@ -86,6 +86,9 @@ export function RootLayout() {
                 <Link to="/admin/users" className="underline">
                   Users
                 </Link>
+                <Link to="/admin/videos" className="underline">
+                  Videos
+                </Link>
                 <Link to="/admin/audit" className="underline">
                   Audit log
                 </Link>

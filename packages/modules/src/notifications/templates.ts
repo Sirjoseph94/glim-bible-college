@@ -176,4 +176,30 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       link: { label: "See your schedule", url: `${appOrigin}/` },
     });
   },
+
+  "video.unavailable": ({ data, appOrigin }) =>
+    email({
+      subject: `${str(data.courseCode)} recording unavailable: ${str(data.title)}`,
+      category: "video-unavailable",
+      paragraphs: [
+        `YouTube no longer serves the ${str(data.courseCode)} recording "${str(data.title)}" (${
+          str(data.reason) === "NOT_FOUND" ? "it was deleted or removed" : "it is now private"
+        }). Students can't see it in the app until it's fixed.`,
+        "Set it back to Unlisted in YouTube Studio and recheck it, or upload it again and replace the link.",
+      ],
+      link: { label: "Manage videos", url: `${appOrigin}/admin/videos` },
+    }),
+
+  "video.youtube-delete-reminder": ({ data }) =>
+    email({
+      subject: `Delete "${str(data.title)}" in YouTube Studio`,
+      category: "video-delete-reminder",
+      paragraphs: [
+        `The ${str(data.courseCode)} recording "${str(data.title)}" was deleted from the app more than 7 days ago and can no longer be restored.`,
+        "It is still on GLIM's YouTube channel, and anyone with its link can watch it. Delete it in YouTube Studio if it should go.",
+      ],
+      ...(str(data.studioUrl) === ""
+        ? {}
+        : { link: { label: "Open in YouTube Studio", url: str(data.studioUrl) } }),
+    }),
 };

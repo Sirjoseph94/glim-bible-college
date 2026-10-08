@@ -82,6 +82,7 @@ const E2E_STAFF: [email: string, displayName: string, role: StaffRole][] = [
   ["e2e-academic@glim.test", "Ade Academic", "ACADEMIC_ADMIN"],
   ["e2e-admissions@glim.test", "Amaka Admissions", "ADMISSIONS_OFFICER"],
   ["e2e-imports@glim.test", "Ike Imports", "ACADEMIC_ADMIN"],
+  ["e2e-videos@glim.test", "Vera Videos", "SYSTEM_ADMIN"],
 ];
 for (const [email, displayName, role] of E2E_STAFF) {
   await app
@@ -275,6 +276,22 @@ mailbox.get<{ Querystring: { to: string } }>("/last", (req, reply) => {
 });
 mailbox.post<{ Body: FakeGoogleUser }>("/google/next", (req, reply) => {
   google.nextSignIn(req.body);
+  return reply.status(204).send();
+});
+// Scripts what the fake YouTube says about a video (e.g. that it was deleted).
+mailbox.post<{
+  Body: { videoId: string; status: "AVAILABLE" | "PRIVATE_OR_RESTRICTED" | "NOT_FOUND" };
+}>("/youtube/script", (req, reply) => {
+  videoHost.script(
+    req.body.videoId,
+    req.body.status === "AVAILABLE"
+      ? {
+          status: "AVAILABLE",
+          title: `Fake video ${req.body.videoId}`,
+          channelUrl: FAKE_CHANNEL_URL,
+        }
+      : { status: req.body.status },
+  );
   return reply.status(204).send();
 });
 await mailbox.listen({ port: config.port + 1, host: "127.0.0.1" });

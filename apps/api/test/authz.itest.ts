@@ -576,6 +576,26 @@ const SAMPLES: Record<string, Sample> = {
     offering: "O1",
     ownPart: true,
   }),
+  "GET /admin/videos": () => Promise.resolve({ url: "/api/v1/admin/videos" }),
+  // A link YouTube refuses, so allowed callers get 422 and nothing changes.
+  "PUT /videos/:id/youtube-link": async (t) => ({
+    url: `/api/v1/videos/${await playableVideoFixture(t)}/youtube-link`,
+    payload: { youtubeUrl: "https://vimeo.com/1" },
+    offering: "O1",
+  }),
+  // Its own video: deleted once, then deleting again changes nothing.
+  "DELETE /videos/:id": async (t) => ({
+    url: `/api/v1/videos/${await deletableVideoFixture(t)}`,
+    offering: "O1",
+  }),
+  "POST /videos/:id/restore": async (t) => ({
+    url: `/api/v1/videos/${await deletableVideoFixture(t)}/restore`,
+    offering: "O1",
+  }),
+  "POST /videos/:id/recheck": async (t) => ({
+    url: `/api/v1/videos/${await playableVideoFixture(t)}/recheck`,
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -679,6 +699,24 @@ async function playableVideoFixture(t: TestApp): Promise<string> {
   );
   playableShared = created.id;
   return playableShared;
+}
+
+let deletableShared: string | undefined;
+/** A video on O1 for the delete and restore samples only. */
+async function deletableVideoFixture(t: TestApp): Promise<string> {
+  if (deletableShared !== undefined) return deletableShared;
+  await videoFixture(t);
+  const created = unwrap(
+    await t.app
+      .get(VideosService)
+      .add(
+        personas.world.offerings.O1,
+        { youtubeUrl: "https://youtu.be/fixture0003" },
+        { ...SYSTEM_ACTOR, userId: personas.acadAdmin.userId },
+      ),
+  );
+  deletableShared = created.id;
+  return deletableShared;
 }
 
 async function freshOffering(t: TestApp): Promise<string> {

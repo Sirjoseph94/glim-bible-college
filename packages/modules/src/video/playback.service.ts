@@ -52,14 +52,19 @@ export class PlaybackService {
         youtubeVideoId: v.youtubeVideoId,
         durationMs: v.durationMs,
         positionMs: p.positionMs,
+        progressDurationMs: p.durationMs,
         completed: p.completed,
       })
       .from(v)
       .leftJoin(p, and(eq(p.videoId, v.id), eq(p.userId, userId)))
       .where(and(eq(v.id, id), this.playable(manages)));
     if (row?.youtubeVideoId === undefined || row.youtubeVideoId === null) return notFound();
-    // A finished video starts again from the beginning.
-    const resumeMs = row.completed === true ? 0 : (row.positionMs ?? 0);
+    // A finished video starts again from the beginning, and so does one whose link was replaced
+    // by a video of another length.
+    const resumeMs =
+      row.completed === true || lengthChanged(row.progressDurationMs, row.durationMs)
+        ? 0
+        : (row.positionMs ?? 0);
     const { embedUrl, thumbnailUrl } = this.host.embed(row.youtubeVideoId, {
       startSeconds: Math.floor(resumeMs / 1000),
     });
@@ -128,11 +133,13 @@ export class PlaybackService {
         now.getTime() - current.updatedAt.getTime() < PROGRESS_MIN_INTERVAL_MS
       )
         return ok(toView(current));
-      const maxPositionMs = Math.min(Math.max(current.maxPositionMs, positionMs), durationMs);
+      // Progress on a replaced video of another length starts over (§13.6).
+      const kept = lengthChanged(current.durationMs, durationMs) ? null : current;
+      const maxPositionMs = Math.min(Math.max(kept?.maxPositionMs ?? 0, positionMs), durationMs);
       const [updated] = await db
         .update(p)
         .set({
-          ...measure(positionMs, maxPositionMs, durationMs, now, current),
+          ...measure(positionMs, maxPositionMs, durationMs, now, kept),
           lastSeq: report.seq,
           updatedAt: now,
           version: sql`${p.version} + 1`,
@@ -183,6 +190,12 @@ export class PlaybackService {
       .for("update");
     return row ?? null;
   }
+}
+
+/** Whether two durations differ by more than 5 % (§13.6: progress then resets). */
+function lengthChanged(recordedMs: number | null, videoMs: number | null): boolean {
+  if (recordedMs === null || videoMs === null) return false;
+  return Math.abs(recordedMs - videoMs) * 20 > videoMs;
 }
 
 /** Position, furthest point, percentage (exact, two places) and completion at 90 %. */

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ENUMS } from "../enums";
 import { endpoint } from "../http";
+import { page, pageQuery } from "../pagination";
 
 /**
  * Course videos (TRD §13, ADR-0003): unlisted videos on GLIM's YouTube channel, added by link in
@@ -197,4 +198,92 @@ export const saveProgress = endpoint({
     })
     .strict(),
   response: playbackProgressSchema,
+});
+
+/** A video as the System Admin's management screen shows it (§13.6). */
+export const adminVideoSchema = videoSchema.extend({
+  origin: z.enum(ENUMS["videos.origin"]),
+  courseCode: z.string(),
+  courseTitle: z.string(),
+  semesterName: z.string(),
+  sessionCode: z.string(),
+  /** Why YouTube stopped serving it, when UNAVAILABLE. */
+  unavailableReason: z.string().nullable(),
+  lastCheckedAt: z.iso.datetime().nullable(),
+  /** Where the System Admin downloads or deletes it on YouTube. */
+  studioUrl: z.string().nullable(),
+  deletedAt: z.iso.datetime().nullable(),
+  /** The end of the 7-day undo window for a deleted video. */
+  deleteAfter: z.iso.datetime().nullable(),
+  /** Set once the System Admin was reminded to delete it in YouTube Studio. */
+  youtubeDeleteRemindedAt: z.iso.datetime().nullable(),
+});
+
+export type AdminVideo = z.infer<typeof adminVideoSchema>;
+
+export const listAdminVideos = endpoint({
+  method: "GET",
+  path: "/admin/videos",
+  summary: "Every video, unavailable ones first, filtered by offering, status or origin",
+  tag: "Video admin",
+  auth: "session",
+  permission: "video:asset:admin",
+  query: pageQuery.extend({
+    offeringId: z.uuid().optional(),
+    status: z.enum(ENUMS["videos.status"]).optional(),
+    origin: z.enum(ENUMS["videos.origin"]).optional(),
+  }),
+  response: page(adminVideoSchema),
+});
+
+export const replaceVideoLink = endpoint({
+  method: "PUT",
+  path: "/videos/:id/youtube-link",
+  summary: "Swap a video's YouTube link (same checks as adding), keeping its place in the course",
+  tag: "Video admin",
+  auth: "session",
+  permission: "video:asset:admin",
+  resource: { type: "video", param: "id" },
+  params: idParams,
+  body: z.object({ youtubeUrl: z.string().trim().min(1).max(500) }).strict(),
+  response: adminVideoSchema,
+});
+
+export const deleteVideo = endpoint({
+  method: "DELETE",
+  path: "/videos/:id",
+  summary: "Delete a video: hidden at once, restorable for 7 days",
+  tag: "Video admin",
+  auth: "session",
+  permission: "video:asset:admin",
+  resource: { type: "video", param: "id" },
+  params: idParams,
+  response: adminVideoSchema,
+  successStatus: 200,
+});
+
+export const restoreVideo = endpoint({
+  method: "POST",
+  path: "/videos/:id/restore",
+  summary: "Undo a delete within 7 days",
+  tag: "Video admin",
+  auth: "session",
+  permission: "video:asset:admin",
+  resource: { type: "video", param: "id" },
+  params: idParams,
+  response: adminVideoSchema,
+  successStatus: 200,
+});
+
+export const recheckVideo = endpoint({
+  method: "POST",
+  path: "/videos/:id/recheck",
+  summary: "Ask YouTube again whether it serves the video; a success restores an unavailable one",
+  tag: "Video",
+  auth: "session",
+  permission: "video:asset:manage",
+  resource: { type: "video", param: "id" },
+  params: idParams,
+  response: videoSchema,
+  successStatus: 200,
 });

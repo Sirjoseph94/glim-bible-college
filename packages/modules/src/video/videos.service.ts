@@ -422,7 +422,8 @@ export class VideosService {
   }
 }
 
-function toView(row: VideoRow): Video {
+/** The API view of a video row. */
+export function toView(row: VideoRow): Video {
   return {
     id: row.id,
     courseOfferingId: row.courseOfferingId,

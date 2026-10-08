@@ -1,0 +1,1 @@
+ALTER TABLE "videos" ADD COLUMN "status_before_delete" text;

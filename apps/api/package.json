@@ -9,7 +9,7 @@
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "build": "node scripts/copy-static.mjs",
     "admin:bootstrap": "tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env src/bin/bootstrap-admin.ts",
-    "e2e:serve": "APP_ORIGIN=http://localhost:4173 PORT=4173 tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env test/e2e-server.ts",
+    "e2e:serve": "APP_ORIGIN=http://localhost:4173 PORT=4173 CLIENT_IP_HEADER=x-e2e-client-ip tsx --tsconfig ../../tsconfig.base.json --env-file-if-exists=../../.env test/e2e-server.ts",
     "start": "tsx --tsconfig ../../tsconfig.base.json src/main.ts"
   },
   "dependencies": {

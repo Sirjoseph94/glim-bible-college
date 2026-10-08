@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { linkToken, nextGoogleSignIn } from "./mailbox";
 
 const EMAIL = "e2e-google@glim.test";
