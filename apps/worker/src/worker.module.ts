@@ -3,6 +3,8 @@ import type { Db } from "@glim/db";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { createVideoHost } from "@glim/integrations/video-host/factory";
+import type { VideoHost } from "@glim/integrations/video-host/port";
 import type { ObjectStorage } from "@glim/integrations/storage/port";
 import type { Mailer } from "@glim/integrations/mail/port";
 import { AdmissionsModule } from "@glim/modules/admissions";
@@ -11,6 +13,7 @@ import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
 import { AttendanceModule } from "@glim/modules/attendance";
 import { ClassMeetingModule } from "@glim/modules/class-meeting";
+import { VideoModule } from "@glim/modules/video";
 import { ImportsModule } from "@glim/modules/imports";
 import { OpsModule } from "@glim/modules/ops";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -35,6 +38,7 @@ class WorkerModule {
         ImportsModule,
         ClassMeetingModule,
         AttendanceModule,
+        VideoModule,
       ],
     };
   }
@@ -48,6 +52,7 @@ export function createWorkerContext(deps: {
   config?: Config;
   mailer?: Mailer;
   objectStorage?: ObjectStorage;
+  videoHost?: VideoHost;
 }): Promise<INestApplicationContext> {
   const config = deps.config ?? loadConfig({ NODE_ENV: "test" });
   return NestFactory.createApplicationContext(
@@ -57,6 +62,7 @@ export function createWorkerContext(deps: {
       mailer: deps.mailer ?? createMailer(config),
       identityProvider: createIdentityProvider(config),
       objectStorage: deps.objectStorage ?? createObjectStorage(config),
+      videoHost: deps.videoHost ?? createVideoHost(),
     }),
     { logger: false },
   );

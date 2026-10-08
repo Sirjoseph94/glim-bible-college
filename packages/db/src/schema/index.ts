@@ -13,3 +13,4 @@ export * from "./meetings";
 export * from "./notifications";
 export * from "./platform";
 export * from "./settings";
+export * from "./video";

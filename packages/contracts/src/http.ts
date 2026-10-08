@@ -51,7 +51,8 @@ export type ResourceType =
   | "application"
   | "semester-enrollment"
   | "course-enrollment"
-  | "class-meeting";
+  | "class-meeting"
+  | "video";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

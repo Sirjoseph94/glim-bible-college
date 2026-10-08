@@ -1,4 +1,11 @@
-import type { calendar, meetings, Offering, offerings, ScheduleWarning } from "@glim/contracts";
+import type {
+  calendar,
+  meetings,
+  Offering,
+  offerings,
+  ScheduleWarning,
+  video,
+} from "@glim/contracts";
 import { zonedToInstant } from "@glim/shared/time";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -534,9 +541,150 @@ function OfferingMeetings({ offeringId }: { offeringId: string }) {
   );
 }
 
+/**
+ * An offering's recordings (TRD §13.3, §13.6): add by YouTube link, publish or hide, and move up
+ * or down. Only Primary and Co-lecturers (and admins) can change them; the server says so.
+ */
+function OfferingRecordings({ offeringId }: { offeringId: string }) {
+  const queryClient = useQueryClient();
+  const key = ["videos", offeringId];
+  const list = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      api<typeof video.listVideos>("GET", "/course-offerings/:id/videos", {
+        params: { id: offeringId },
+        signal,
+      }),
+  });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await action();
+      await queryClient.invalidateQueries({ queryKey: key });
+      return true;
+    } catch (error) {
+      setProblem(problemOf(error));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const items = list.data?.items ?? [];
+  const move = (index: number, by: number) => {
+    const ids = items.map((v) => v.id);
+    const [moved] = ids.splice(index, 1);
+    if (moved === undefined) return;
+    ids.splice(index + by, 0, moved);
+    void run(() =>
+      api<typeof video.reorderVideos>("PUT", "/course-offerings/:id/videos/order", {
+        params: { id: offeringId },
+        body: { videoIds: ids },
+      }),
+    );
+  };
+  return (
+    <div className="space-y-2 text-sm">
+      <ProblemAlert problem={problem} />
+      {items.length === 0 ? <p className="text-slate-600">No recordings yet.</p> : null}
+      <ul className="space-y-1">
+        {items.map((v, index) => (
+          <li key={v.id} className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {v.title}{" "}
+              <span className="text-slate-500">
+                ({v.status === "PUBLISHED" ? "published" : v.status.toLowerCase()})
+              </span>
+            </span>
+            <span className="flex gap-3">
+              <button
+                type="button"
+                disabled={busy || index === 0}
+                aria-label={`Move ${v.title} up`}
+                onClick={() => {
+                  move(index, -1);
+                }}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                disabled={busy || index === items.length - 1}
+                aria-label={`Move ${v.title} down`}
+                onClick={() => {
+                  move(index, 1);
+                }}
+              >
+                ↓
+              </button>
+              {v.status === "PUBLISHED" || v.status === "UNPUBLISHED" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="text-brand underline"
+                  onClick={() =>
+                    void run(() =>
+                      v.status === "PUBLISHED"
+                        ? api<typeof video.unpublishVideo>("POST", "/videos/:id/unpublish", {
+                            params: { id: v.id },
+                          })
+                        : api<typeof video.publishVideo>("POST", "/videos/:id/publish", {
+                            params: { id: v.id },
+                            headers: { "idempotency-key": crypto.randomUUID() },
+                          }),
+                    )
+                  }
+                >
+                  {v.status === "PUBLISHED" ? "Hide" : "Publish"}
+                </button>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="space-y-2 border-t border-slate-100 pt-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const element = event.currentTarget;
+          const form = new FormData(element);
+          const title = formText(form, "title");
+          void run(() =>
+            api<typeof video.addVideo>("POST", "/course-offerings/:id/videos", {
+              params: { id: offeringId },
+              headers: { "idempotency-key": crypto.randomUUID() },
+              body: { youtubeUrl: formText(form, "youtubeUrl"), ...(title ? { title } : {}) },
+            }),
+          ).then((added) => {
+            if (added) element.reset();
+          });
+        }}
+      >
+        <Field
+          id={`yt-${offeringId}`}
+          name="youtubeUrl"
+          type="url"
+          label="YouTube link (uploaded as Unlisted to GLIM's channel)"
+          required
+          error={problem?.fieldErrors.youtubeUrl}
+        />
+        <Field
+          id={`yt-title-${offeringId}`}
+          name="title"
+          label="Title (optional: taken from YouTube)"
+        />
+        <SubmitButton busy={busy}>Add recording</SubmitButton>
+      </form>
+    </div>
+  );
+}
+
 function OfferingItem({ offering }: { offering: Offering }) {
   const [scheduling, setScheduling] = useState(false);
   const [showMeetings, setShowMeetings] = useState(false);
+  const [showRecordings, setShowRecordings] = useState(false);
   return (
     <li className="space-y-2 rounded border border-slate-200 bg-white p-3">
       <div className="font-medium">
@@ -561,6 +709,16 @@ function OfferingItem({ offering }: { offering: Offering }) {
         {showMeetings ? "Hide Class Meetings" : "Class Meetings"}
       </button>
       {showMeetings ? <OfferingMeetings offeringId={offering.id} /> : null}
+      <button
+        type="button"
+        className="block text-sm text-brand underline"
+        onClick={() => {
+          setShowRecordings((v) => !v);
+        }}
+      >
+        {showRecordings ? "Hide recordings" : "Recordings"}
+      </button>
+      {showRecordings ? <OfferingRecordings offeringId={offering.id} /> : null}
       {offering.status === "COMPLETED" || offering.status === "CANCELLED" ? null : scheduling ? (
         <ScheduleMeetingForm
           offering={offering}

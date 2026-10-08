@@ -4,6 +4,7 @@ import type {
   MyAttendance,
   offerings,
   SemesterRegistration,
+  video,
 } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -119,6 +120,30 @@ function MyCourseAttendance({ course }: { course: MyAttendance["courses"][number
   );
 }
 
+/** A course's published recordings (TRD §13.5). Watching comes with the player. */
+function CourseRecordings({ offeringId }: { offeringId: string }) {
+  const list = useQuery({
+    queryKey: ["videos", offeringId],
+    queryFn: ({ signal }) =>
+      api<typeof video.listVideos>("GET", "/course-offerings/:id/videos", {
+        params: { id: offeringId },
+        signal,
+      }),
+  });
+  const items = list.data?.items ?? [];
+  if (items.length === 0) return null;
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-slate-700">Recordings ({items.length})</summary>
+      <ul className="mt-2 space-y-1">
+        {items.map((v) => (
+          <li key={v.id}>{v.title}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 export function CoursesPage() {
   const list = useQuery({
     queryKey: ["offerings", "mine"],
@@ -152,6 +177,7 @@ export function CoursesPage() {
                 {o.lecturers.map((l) => l.lecturerName).join(", ")}
               </div>
             ) : null}
+            <CourseRecordings offeringId={o.id} />
             {myAttendance.data?.courses
               .filter((c) => c.offeringId === o.id)
               .map((c) => (

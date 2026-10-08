@@ -53,6 +53,8 @@ export const recordingPolicy = z
         "Class Meetings are recorded. Recordings are published on GLIM's YouTube channel as unlisted videos: anyone with the link can watch them. Lecturers keep the camera on themselves and the slides where possible.",
       ),
     showDataSaverTip: z.boolean().default(true),
+    /** A newly added video is published straight away (TRD §13.3). */
+    autoPublish: z.boolean().default(true),
     restoreWindowDays: z.number().int().min(1).max(30).default(7),
   })
   .strict();

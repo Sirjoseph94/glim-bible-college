@@ -5,6 +5,7 @@ import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { DisabledIdentityProvider } from "@glim/integrations/oidc/openid";
 import type { IdentityProvider } from "@glim/integrations/oidc/port";
 import { S3ObjectStorage } from "@glim/integrations/storage/s3";
+import { FakeVideoHost } from "@glim/integrations/video-host/fake";
 import { TestClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -19,6 +20,8 @@ export interface TestApp {
   db: Db;
   boss: PgBoss;
   clock: TestClock;
+  /** Scriptable YouTube (TRD §21.3). */
+  videoHost: FakeVideoHost;
   mailer: MemoryMailer;
   /** Every log line the app wrote, when created with `captureLogs`. */
   logs: string[];
@@ -64,6 +67,7 @@ export async function createTestApp(
   const logger = options.captureLogs
     ? createLogger({ service: "api-test", level: "trace" }, { write: (line) => logs.push(line) })
     : createLogger({ service: "api-test", level: "silent" });
+  const videoHost = new FakeVideoHost();
   const app = await buildApp({
     config,
     db,
@@ -72,6 +76,7 @@ export async function createTestApp(
     mailer,
     identityProvider: options.identityProvider ?? new DisabledIdentityProvider(),
     objectStorage: storage,
+    videoHost,
     logger,
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });
@@ -81,6 +86,7 @@ export async function createTestApp(
     db,
     boss,
     clock,
+    videoHost,
     mailer,
     logs,
     request: ({ method = "GET", url, headers, payload, remoteAddress }) =>

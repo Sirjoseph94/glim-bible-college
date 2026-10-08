@@ -12,6 +12,7 @@ import { AppModule } from "../app";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { createVideoHost } from "@glim/integrations/video-host/factory";
 
 const { values } = parseArgs({ options: { email: { type: "string" }, name: { type: "string" } } });
 if (values.email === undefined || values.name === undefined) {
@@ -34,6 +35,7 @@ const app = await NestFactory.createApplicationContext(
     mailer: createMailer(config),
     identityProvider: createIdentityProvider(config),
     objectStorage: createObjectStorage(config),
+    videoHost: createVideoHost(),
   }),
   { logger: false },
 );

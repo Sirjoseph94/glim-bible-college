@@ -9,6 +9,8 @@ import {
 import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { ClassMeetingsService } from "@glim/modules/class-meeting";
+import { VideosService } from "@glim/modules/video";
+import { FAKE_CHANNEL_URL } from "@glim/integrations/video-host/fake";
 import { assignmentHasCapability, AuthorizationService, MATRIX } from "@glim/modules/authorization";
 import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
 import { unwrap } from "@glim/shared";
@@ -517,6 +519,51 @@ const SAMPLES: Record<string, Sample> = {
       url: `/api/v1/reports/attendance?offeringId=${personas.world.offerings.O1}`,
       offering: "O1",
     }),
+  "GET /course-offerings/:id/videos": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/videos`,
+      offering: "O1",
+    }),
+  "GET /videos/:id": async (t) => ({
+    url: `/api/v1/videos/${await videoFixture(t)}`,
+    offering: "O1",
+  }),
+  // A new video id each time, so every allowed caller really adds one.
+  "POST /course-offerings/:id/videos": async (t) => {
+    await videoFixture(t);
+    n++;
+    return {
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/videos`,
+      payload: { youtubeUrl: `https://youtu.be/az${String(n).padStart(9, "0")}` },
+      headers: { "idempotency-key": `authz-video-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  "PATCH /videos/:id": async (t) => ({
+    url: `/api/v1/videos/${await videoFixture(t)}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
+  "POST /videos/:id/publish": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/videos/${await videoFixture(t)}/publish`,
+      headers: { "idempotency-key": `authz-publish-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  // Already published, so it's unpublished once; later calls get 409.
+  "POST /videos/:id/unpublish": async (t) => ({
+    url: `/api/v1/videos/${await videoFixture(t)}/unpublish`,
+    offering: "O1",
+  }),
+  // Not the full list, so allowed callers get 400 and nothing changes.
+  "PUT /course-offerings/:id/videos/order": async (t) => ({
+    url: `/api/v1/course-offerings/${personas.world.offerings.O1}/videos/order`,
+    payload: { videoIds: [await videoFixture(t), "00000000-0000-7000-8000-000000000000"] },
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -584,6 +631,24 @@ async function attendanceRecordFixture(t: TestApp): Promise<string> {
   );
   recordShared = studentId;
   return studentId;
+}
+
+let videoShared: string | undefined;
+/** GLIM's (fake) channel allowed, and one published video on O1. */
+async function videoFixture(t: TestApp): Promise<string> {
+  if (videoShared !== undefined) return videoShared;
+  await t.db.pool.query("UPDATE settings SET youtube_channel_urls = $1", [[FAKE_CHANNEL_URL]]);
+  const created = unwrap(
+    await t.app
+      .get(VideosService)
+      .add(
+        personas.world.offerings.O1,
+        { youtubeUrl: "https://youtu.be/fixture0001" },
+        { ...SYSTEM_ACTOR, userId: personas.acadAdmin.userId },
+      ),
+  );
+  videoShared = created.id;
+  return videoShared;
 }
 
 async function freshOffering(t: TestApp): Promise<string> {

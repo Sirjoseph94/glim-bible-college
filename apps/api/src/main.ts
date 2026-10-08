@@ -6,6 +6,7 @@ import { buildApp } from "./app";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { createVideoHost } from "@glim/integrations/video-host/factory";
 
 const config = loadConfig();
 const logger = createLogger({ service: "api", level: config.logLevel });
@@ -24,6 +25,7 @@ const app = await buildApp({
   mailer: createMailer(config),
   identityProvider: createIdentityProvider(config),
   objectStorage: createObjectStorage(config),
+  videoHost: createVideoHost(),
 });
 await app.listen(config.port, "0.0.0.0");
 logger.info({ port: config.port }, "api listening");

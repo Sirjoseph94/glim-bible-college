@@ -129,3 +129,28 @@ test("a Lecturer starts a class with the room instructions, then ends it", async
   await card.getByRole("button", { name: "End class" }).click();
   await expect(card).toContainText("Ended");
 });
+
+test("a Lecturer adds a YouTube recording to the course", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(EMAIL);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "My offerings" }).click();
+  await page.getByRole("button", { name: "Recordings" }).click();
+  await expect(page.getByText("No recordings yet.")).toBeVisible();
+
+  const link = page.getByLabel(/^YouTube link/);
+  await link.fill("https://vimeo.com/12345");
+  await page.getByRole("button", { name: "Add recording" }).click();
+  await expect(page.getByText(/Paste the link of a YouTube video/).first()).toBeVisible();
+
+  await link.fill("https://youtu.be/e2eRecord01");
+  await page
+    .getByLabel(/^Title/)
+    .last()
+    .fill("Week 1: Caring for the flock");
+  await page.getByRole("button", { name: "Add recording" }).click();
+  await expect(page.getByText("Week 1: Caring for the flock (published)")).toBeVisible();
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(page.getByText("Week 1: Caring for the flock (unpublished)")).toBeVisible();
+});

@@ -15,6 +15,7 @@ import * as platform from "./platform";
 import * as reports from "./reports";
 import * as settings from "./settings";
 import * as users from "./users";
+import * as video from "./video";
 
 export {
   academic,
@@ -34,6 +35,7 @@ export {
   reports,
   settings,
   users,
+  video,
 };
 
 /** Every endpoint, for the OpenAPI document and the route-coverage test. */
@@ -64,6 +66,13 @@ export const ENDPOINTS = [
   attendance.overrideAttendance,
   attendance.clearAttendanceOverride,
   attendance.getAttendanceReport,
+  video.listVideos,
+  video.getVideo,
+  video.addVideo,
+  video.updateVideo,
+  video.publishVideo,
+  video.unpublishVideo,
+  video.reorderVideos,
   meetings.getMySchedule,
   auth.login,
   auth.logout,
@@ -189,3 +198,4 @@ export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";
 export type { UserDetail, UserListItem } from "./users";
+export type { Video } from "./video";

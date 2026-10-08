@@ -9,6 +9,7 @@ import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { S3ObjectStorage } from "@glim/integrations/storage/s3";
+import { FAKE_CHANNEL_URL, FakeVideoHost } from "@glim/integrations/video-host/fake";
 import {
   CalendarService,
   CoursesService,
@@ -53,6 +54,8 @@ const db = new Db(createPool(database.appUrl, 4), boss);
 const mailer = new MemoryMailer();
 // Stands in for accounts.google.com; specs queue who signs in next through the mailbox port.
 const google = await new FakeOidcIssuer().start();
+// YouTube is faked end to end: every well-formed link is an available video on GLIM's channel.
+const videoHost = new FakeVideoHost();
 const app = await buildApp({
   config,
   db,
@@ -67,6 +70,7 @@ const app = await buildApp({
     allowHttp: true,
   }),
   objectStorage,
+  videoHost,
   staticDir: fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });
 await bootstrapSystemAdmin(app, E2E_ADMIN);
@@ -236,6 +240,8 @@ for (const [n, given, family, mode] of [
     [semesterEnrollmentId, enrollmentId, teachingOffering, studentId],
   );
 }
+// Recordings may come from the fake YouTube's channel.
+await db.pool.query("UPDATE settings SET youtube_channel_urls = $1", [[FAKE_CHANNEL_URL]]);
 await app.listen(config.port, "127.0.0.1");
 
 // The worker runs in-process on the general queues (no cron), so queued emails are sent.
@@ -247,6 +253,7 @@ const workerContext = await createWorkerContext({
   config,
   mailer,
   objectStorage,
+  videoHost,
 });
 const worker = await startWorker({
   boss: workerBoss,
