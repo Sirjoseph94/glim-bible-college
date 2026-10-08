@@ -1,4 +1,4 @@
-import type { ApplicationSection } from "@glim/contracts";
+import type { Application, ApplicationSection } from "@glim/contracts";
 import type { schema } from "@glim/db";
 
 type ApplicationRow = typeof schema.applications.$inferSelect;
@@ -69,4 +69,78 @@ export function ageOn(dateOfBirth: string, on: string): number {
   const [y, m, d] = on.split("-").map(Number) as [number, number, number];
   const beforeBirthday = m < bm || (m === bm && d < bd);
   return y - by - (beforeBirthday ? 1 : 0);
+}
+
+const iso = (d: Date | null) => (d === null ? null : d.toISOString());
+
+/** The form's sections as the API shows them (applicant and staff views alike). */
+export function formAnswers(
+  r: ApplicationRow,
+): Pick<
+  Application,
+  | "personal"
+  | "contact"
+  | "address"
+  | "church"
+  | "spiritual"
+  | "feedback"
+  | "declaration"
+  | "consent"
+  | "photo"
+> {
+  const spiritual = r.spiritualBackground ?? {};
+  return {
+    personal: {
+      firstName: r.firstName,
+      middleName: r.middleName,
+      lastName: r.lastName,
+      title: r.title as Application["personal"]["title"],
+      titleOther: r.titleOther,
+      gender: r.gender as Application["personal"]["gender"],
+      dateOfBirth: r.dateOfBirth,
+      maritalStatus: r.maritalStatus as Application["personal"]["maritalStatus"],
+      nationality: r.nationality,
+      occupation: r.occupation,
+    },
+    contact: {
+      email: r.email,
+      phoneWhatsapp: r.phoneWhatsapp,
+      altPhoneWhatsapp: r.altPhoneWhatsapp,
+    },
+    address: {
+      country: r.country,
+      stateProvince: r.stateProvince,
+      city: r.city,
+      postcode: r.postcode,
+      address: r.address,
+    },
+    church: {
+      churchName: r.churchName,
+      churchAddress: r.churchAddress,
+      pastorName: r.pastorName,
+      pastorPhone: r.pastorPhone,
+    },
+    spiritual: {
+      bornAgain: spiritual.bornAgain ?? null,
+      bornAgainWhen: spiritual.bornAgainWhen ?? null,
+      waterBaptism: spiritual.waterBaptism ?? null,
+      holySpiritBaptism: spiritual.holySpiritBaptism ?? null,
+      holySpiritSince: spiritual.holySpiritSince ?? null,
+    },
+    feedback: {
+      heardVia: r.heardVia as Application["feedback"]["heardVia"],
+      heardViaOther: r.heardViaOther,
+      referralCode: r.referralCodeEntered,
+    },
+    declaration: {
+      fullName: r.declarationFullName,
+      statementOfFaithRead: r.statementOfFaithRead,
+      declaredAt: iso(r.declaredAt),
+    },
+    consent: { consentedAt: iso(r.dataConsentAt) },
+    photo:
+      r.photoFileId === null
+        ? null
+        : { fileId: r.photoFileId, downloadPath: `/api/v1/files/${r.photoFileId}/download` },
+  };
 }

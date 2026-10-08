@@ -1,4 +1,5 @@
 import type { MailMessage } from "@glim/integrations/mail/port";
+import { formatDualTime } from "@glim/shared/time";
 
 /** What a template needs; `appOrigin` builds deep links into the SPA. */
 export interface TemplateInput {
@@ -53,5 +54,39 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
         "We review applications as they arrive and will email you when there's a decision.",
       ],
       link: { label: "Check your application", url: `${appOrigin}/application` },
+    }),
+
+  "admissions.application.admitted": ({ data, appOrigin }) => {
+    const zone = str(data.timeZone) || "Africa/Lagos";
+    const deadline = formatDualTime(str(data.offerExpiresAt), {
+      viewerZone: zone,
+      institutionZone: zone,
+      withDate: true,
+    });
+    return email({
+      subject: "Your offer of a place at GLIM Online Bible College",
+      category: "application-admitted",
+      paragraphs: [
+        `Dear ${str(data.name)},`,
+        `We're delighted to offer you a place on the ${str(data.programmeName)} (${str(data.studyMode)}), starting in the ${str(data.academicSessionName)}. Your Application Reference No is ${str(data.referenceNo)}.`,
+        `Please accept your offer by ${deadline}. If you don't accept by then, the offer lapses.`,
+        "When you accept, you'll get your Matric Number and the first steps for your studies.",
+      ],
+      link: { label: "Accept your offer", url: `${appOrigin}/application` },
+    });
+  },
+
+  // Neutral wording; the officer's internal note is never part of it (spec story 33).
+  "admissions.application.rejected": ({ data, appOrigin }) =>
+    email({
+      subject: "Your application to GLIM Online Bible College",
+      category: "application-rejected",
+      paragraphs: [
+        `Dear ${str(data.name)},`,
+        `Thank you for applying to GLIM Online Bible College (Application Reference No ${str(data.referenceNo)}).`,
+        "We have carefully considered your application, and we're sorry that we're unable to offer you a place this time.",
+        "We're grateful for your interest in studying with us, and we wish you every blessing.",
+      ],
+      link: { label: "View your application", url: `${appOrigin}/application` },
     }),
 };

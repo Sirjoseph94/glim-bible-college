@@ -16,6 +16,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await expect(page.getByRole("heading", { name: "Welcome, Amaka Admissions" })).toBeVisible();
 
   await page.getByRole("link", { name: "Admissions" }).click();
+  await page.getByRole("link", { name: "Intakes" }).click();
   await page.getByLabel("Intake (year students start, e.g. 2027)").fill("2030");
   await page
     .getByLabel("Academic Session students start in")
@@ -158,6 +159,27 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
     .poll(async () => (await lastEmail("chioma.applicant@gmail.com"))?.subject, { timeout: 15_000 })
     .toBe("We've received your application GLIM-APP-2030-00001");
 
+  // The Admissions Officer opens it (marking it Under Review), sees every section, and admits.
+  await page.getByRole("link", { name: "Admissions" }).click();
+  await page.getByRole("link", { name: "Chioma Eze" }).click();
+  await expect(page.getByText("Status: Under review")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "5. Spiritual background (confidential)" }),
+  ).toBeVisible();
+  await page.getByLabel("Internal note (never sent to the applicant)").fill("Clear calling");
+  await page.getByRole("button", { name: "Admit", exact: true }).click();
+  await page.getByRole("button", { name: "Yes, admit" }).click();
+  await expect(page.getByText("Status: Admitted: offer made")).toBeVisible();
+  await expect
+    .poll(async () => (await lastEmail("chioma.applicant@gmail.com"))?.subject, {
+      timeout: 15_000,
+    })
+    .toBe("Your offer of a place at GLIM Online Bible College");
+  await applicant.reload();
+  await expect(applicant.getByText("Status: Admitted: offer made")).toBeVisible();
+
+  await page.getByRole("link", { name: "Admissions" }).click();
+  await page.getByRole("link", { name: "Intakes" }).click();
   await page.getByRole("button", { name: "Close now" }).click();
   await expect(page.getByText("closed", { exact: true })).toBeVisible();
   await applicant.goto("/apply");

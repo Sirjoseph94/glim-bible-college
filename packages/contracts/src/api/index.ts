@@ -97,6 +97,11 @@ export const ENDPOINTS = [
   admissions.openIntake,
   admissions.closeIntake,
   admissions.getCurrentIntake,
+  admissions.listApplications,
+  admissions.getReviewedApplication,
+  admissions.startReview,
+  admissions.addApplicationNote,
+  admissions.decideApplication,
   applications.startApplication,
   applications.myApplications,
   applications.getApplication,
@@ -114,7 +119,9 @@ export {
   type Application,
   type ApplicationDraft,
   type ApplicationSection,
+  type ApplicationQueueItem,
   type ApplicationSummary,
+  type ReviewedApplication,
 } from "./applications";
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";

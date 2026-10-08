@@ -1,10 +1,9 @@
 import type { AcademicSession, Application, Intake, Me, Programme } from "@glim/contracts";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
-import { drainQueues } from "@glim/db/testing";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
-import { NotificationsService } from "@glim/modules/notifications";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cookieValue, viaGoogle } from "./google-flow";
+import { applicantKit, idempotencyKey } from "./applicants";
+import { viaGoogle } from "./google-flow";
 import { createTestApp, type TestApp } from "./harness";
 import { createPersonas, type Personas } from "./personas";
 import { startUpload, uploadPhoto, type StartedUpload } from "./uploads";
@@ -79,36 +78,20 @@ afterAll(async () => {
   await issuer.stop();
 });
 
-/** Signs up (or back in) from /apply, returning headers that act as that applicant. */
-async function applicant(user: FakeGoogleUser): Promise<Record<string, string>> {
-  const res = await viaGoogle(t, issuer, user, { intent: "apply", returnTo: "/application/edit" });
-  expect(res.headers.location).toBe("/application/edit");
-  const cookie = cookieValue(res, "__Host-glim_sid") ?? "";
-  const me = await t.request({ url: "/api/v1/me", headers: { cookie } });
-  return { cookie, "x-csrf-token": me.json<Me>().csrfToken };
-}
-
-async function start(headers: Record<string, string>, programmeId = certificate.id) {
-  return t.request({
-    method: "POST",
-    url: "/api/v1/applications",
-    headers,
-    payload: { programmeId, studyMode: "ONLINE" },
-  });
-}
-
-async function save(
+const kit = () => applicantKit(t, issuer, () => certificate.id);
+const applicant = (user: FakeGoogleUser) => kit().signUp(user);
+const start = (headers: Record<string, string>, programmeId?: string) =>
+  kit().start(headers, programmeId);
+const save = (
   headers: Record<string, string>,
   application: { id: string; version: number },
   payload: unknown,
-) {
-  return t.request({
-    method: "PATCH",
-    url: `/api/v1/applications/${application.id}`,
-    headers: { ...headers, "if-match": `"${String(application.version)}"` },
-    payload,
-  });
-}
+) => kit().save(headers, application, payload);
+const completeApplicant = (name: string, extra?: { spiritual?: object }) =>
+  kit().complete(name, extra);
+const submit = (headers: Record<string, string>, id: string, key?: string) =>
+  kit().submit(headers, id, key);
+const sendQueuedEmails = () => kit().sendQueuedEmails();
 
 describe("signing up to apply", () => {
   it("creates a role-less account only from /apply, with a 24-hour idle session", async () => {
@@ -332,75 +315,6 @@ describe("saving the draft", () => {
     }
   });
 });
-
-/** Every required answer, as a complete applicant would give them (one section per save). */
-const COMPLETE = (name: string, extra: { spiritual?: object } = {}) => ({
-  personal: {
-    firstName: name,
-    lastName: "Okafor",
-    title: "MR",
-    gender: "MALE",
-    dateOfBirth: "1988-02-14",
-    maritalStatus: "MARRIED",
-    nationality: "Nigerian",
-    occupation: "Farmer",
-  },
-  contact: { email: `${name.toLowerCase()}.mail@gmail.com`, phoneWhatsapp: "+2348031234567" },
-  address: { country: "Nigeria", stateProvince: "Enugu", city: "Nsukka", address: "1 Market Road" },
-  church: {
-    churchName: "Grace Chapel",
-    churchAddress: "2 Church Street",
-    pastorName: "Pastor Obi",
-    pastorPhone: "+2348039876543",
-  },
-  spiritual: {
-    bornAgain: true,
-    bornAgainWhen: "2005",
-    waterBaptism: "Yes, 2006",
-    holySpiritBaptism: false,
-    ...extra.spiritual,
-  },
-  feedback: { heardVia: ["FRIEND"] },
-  declaration: { fullName: `${name} Okafor`, statementOfFaithRead: true, declared: true },
-  consent: { consented: true },
-});
-
-/** A new applicant with a complete draft (photo included), ready to submit. */
-async function completeApplicant(
-  name: string,
-  extra?: { spiritual?: object },
-): Promise<{ headers: Record<string, string>; application: Application }> {
-  const headers = await applicant({
-    sub: `google-${name.toLowerCase()}`,
-    email: `${name.toLowerCase()}@gmail.com`,
-  });
-  let application = (await start(headers)).json<Application>();
-  const photo = await uploadPhoto(t, headers);
-  application = (
-    await save(headers, application, { ...COMPLETE(name, extra), photo: { fileId: photo.id } })
-  ).json<Application>();
-  expect(Object.values(application.missing).flat()).toEqual([]);
-  return { headers, application };
-}
-
-let keys = 0;
-const idempotencyKey = () => `submit-key-${String(++keys).padStart(8, "0")}`;
-
-function submit(headers: Record<string, string>, id: string, key = idempotencyKey()) {
-  return t.request({
-    method: "POST",
-    url: `/api/v1/applications/${id}/submit`,
-    headers: { ...headers, "idempotency-key": key },
-  });
-}
-
-async function sendQueuedEmails() {
-  const notifications = t.app.get(NotificationsService);
-  return drainQueues(t.boss, {
-    "notify.send": (job) =>
-      notifications.deliver((job.data as { notificationId: string }).notificationId),
-  });
-}
 
 describe("submitting", () => {
   it("is refused while answers are missing, listing them", async () => {

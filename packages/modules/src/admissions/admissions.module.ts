@@ -9,6 +9,7 @@ import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import { ApplicationsService } from "./applications.service";
 import { IntakesService } from "./intakes.service";
+import { ReviewService } from "./review.service";
 
 /**
  * Admissions owns intakes and applications, so it tells authorization whether one exists and,
@@ -39,7 +40,7 @@ class AdmissionsResources implements OnModuleInit {
   }
 }
 
-const services = [IntakesService, ApplicationsService];
+const services = [IntakesService, ApplicationsService, ReviewService];
 
 @Module({
   imports: [AuditModule, AuthorizationModule, ContentModule, IdentityModule, NotificationsModule],

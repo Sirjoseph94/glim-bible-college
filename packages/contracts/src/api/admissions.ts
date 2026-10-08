@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { ENUMS } from "../enums";
 import { endpoint } from "../http";
+import { page, pageQuery } from "../pagination";
+import {
+  applicationQueueItemSchema,
+  QUEUE_STATUSES,
+  reviewedApplicationSchema,
+} from "./applications";
 
 const idParams = z.object({ id: z.uuid() });
 const isoDate = z.iso.date();
@@ -127,4 +133,80 @@ export const getCurrentIntake = endpoint({
   tag: "Public",
   auth: "public",
   response: currentIntakeSchema,
+});
+
+const queueStatus = z.enum(QUEUE_STATUSES as [string, ...string[]]);
+
+export const listApplications = endpoint({
+  method: "GET",
+  path: "/admissions/applications",
+  summary: "The officers' queue: submitted applications, oldest first",
+  tag: "Admissions",
+  auth: "session",
+  permission: "admissions:application:read",
+  query: pageQuery.extend({
+    intakeId: z.uuid().optional(),
+    status: queueStatus.optional(),
+    programmeId: z.uuid().optional(),
+    studyMode: z.enum(ENUMS["applications.study_mode"]).optional(),
+    /** Name or Application Reference No. */
+    q: z.string().trim().min(1).max(100).optional(),
+  }),
+  response: page(applicationQueueItemSchema),
+});
+
+const reviewResource = {
+  auth: "session",
+  resource: { type: "application", param: "id" },
+  params: idParams,
+  response: reviewedApplicationSchema,
+} as const;
+
+export const getReviewedApplication = endpoint({
+  ...reviewResource,
+  method: "GET",
+  path: "/admissions/applications/:id",
+  summary:
+    "Every section of a submitted application (spiritual background only with read-sensitive)",
+  tag: "Admissions",
+  permission: "admissions:application:read",
+});
+
+export const startReview = endpoint({
+  ...reviewResource,
+  method: "POST",
+  path: "/admissions/applications/:id/review",
+  summary: "Mark a submitted application Under Review (opening it does this)",
+  tag: "Admissions",
+  permission: "admissions:application:decide",
+  successStatus: 200,
+});
+
+export const addApplicationNote = endpoint({
+  ...reviewResource,
+  method: "POST",
+  path: "/admissions/applications/:id/notes",
+  summary: "Record an internal note, e.g. from an interview",
+  tag: "Admissions",
+  permission: "admissions:application:decide",
+  body: z.object({ note: z.string().trim().min(1).max(2000) }).strict(),
+  successStatus: 200,
+});
+
+export const decideApplication = endpoint({
+  ...reviewResource,
+  method: "POST",
+  path: "/admissions/applications/:id/decide",
+  summary: "Admit or reject an application under review; the applicant is emailed",
+  tag: "Admissions",
+  permission: "admissions:application:decide",
+  idempotent: true,
+  body: z
+    .object({
+      decision: z.enum(["ADMIT", "REJECT"]),
+      /** Internal; never sent to the applicant. */
+      note: z.string().trim().max(2000).optional(),
+    })
+    .strict(),
+  successStatus: 200,
 });

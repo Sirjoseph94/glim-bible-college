@@ -1,5 +1,5 @@
 import type { Application, applications, ApplicationSummary, BodyOf } from "@glim/contracts";
-import { Db, PG, pgError, schema, type Database, type Tx } from "@glim/db";
+import { Db, PG, pgError, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { FilesService } from "@glim/modules/content";
 import { PolicyService, SettingsService, UserService } from "@glim/modules/identity";
@@ -14,8 +14,10 @@ import {
   type DomainResult,
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
-import { ageOn, missingFields } from "./application-form";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { ageOn, formAnswers, missingFields } from "./application-form";
+import { selectApplications } from "./application-query";
+import { recordTransition } from "./transitions";
 
 export type ApplicationDraftChange = BodyOf<typeof applications.saveApplicationDraft>;
 type ApplicationRow = typeof schema.applications.$inferSelect;
@@ -115,9 +117,11 @@ export class ApplicationsService {
   }
 
   async mine(userId: string): Promise<ApplicationSummary[]> {
-    const rows = await this.query(eq(schema.applications.applicantUserId, userId), this.db.read, [
-      desc(schema.applications.createdAt),
-    ]);
+    const rows = await selectApplications(
+      eq(schema.applications.applicantUserId, userId),
+      this.db.read,
+      [desc(schema.applications.createdAt)],
+    );
     return rows.map((r) => ({
       id: r.application.id,
       status: r.application.status as Application["status"],
@@ -223,7 +227,7 @@ export class ApplicationsService {
         return err(
           domainError("APPLICATION_STATE_INVALID", "This application has already been submitted."),
         );
-      const [found] = await this.query(eq(a.id, id), db);
+      const [found] = await selectApplications(eq(a.id, id), db);
       if (found === undefined) return notFound();
       if (found.intake.status !== "OPEN")
         return err(domainError("INTAKE_CLOSED", "Applications for this intake have closed."));
@@ -260,18 +264,38 @@ export class ApplicationsService {
       }
 
       const referenceNo = await this.nextReferenceNo(db, current.intakeId, found.intake.code);
+      // Credit the referrer whose personal code was entered; an unknown code is flagged for staff.
+      const referrer =
+        current.referralCodeEntered === null
+          ? undefined
+          : (
+              await db
+                .select({ id: schema.users.id })
+                .from(schema.users)
+                .where(
+                  eq(schema.users.referralCode, current.referralCodeEntered.trim().toUpperCase()),
+                )
+            )[0];
       const now = this.clock.now();
       await db
         .update(a)
         .set({
           status: "SUBMITTED",
           referenceNo,
+          referrerUserId: referrer?.id ?? null,
           submittedAt: now,
           updatedAt: now,
           version: sql`${a.version} + 1`,
         })
         .where(eq(a.id, id));
-      await this.recordTransition(tx, current, "SUBMITTED", actor, now, { referenceNo });
+      await recordTransition(tx, this.audit, {
+        applicationId: id,
+        from: current.status,
+        to: "SUBMITTED",
+        actor,
+        now,
+        metadata: { referenceNo },
+      });
       await this.notifications.notify(tx, {
         userId: current.applicantUserId,
         kind: "admissions.application.receipt",
@@ -320,7 +344,13 @@ export class ApplicationsService {
           version: sql`${a.version} + 1`,
         })
         .where(eq(a.id, id));
-      await this.recordTransition(tx, current, "WITHDRAWN", actor, now, {});
+      await recordTransition(tx, this.audit, {
+        applicationId: id,
+        from: current.status,
+        to: "WITHDRAWN",
+        actor,
+        now,
+      });
       return this.view(db, id);
     });
   }
@@ -336,36 +366,6 @@ export class ApplicationsService {
       .set({ nextValue: sequence.nextValue + 1 })
       .where(eq(q.intakeId, intakeId));
     return `GLIM-APP-${intakeCode}-${String(sequence.nextValue).padStart(5, "0")}`;
-  }
-
-  /** Every transition: an application event, an audit row and a domain event (§10.3, INV-11). */
-  private async recordTransition(
-    tx: Tx,
-    current: ApplicationRow,
-    to: "SUBMITTED" | "WITHDRAWN",
-    actor: AuditActor & { userId: string },
-    now: Date,
-    metadata: Record<string, string>,
-  ): Promise<void> {
-    await tx.db.insert(schema.applicationEvents).values({
-      applicationId: current.id,
-      fromStatus: current.status,
-      toStatus: to,
-      actorUserId: actor.userId,
-      createdAt: now,
-    });
-    const action = to === "SUBMITTED" ? "submitted" : "withdrawn";
-    await this.audit.record(tx.db, actor, {
-      action: `admissions.application.${action}`,
-      resourceType: "application",
-      resourceId: current.id,
-      metadata: { from: current.status, ...metadata },
-    });
-    await tx.boss.publish(
-      `admissions.application.${action}`,
-      { applicationId: current.id, ...metadata },
-      { occurredAt: now, actorUserId: actor.userId },
-    );
   }
 
   /** APPLICANT_UNDER_AGE unless they reach the minimum age by the day the Academic Session starts (Q-15). */
@@ -438,19 +438,19 @@ export class ApplicationsService {
   }
 
   private async view(db: Database, id: string): Promise<DomainResult<Application>> {
-    const [found] = await this.query(eq(schema.applications.id, id), db);
+    const [found] = await selectApplications(eq(schema.applications.id, id), db);
     if (found === undefined) return notFound();
     const { application: r, intake, programme } = found;
     const [{ config }, settings] = await Promise.all([
       this.policies.current("ADMISSIONS", db),
       this.settings.get(db),
     ]);
-    const spiritual = r.spiritualBackground ?? {};
     const ev = schema.applicationEvents;
     const timeline = await db
       .select({ status: ev.toStatus, at: ev.createdAt })
       .from(ev)
-      .where(eq(ev.applicationId, r.id))
+      // Internal notes are events too; the applicant sees only status changes.
+      .where(and(eq(ev.applicationId, r.id), isNull(ev.note)))
       .orderBy(asc(ev.createdAt), asc(ev.id));
     return ok({
       id: r.id,
@@ -460,58 +460,7 @@ export class ApplicationsService {
       intake,
       programme,
       studyMode: r.studyMode as Application["studyMode"],
-      personal: {
-        firstName: r.firstName,
-        middleName: r.middleName,
-        lastName: r.lastName,
-        title: r.title as Application["personal"]["title"],
-        titleOther: r.titleOther,
-        gender: r.gender as Application["personal"]["gender"],
-        dateOfBirth: r.dateOfBirth,
-        maritalStatus: r.maritalStatus as Application["personal"]["maritalStatus"],
-        nationality: r.nationality,
-        occupation: r.occupation,
-      },
-      contact: {
-        email: r.email,
-        phoneWhatsapp: r.phoneWhatsapp,
-        altPhoneWhatsapp: r.altPhoneWhatsapp,
-      },
-      address: {
-        country: r.country,
-        stateProvince: r.stateProvince,
-        city: r.city,
-        postcode: r.postcode,
-        address: r.address,
-      },
-      church: {
-        churchName: r.churchName,
-        churchAddress: r.churchAddress,
-        pastorName: r.pastorName,
-        pastorPhone: r.pastorPhone,
-      },
-      spiritual: {
-        bornAgain: spiritual.bornAgain ?? null,
-        bornAgainWhen: spiritual.bornAgainWhen ?? null,
-        waterBaptism: spiritual.waterBaptism ?? null,
-        holySpiritBaptism: spiritual.holySpiritBaptism ?? null,
-        holySpiritSince: spiritual.holySpiritSince ?? null,
-      },
-      feedback: {
-        heardVia: r.heardVia as Application["feedback"]["heardVia"],
-        heardViaOther: r.heardViaOther,
-        referralCode: r.referralCodeEntered,
-      },
-      declaration: {
-        fullName: r.declarationFullName,
-        statementOfFaithRead: r.statementOfFaithRead,
-        declaredAt: iso(r.declaredAt),
-      },
-      consent: { consentedAt: iso(r.dataConsentAt) },
-      photo:
-        r.photoFileId === null
-          ? null
-          : { fileId: r.photoFileId, downloadPath: `/api/v1/files/${r.photoFileId}/download` },
+      ...formAnswers(r),
       missing: missingFields(r),
       texts: {
         declarationText: config.declarationText,
@@ -527,36 +476,5 @@ export class ApplicationsService {
       })),
       updatedAt: r.updatedAt.toISOString(),
     });
-  }
-
-  private query(where: SQL, db: Database = this.db.read, order: SQL[] = []) {
-    const a = schema.applications;
-    const i = schema.intakes;
-    const s = schema.academicSessions;
-    const pr = schema.programmes;
-    return db
-      .select({
-        application: a,
-        intake: {
-          id: i.id,
-          code: i.code,
-          academicSessionName: s.name,
-          startsOn: s.startsOn,
-          closesOn: i.closesOn,
-          status: sql<Application["intake"]["status"]>`${i.status}`,
-        },
-        programme: {
-          id: pr.id,
-          code: pr.code,
-          name: pr.name,
-          awardType: sql<Application["programme"]["awardType"]>`${pr.awardType}`,
-        },
-      })
-      .from(a)
-      .innerJoin(i, eq(i.id, a.intakeId))
-      .innerJoin(s, eq(s.id, i.academicSessionId))
-      .innerJoin(pr, eq(pr.id, a.programmeId))
-      .where(where)
-      .orderBy(...order);
   }
 }

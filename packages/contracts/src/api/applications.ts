@@ -308,3 +308,57 @@ export const withdrawApplication = endpoint({
   response: applicationSchema,
   successStatus: 200,
 });
+
+/**
+ * An application as Admissions staff see it (§10.3): every section, plus review and decision
+ * details. `spiritual` is present only for holders of `admissions:application:read-sensitive`
+ * (INV-15); it never appears in the queue.
+ */
+export const reviewedApplicationSchema = applicationSchema
+  .omit({ texts: true, minimumAgeYears: true, spiritual: true })
+  .extend({
+    spiritual: applicationSchema.shape.spiritual.optional(),
+    applicant: z.object({ userId: z.uuid(), displayName: z.string(), accountEmail: z.string() }),
+    review: z.object({
+      startedAt: z.iso.datetime().nullable(),
+      by: z.string().nullable(),
+    }),
+    decision: z.object({
+      decidedAt: z.iso.datetime().nullable(),
+      by: z.string().nullable(),
+      /** Internal; never shown or sent to the applicant. */
+      note: z.string().nullable(),
+      offerExpiresAt: z.iso.datetime().nullable(),
+    }),
+    /** The referral code the applicant entered, and whether it matched anyone. */
+    referral: z
+      .object({ code: z.string(), matched: z.boolean(), referrerName: z.string().nullable() })
+      .nullable(),
+    /** Internal notes (e.g. an interview), oldest first. */
+    notes: z.array(
+      z.object({ id: z.uuid(), note: z.string(), at: z.iso.datetime(), by: z.string().nullable() }),
+    ),
+  });
+
+export type ReviewedApplication = z.infer<typeof reviewedApplicationSchema>;
+
+export const applicationQueueItemSchema = z.object({
+  id: z.uuid(),
+  referenceNo: z.string(),
+  name: z.string(),
+  intakeCode: z.string(),
+  programme: z.object({ id: z.uuid(), code: z.string(), name: z.string() }),
+  studyMode: z.enum(ENUMS["applications.study_mode"]),
+  status: z.enum(ENUMS["applications.status"]),
+  submittedAt: z.iso.datetime(),
+  /** The applicant entered a referral code that matched nobody. */
+  unmatchedReferral: z.boolean(),
+});
+
+export type ApplicationQueueItem = z.infer<typeof applicationQueueItemSchema>;
+
+/** Statuses an officer's queue can show: everything after the applicant submits. */
+type QueueStatus = Exclude<(typeof ENUMS)["applications.status"][number], "DRAFT">;
+export const QUEUE_STATUSES = ENUMS["applications.status"].filter(
+  (s): s is QueueStatus => s !== "DRAFT",
+);

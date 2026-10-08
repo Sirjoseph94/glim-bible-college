@@ -337,6 +337,25 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/applications/${await applicationFixture(t)}/withdraw`,
     owner: "applicant",
   }),
+  "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
+  "GET /admissions/applications/:id": async (t) => ({
+    url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
+  }),
+  "POST /admissions/applications/:id/review": async (t) => ({
+    url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}/review`,
+  }),
+  "POST /admissions/applications/:id/notes": async (t) => ({
+    url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}/notes`,
+    payload: { note: "Spoke to the pastor" },
+  }),
+  "POST /admissions/applications/:id/decide": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}/decide`,
+      payload: { decision: "REJECT" },
+      headers: { "idempotency-key": `authz-decide-${String(n).padStart(8, "0")}` },
+    };
+  },
   "POST /curricula/:id/clone": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
     payload: { effectiveFrom: "2027-09-01" },
@@ -393,6 +412,27 @@ async function applicationFixture(t: TestApp): Promise<string> {
   );
   applicationShared = rows[0]?.id ?? "";
   return applicationShared;
+}
+
+let submittedShared: string | undefined;
+/** A submitted application (staff never see drafts), from a user of its own. */
+async function submittedApplicationFixture(t: TestApp): Promise<string> {
+  if (submittedShared !== undefined) return submittedShared;
+  const owner = await freshUser(t);
+  const { rows: files } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO files (owner_user_id, purpose, storage_key, original_name, mime, size_bytes, status)
+     VALUES ($1, 'PASSPORT_PHOTO', 'passport-photos/authz', 'me.jpg', 'image/jpeg', 100, 'AVAILABLE') RETURNING id`,
+    [owner.id],
+  );
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO applications (intake_id, programme_id, applicant_user_id, study_mode, status, reference_no,
+       submitted_at, declared_at, data_consent_at, statement_of_faith_read, photo_file_id)
+     VALUES ($1, $2, $3, 'ONLINE', 'SUBMITTED', 'GLIM-APP-2091-00001', now(), now(), now(), true, $4)
+     RETURNING id`,
+    [(await intakeFixture(t)).intakeId, (await fixtures(t)).programmeId, owner.id, files[0]?.id],
+  );
+  submittedShared = rows[0]?.id ?? "";
+  return submittedShared;
 }
 
 let intakeShared: { sessionId: string; intakeId: string } | undefined;
