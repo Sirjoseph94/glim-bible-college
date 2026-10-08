@@ -12,6 +12,7 @@ import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { VideosService } from "@glim/modules/video";
 import {
   AssignmentsService as CourseworkAssignments,
+  ExamsService,
   QuizAttemptsService,
   QuizzesService,
   SubmissionsService,
@@ -730,6 +731,58 @@ const SAMPLES: Record<string, Sample> = {
       offering: "O1",
       ownPart: true,
     }),
+  "POST /course-offerings/:id/exams": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/exams`,
+      payload: { title: "Exam", maxScore: "100", weight: "0" },
+      headers: { "idempotency-key": `authz-exam-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  // The fixture exam has its online part already, so allowed callers get 409.
+  "POST /assessments/:id/online-exam": async (t) => {
+    n++;
+    const f = await examFixture(t);
+    return {
+      url: `/api/v1/assessments/${f.assessmentId}/online-exam`,
+      payload: { questions: [{ questionId: f.essayId }], timeLimitMinutes: 30 },
+      headers: { "idempotency-key": `authz-online-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  "GET /quizzes/:id/online-grants": async (t) => ({
+    url: `/api/v1/quizzes/${(await examFixture(t)).quizId}/online-grants`,
+    offering: "O1",
+  }),
+  "PUT /quizzes/:id/online-grants/:studentId": async (t) => {
+    const f = await examFixture(t);
+    return {
+      url: `/api/v1/quizzes/${f.quizId}/online-grants/${f.studentId}`,
+      payload: { reason: "Travelling" },
+      offering: "O1",
+    };
+  },
+  // A fresh grant each time, so allowed callers have something to withdraw.
+  "DELETE /quizzes/:id/online-grants/:studentId": async (t) => {
+    const f = await examFixture(t);
+    await t.app.get(ExamsService).grant(f.quizId, f.studentId, "Travelling", {
+      ...SYSTEM_ACTOR,
+      type: "USER",
+      userId: personas.l1Primary.userId,
+    });
+    return { url: `/api/v1/quizzes/${f.quizId}/online-grants/${f.studentId}`, offering: "O1" };
+  },
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "POST /assessments/:id/grades/:studentId/online-score": async (t) => {
+    const f = await examFixture(t);
+    return {
+      url: `/api/v1/assessments/${f.assessmentId}/grades/${f.studentId}/online-score`,
+      payload: { reason: "Sat online" },
+      headers: { "if-match": '"999"' },
+      offering: "O1",
+    };
+  },
   "GET /course-offerings/:id/questions": () =>
     Promise.resolve({
       url: `/api/v1/course-offerings/${personas.world.offerings.O1}/questions`,
@@ -1099,6 +1152,38 @@ async function quizFixture(t: TestApp) {
   );
   quizShared = { quizId: created.id, attemptId: attempt.id, essayId: essay.id };
   return quizShared;
+}
+
+let examShared:
+  { assessmentId: string; quizId: string; essayId: string; studentId: string } | undefined;
+/** An exam on O1 with its online part, and sEnrolled's student id. */
+async function examFixture(t: TestApp) {
+  if (examShared !== undefined) return examShared;
+  const { essayId } = await quizFixture(t);
+  const column = await t.app
+    .get(ExamsService)
+    .create(
+      personas.world.offerings.O1,
+      { title: "Fixture exam", maxScore: "100", weight: "0" },
+      SYSTEM_ACTOR,
+    );
+  const online = unwrap(
+    await t.app.get(QuizzesService).createOnlineExam(column.assessmentId, {
+      questions: [{ questionId: essayId }],
+      timeLimitMinutes: 30,
+    }),
+  );
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    "SELECT id FROM students WHERE user_id = $1",
+    [personas.sEnrolled.userId],
+  );
+  examShared = {
+    assessmentId: column.assessmentId,
+    quizId: online.id,
+    essayId,
+    studentId: rows[0]?.id ?? "",
+  };
+  return examShared;
 }
 
 let fileMaterialShared: string | undefined;

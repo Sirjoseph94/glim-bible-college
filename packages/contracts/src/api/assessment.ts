@@ -386,8 +386,10 @@ export const quizSchema = z.object({
   showAnswers: z.enum(ENUMS["quizzes.show_answers"]),
   eligibleStudyMode: z.enum(ENUMS["quizzes.eligible_study_mode"]),
   status: z.enum(ENUMS["quizzes.status"]),
-  /** The total of the questions' points: the gradebook column's maximum. */
+  /** The gradebook column's maximum: the questions' total, or an online exam's exam maximum. */
   maxScore: z.string(),
+  /** The total of the questions' points; an online exam's score is scaled from it to `maxScore`. */
+  pointsTotal: z.string(),
   weight: z.string(),
   questionCount: z.number().int(),
   /** The questions and points, for the course's staff (empty for students). */
@@ -564,6 +566,11 @@ export const myQuizAttemptsSchema = z.object({
   attemptsLeft: z.number().int(),
   /** Whether an attempt can be started (or resumed) now. */
   open: z.boolean(),
+  /**
+   * False for an online exam the student sits on paper instead (an On-campus student without an
+   * exception from the Lecturer).
+   */
+  eligible: z.boolean(),
 });
 
 export type MyQuizAttempts = z.infer<typeof myQuizAttemptsSchema>;
@@ -681,6 +688,8 @@ export const gradebookColumnSchema = z.object({
   /** Scored grades still DRAFT: what releasing would show to students. */
   unreleased: z.number().int(),
   released: z.number().int(),
+  /** An EXAM's online part (a quiz for Online students), if it has one. */
+  onlineQuizId: z.uuid().nullable(),
   version: z.number().int(),
 });
 
@@ -695,6 +704,11 @@ export const gradebookRowSchema = z.object({
   studyMode: z.enum(ENUMS["programme_enrollments.study_mode"]),
   /** One per column that has a grade. */
   grades: z.array(gradebookCellSchema),
+  /**
+   * Online exam scores (scaled to the exam's maximum) per EXAM column the student sat online, so
+   * the Lecturer can choose it when there is a paper score too.
+   */
+  onlineScores: z.array(z.object({ assessmentId: z.uuid(), score: z.string() })),
 });
 
 export type GradebookRow = z.infer<typeof gradebookRowSchema>;
@@ -839,4 +853,122 @@ export const getMyGrades = endpoint({
   resource: { type: "course-offering", param: "id", ownPart: true },
   params: idParams,
   response: z.object({ items: z.array(myGradeSchema) }),
+});
+
+// ---- hybrid exams (§14.2, C-34) ----
+
+export const createExam = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/exams",
+  summary:
+    "Add an exam column: On-campus students sit it on paper (scores entered or imported); an online part can be added for Online students",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "course-offering", param: "id" },
+  idempotent: true,
+  params: idParams,
+  body: z
+    .object({
+      title: z.string().trim().min(1).max(200),
+      maxScore: decimalText(100_000, 1),
+      weight: decimalText(10_000),
+      /** When the paper exam is held. */
+      heldAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    })
+    .strict(),
+  response: gradebookColumnSchema,
+  successStatus: 201,
+});
+
+export const createOnlineExam = endpoint({
+  method: "POST",
+  path: "/assessments/:id/online-exam",
+  summary:
+    "Add the timed online part of an exam (a draft quiz for Online students); its score is scaled to the exam's maximum",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "assessment", param: "id" },
+  idempotent: true,
+  params: idParams,
+  body: z
+    .object({
+      questions: quizSettings.questions,
+      timeLimitMinutes: quizSettings.timeLimitMinutes,
+      instructionsMd: quizSettings.instructionsMd.optional(),
+      maxAttempts: quizSettings.maxAttempts.optional(),
+      attemptScoring: quizSettings.attemptScoring.optional(),
+      opensAt: quizSettings.opensAt.optional(),
+      closesAt: quizSettings.closesAt.optional(),
+      shuffleQuestions: quizSettings.shuffleQuestions.optional(),
+      showAnswers: quizSettings.showAnswers.optional(),
+    })
+    .strict(),
+  response: quizSchema,
+  successStatus: 201,
+});
+
+export const onlineGrantSchema = z.object({
+  studentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string().nullable(),
+  reason: z.string(),
+  grantedAt: z.iso.datetime(),
+});
+
+export type OnlineGrant = z.infer<typeof onlineGrantSchema>;
+
+export const listOnlineGrants = endpoint({
+  method: "GET",
+  path: "/quizzes/:id/online-grants",
+  summary: "On-campus students allowed to sit this online exam",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "quiz", param: "id" },
+  params: idParams,
+  response: z.object({ items: z.array(onlineGrantSchema) }),
+});
+
+export const grantOnline = endpoint({
+  method: "PUT",
+  path: "/quizzes/:id/online-grants/:studentId",
+  summary: "Let an On-campus student sit this online exam (granting again changes nothing)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "quiz", param: "id" },
+  params: z.object({ id: z.uuid(), studentId: z.uuid() }),
+  body: z.object({ reason: z.string().trim().min(1).max(500) }).strict(),
+  response: onlineGrantSchema,
+});
+
+export const revokeOnline = endpoint({
+  method: "DELETE",
+  path: "/quizzes/:id/online-grants/:studentId",
+  summary: "Withdraw an exception (attempts already started are kept)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "quiz", param: "id" },
+  params: z.object({ id: z.uuid(), studentId: z.uuid() }),
+  response: z.object({}),
+  successStatus: 204,
+});
+
+export const useOnlineScore = endpoint({
+  method: "POST",
+  path: "/assessments/:id/grades/:studentId/online-score",
+  summary:
+    "Use the student's online exam score instead of the paper one (If-Match: the grade's version; a reason is required)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:update",
+  resource: { type: "assessment", param: "id" },
+  ifMatch: true,
+  params: z.object({ id: z.uuid(), studentId: z.uuid() }),
+  body: z.object({ reason: z.string().trim().min(1).max(500) }).strict(),
+  response: gradeSchema,
+  successStatus: 200,
 });

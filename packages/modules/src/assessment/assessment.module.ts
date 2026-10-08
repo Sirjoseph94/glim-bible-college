@@ -5,6 +5,7 @@ import { NotificationsModule } from "@glim/modules/notifications";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { AssignmentsService } from "./assignments.service";
+import { ExamsService } from "./exams.service";
 import { GradebookService } from "./gradebook.service";
 import { GradesService } from "./grades.service";
 import { QuizAttemptsService } from "./quiz-attempts.service";
@@ -52,6 +53,7 @@ const services = [
   SubmissionsService,
   GradesService,
   GradebookService,
+  ExamsService,
   QuizzesService,
   QuizAttemptsService,
 ];

@@ -44,6 +44,9 @@ export interface QuizInput {
 
 export type QuizChange = { [K in keyof QuizInput]?: QuizInput[K] | undefined };
 
+/** The online part of an exam: the exam column already has its title, maximum and weight. */
+export type OnlineExamInput = Omit<QuizInput, "title" | "weight">;
+
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
 const invalid = (path: string, message: string): DomainError =>
   domainError("VALIDATION_FAILED", message, {
@@ -193,27 +196,55 @@ export class QuizzesService {
         })
         .returning({ id: a.id });
       if (assessment === undefined) throw new Error("assessment insert returned nothing");
-      const [quiz] = await db
-        .insert(schema.quizzes)
-        .values({
-          courseOfferingId: offeringId,
-          assessmentId: assessment.id,
-          title: input.title,
-          instructionsMd: input.instructionsMd ?? null,
-          timeLimitMinutes: input.timeLimitMinutes ?? null,
-          maxAttempts: input.maxAttempts ?? 1,
-          attemptScoring: input.attemptScoring ?? "HIGHEST",
-          opensAt: toDate(input.opensAt) ?? null,
-          closesAt: toDate(input.closesAt) ?? null,
-          shuffleQuestions: input.shuffleQuestions ?? false,
-          showAnswers: input.showAnswers ?? "AFTER_CLOSE",
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning({ id: schema.quizzes.id });
-      if (quiz === undefined) throw new Error("quiz insert returned nothing");
-      await this.setQuestions(db, quiz.id, picked.value.rows, now);
-      return ok(quiz.id);
+      const quizId = await this.insertQuiz(db, {
+        offeringId,
+        assessmentId: assessment.id,
+        title: input.title,
+        input,
+        eligibleStudyMode: "ALL",
+        rows: picked.value.rows,
+        now,
+      });
+      return ok(quizId);
+    });
+    return result.ok ? ok(await this.one(result.value)) : result;
+  }
+
+  /**
+   * Adds the timed online part to an EXAM column (C-34): a draft quiz for Online students (and
+   * On-campus students the Lecturer lets in), whose score is scaled to the exam's maximum. An
+   * exam has at most one.
+   */
+  async createOnlineExam(
+    assessmentId: string,
+    input: OnlineExamInput,
+  ): Promise<DomainResult<Quiz>> {
+    const window = checkWindow(toDate(input.opensAt) ?? null, toDate(input.closesAt) ?? null);
+    if (window !== null) return err(window);
+    const result = await this.db.withTxResult<string, DomainError>(async ({ db }) => {
+      const a = schema.assessments;
+      const [exam] = await db.select().from(a).where(eq(a.id, assessmentId)).for("update");
+      if (exam === undefined) return notFound();
+      if (exam.kind !== "EXAM")
+        return err(domainError("CONFLICT", "Only an exam column can have an online part."));
+      const [existing] = await db
+        .select({ id: schema.quizzes.id })
+        .from(schema.quizzes)
+        .where(eq(schema.quizzes.assessmentId, assessmentId));
+      if (existing !== undefined)
+        return err(domainError("CONFLICT", "This exam already has an online part."));
+      const picked = await this.pickQuestions(db, exam.courseOfferingId, input.questions);
+      if (!picked.ok) return picked;
+      const quizId = await this.insertQuiz(db, {
+        offeringId: exam.courseOfferingId,
+        assessmentId,
+        title: exam.title,
+        input,
+        eligibleStudyMode: "ONLINE",
+        rows: picked.value.rows,
+        now: this.clock.now(),
+      });
+      return ok(quizId);
     });
     return result.ok ? ok(await this.one(result.value)) : result;
   }
@@ -235,6 +266,10 @@ export class QuizzesService {
       const window = checkWindow(opensAt, closesAt);
       if (window !== null) return err(window);
       const now = this.clock.now();
+      const a = schema.assessments;
+      const [column] = await db.select({ kind: a.kind }).from(a).where(eq(a.id, row.assessmentId));
+      // An exam keeps its own maximum and date; a quiz's maximum is its questions' total.
+      const exam = column?.kind === "EXAM";
       let maxScore: string | undefined;
       if (change.questions !== undefined) {
         if (row.status !== "DRAFT")
@@ -248,7 +283,7 @@ export class QuizzesService {
         if (!picked.ok) return picked;
         await db.delete(schema.quizQuestions).where(eq(schema.quizQuestions.quizId, id));
         await this.setQuestions(db, id, picked.value.rows, now);
-        maxScore = formatDecimal(picked.value.totalX100, 2);
+        if (!exam) maxScore = formatDecimal(picked.value.totalX100, 2);
       }
       await db
         .update(z)
@@ -268,12 +303,11 @@ export class QuizzesService {
           version: sql`${z.version} + 1`,
         })
         .where(eq(z.id, id));
-      const a = schema.assessments;
       await db
         .update(a)
         .set({
           ...definedFields({ title: change.title, weight: change.weight, maxScore }),
-          dueAt: closesAt,
+          ...(exam ? {} : { dueAt: closesAt }),
           updatedAt: now,
           version: sql`${a.version} + 1`,
         })
@@ -360,6 +394,43 @@ export class QuizzesService {
     return ok({ rows, totalX100 });
   }
 
+  private async insertQuiz(
+    db: Database,
+    q: {
+      offeringId: string;
+      assessmentId: string;
+      title: string;
+      input: OnlineExamInput;
+      eligibleStudyMode: "ALL" | "ONLINE";
+      rows: { questionId: string; points: string }[];
+      now: Date;
+    },
+  ): Promise<string> {
+    const { input, now } = q;
+    const [quiz] = await db
+      .insert(schema.quizzes)
+      .values({
+        courseOfferingId: q.offeringId,
+        assessmentId: q.assessmentId,
+        title: q.title,
+        instructionsMd: input.instructionsMd ?? null,
+        timeLimitMinutes: input.timeLimitMinutes ?? null,
+        maxAttempts: input.maxAttempts ?? 1,
+        attemptScoring: input.attemptScoring ?? "HIGHEST",
+        opensAt: toDate(input.opensAt) ?? null,
+        closesAt: toDate(input.closesAt) ?? null,
+        shuffleQuestions: input.shuffleQuestions ?? false,
+        showAnswers: input.showAnswers ?? "AFTER_CLOSE",
+        eligibleStudyMode: q.eligibleStudyMode,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: schema.quizzes.id });
+    if (quiz === undefined) throw new Error("quiz insert returned nothing");
+    await this.setQuestions(db, quiz.id, q.rows, now);
+    return quiz.id;
+  }
+
   private async setQuestions(
     db: Database,
     quizId: string,
@@ -411,6 +482,7 @@ export class QuizzesService {
       return toQuiz(
         r.quiz,
         r.assessment,
+        mine.reduce((sum, x) => sum + parseDecimal(x.points, 2), 0),
         mine.length,
         withQuestions
           ? mine.map((x) => ({
@@ -453,6 +525,7 @@ function toQuestion(row: QuestionRow): Question {
 function toQuiz(
   row: QuizRow,
   assessment: typeof schema.assessments.$inferSelect,
+  pointsTotalX100: number,
   questionCount: number,
   questions: Quiz["questions"],
 ): Quiz {
@@ -474,6 +547,7 @@ function toQuiz(
     eligibleStudyMode: row.eligibleStudyMode as Quiz["eligibleStudyMode"],
     status: row.status as Quiz["status"],
     maxScore: assessment.maxScore,
+    pointsTotal: formatDecimal(pointsTotalX100, 2),
     weight: assessment.weight,
     questionCount,
     questions,

@@ -72,6 +72,7 @@ function QuizItem({
         </Link>
         <span className="text-slate-600">
           {z.status === "DRAFT" ? "Draft · " : null}
+          {z.kind === "EXAM" ? "Online exam · " : null}
           {z.questionCount} questions · {z.maxScore} marks
           {z.timeLimitMinutes === null ? "" : ` · ${String(z.timeLimitMinutes)} min`}
         </span>
@@ -271,7 +272,20 @@ function NewQuiz({ offeringId }: { offeringId: string }) {
   const questions = useQuestions(offeringId);
   const { busy, error, fieldErrors, run } = useSubmit();
   const [formKey, setFormKey] = useState(0);
+  // "" for a quiz, or the EXAM column this is the online part of.
+  const [examId, setExamId] = useState("");
   const id = useId();
+  const book = useQuery({
+    queryKey: ["gradebook", offeringId],
+    queryFn: ({ signal }) =>
+      api<typeof assessment.getGradebook>("GET", "/course-offerings/:id/gradebook", {
+        params: { id: offeringId },
+        signal,
+      }),
+  });
+  const exams = (book.data?.columns ?? []).filter(
+    (c) => c.kind === "EXAM" && c.onlineQuizId === null,
+  );
   const items = questions.data?.items ?? [];
   if (items.length === 0) return null;
   return (
@@ -285,38 +299,76 @@ function NewQuiz({ offeringId }: { offeringId: string }) {
         const opens = formText(data, "opensAt");
         const closes = formText(data, "closesAt");
         const chosen = items.filter((q) => data.get(`q-${q.id}`) === "on");
+        const settings = {
+          timeLimitMinutes: limit === "" ? null : Number(limit),
+          maxAttempts: Number(formText(data, "maxAttempts")),
+          attemptScoring: formText(data, "scoring") as Quiz["attemptScoring"],
+          showAnswers: formText(data, "showAnswers") as Quiz["showAnswers"],
+          shuffleQuestions: data.get("shuffle") === "on",
+          opensAt: opens === "" ? null : instant(opens),
+          closesAt: closes === "" ? null : instant(closes),
+          questions: chosen.map((q) => ({ questionId: q.id })),
+        };
         void run(async () => {
           if (chosen.length === 0) throw new Error("Choose at least one question.");
-          await api<typeof assessment.createQuiz>("POST", "/course-offerings/:id/quizzes", {
-            params: { id: offeringId },
-            body: {
-              title: formText(data, "title"),
-              weight: formText(data, "weight"),
-              timeLimitMinutes: limit === "" ? null : Number(limit),
-              maxAttempts: Number(formText(data, "maxAttempts")),
-              attemptScoring: formText(data, "scoring") as Quiz["attemptScoring"],
-              showAnswers: formText(data, "showAnswers") as Quiz["showAnswers"],
-              shuffleQuestions: data.get("shuffle") === "on",
-              opensAt: opens === "" ? null : instant(opens),
-              closesAt: closes === "" ? null : instant(closes),
-              questions: chosen.map((q) => ({ questionId: q.id })),
-            },
-            headers: { "idempotency-key": crypto.randomUUID() },
-          });
+          if (examId === "")
+            await api<typeof assessment.createQuiz>("POST", "/course-offerings/:id/quizzes", {
+              params: { id: offeringId },
+              body: {
+                ...settings,
+                title: formText(data, "title"),
+                weight: formText(data, "weight"),
+              },
+              headers: { "idempotency-key": crypto.randomUUID() },
+            });
+          else
+            await api<typeof assessment.createOnlineExam>("POST", "/assessments/:id/online-exam", {
+              params: { id: examId },
+              body: settings,
+              headers: { "idempotency-key": crypto.randomUUID() },
+            });
           await queryClient.invalidateQueries({ queryKey: quizzesKey(offeringId) });
+          await queryClient.invalidateQueries({ queryKey: ["gradebook", offeringId] });
+          setExamId("");
           setFormKey((k) => k + 1);
         });
       }}
     >
-      <p className="font-medium">New quiz</p>
+      <p className="font-medium">New quiz or online exam</p>
       {error ? <Alert tone="error">{error}</Alert> : null}
-      <Field
-        id={`${id}-title`}
-        name="title"
-        label="Quiz title"
-        required
-        error={fieldErrors.title}
-      />
+      {exams.length > 0 ? (
+        <label className="block">
+          <span className="block text-sm font-medium text-slate-700">For</span>
+          <select
+            name="for"
+            value={examId}
+            onChange={(e) => {
+              setExamId(e.target.value);
+            }}
+            className="w-full rounded border border-slate-300 px-2 py-2"
+          >
+            <option value="">A quiz</option>
+            {exams.map((c) => (
+              <option key={c.assessmentId} value={c.assessmentId}>
+                Online part of {c.title} (for Online students)
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {examId === "" ? (
+        <Field
+          id={`${id}-title`}
+          name="title"
+          label="Quiz title"
+          required
+          error={fieldErrors.title}
+        />
+      ) : (
+        <p className="text-slate-600">
+          Scores are scaled from the questions' points to the exam's maximum.
+        </p>
+      )}
       <fieldset className="space-y-1">
         <legend className="text-slate-700">Questions</legend>
         {items.map((q) => (
@@ -336,6 +388,7 @@ function NewQuiz({ offeringId }: { offeringId: string }) {
           min={1}
           max={600}
           label="Time limit (minutes)"
+          required={examId !== ""}
         />
         <Field
           id={`${id}-attempts`}
@@ -346,14 +399,16 @@ function NewQuiz({ offeringId }: { offeringId: string }) {
           defaultValue={1}
           label="Attempts"
         />
-        <Field
-          id={`${id}-weight`}
-          name="weight"
-          inputMode="decimal"
-          label="Weight (%)"
-          required
-          error={fieldErrors.weight}
-        />
+        {examId === "" ? (
+          <Field
+            id={`${id}-weight`}
+            name="weight"
+            inputMode="decimal"
+            label="Weight (%)"
+            required
+            error={fieldErrors.weight}
+          />
+        ) : null}
         <label className="block">
           <span className="block text-sm font-medium text-slate-700">Score from attempts</span>
           <select name="scoring" className="w-full rounded border border-slate-300 px-2 py-2">
@@ -385,7 +440,7 @@ function NewQuiz({ offeringId }: { offeringId: string }) {
         disabled={busy}
         className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
       >
-        Create quiz
+        {examId === "" ? "Create quiz" : "Create online exam"}
       </button>
     </form>
   );

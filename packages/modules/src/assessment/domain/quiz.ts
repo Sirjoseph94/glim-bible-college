@@ -1,5 +1,5 @@
 import type { QuizResponseValue, SnapshotQuestion } from "@glim/db";
-import { divRoundHalfUp } from "@glim/shared";
+import { divRoundHalfUp, mulDivRoundHalfUp } from "@glim/shared";
 
 /** The grace after a deadline for a save that was on its way, and when `quiz.expire` runs. */
 export const QUIZ_GRACE_MS = 30_000;
@@ -46,6 +46,17 @@ export function combineAttempts(
     scoresInOrder.reduce((a, b) => a + b, 0),
     scoresInOrder.length,
   );
+}
+
+/**
+ * An online exam's score on the exam's scale (C-34, Appendix C.2): the quiz points scored, out of
+ * the quiz's total, scaled to the exam's maximum and rounded half-up, all in hundredths. A quiz
+ * whose total is the maximum is unchanged.
+ */
+export function scaleToMax(scoreX100: number, pointsTotalX100: number, maxX100: number): number {
+  if (pointsTotalX100 <= 0) throw new Error("a quiz with no points can't be scaled");
+  if (pointsTotalX100 === maxX100) return scoreX100;
+  return mulDivRoundHalfUp(scoreX100, maxX100, pointsTotalX100);
 }
 
 /** When an attempt must end: the time limit from the start, cut short by the quiz closing. */

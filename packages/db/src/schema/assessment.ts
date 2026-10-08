@@ -270,6 +270,28 @@ export const quizzes = pgTable(
   ],
 );
 
+/**
+ * Owner: assessment. An On-campus student allowed to sit an online exam (C-34): eligibility
+ * otherwise follows the student's Study Mode.
+ */
+export const examOnlineGrants = pgTable(
+  "exam_online_grants",
+  {
+    ...stdRo(),
+    quizId: uuid("quiz_id")
+      .notNull()
+      .references(() => quizzes.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "restrict" }),
+    grantedBy: uuid("granted_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    reason: text().notNull(),
+  },
+  (t) => [unique("exam_online_grants_once").on(t.quizId, t.studentId)],
+);
+
 /** Owner: assessment. The questions of a quiz, in order, with their points. */
 export const quizQuestions = pgTable(
   "quiz_questions",

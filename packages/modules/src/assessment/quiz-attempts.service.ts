@@ -23,7 +23,8 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
-import { QUIZ_GRACE_MS, combineAttempts, deadlineFor, markResponse, shuffled } from "./domain/quiz";
+import { QUIZ_GRACE_MS, deadlineFor, markResponse, shuffled } from "./domain/quiz";
+import { attemptsScore, onlineEligible } from "./exam-scores";
 import { GradesService } from "./grades.service";
 
 type QuizRow = typeof schema.quizzes.$inferSelect;
@@ -83,6 +84,13 @@ export class QuizAttemptsService {
         if (!this.pastGrace(running, now)) return ok(running.id);
         await this.finish(tx, running, "EXPIRED", userId, JOB_ACTOR);
       }
+      if (!(await onlineEligible(tx.db, quiz, studentId)))
+        return err(
+          domainError(
+            "NOT_ELIGIBLE_FOR_ONLINE_EXAM",
+            "You sit this exam on paper in the Room. Ask your Lecturer if you need to take it online.",
+          ),
+        );
       if (
         quiz.status !== "PUBLISHED" ||
         (quiz.opensAt !== null && now < quiz.opensAt) ||
@@ -139,7 +147,8 @@ export class QuizAttemptsService {
       "COMPLETED",
     ]);
     if (studentId === null || quiz.status === "DRAFT")
-      return ok({ attempts: [], attemptsLeft: 0, open: false });
+      return ok({ attempts: [], attemptsLeft: 0, open: false, eligible: false });
+    const eligible = await onlineEligible(this.db.read, quiz, studentId);
     const a = schema.quizAttempts;
     const rows = await this.db.read
       .select()
@@ -162,7 +171,8 @@ export class QuizAttemptsService {
         score: r.score,
       })),
       attemptsLeft,
-      open: running || (windowOpen && attemptsLeft > 0),
+      open: running || (eligible && windowOpen && attemptsLeft > 0),
+      eligible,
     });
   }
 
@@ -515,17 +525,7 @@ export class QuizAttemptsService {
       .from(schema.quizzes)
       .where(eq(schema.quizzes.id, attempt.quizId));
     if (quiz === undefined) return;
-    const scored = await tx.db
-      .select({ score: a.score })
-      .from(a)
-      .where(
-        and(eq(a.quizId, attempt.quizId), eq(a.studentId, attempt.studentId), isNotNull(a.score)),
-      )
-      .orderBy(asc(a.attemptNo));
-    const combined = combineAttempts(
-      quiz.attemptScoring as "HIGHEST" | "LAST" | "AVERAGE",
-      scored.map((s) => x100(s.score) ?? 0),
-    );
+    const combined = await attemptsScore(tx.db, quiz, attempt.studentId);
     if (combined === null) return;
     await this.grades.recordComputed(tx.db, {
       assessmentId: quiz.assessmentId,

@@ -1,6 +1,13 @@
 import type { QuizResponseValue, SnapshotQuestion } from "@glim/db";
 import { describe, expect, it } from "vitest";
-import { combineAttempts, deadlineFor, markResponse, normaliseAnswer, shuffled } from "./quiz";
+import {
+  combineAttempts,
+  deadlineFor,
+  markResponse,
+  normaliseAnswer,
+  scaleToMax,
+  shuffled,
+} from "./quiz";
 
 const q = (over: Partial<SnapshotQuestion>): SnapshotQuestion => ({
   questionId: "q",
@@ -134,5 +141,25 @@ describe("helpers", () => {
     const out = shuffled([1, 2, 3, 4, 5], () => 0);
     expect([...out].sort()).toEqual([1, 2, 3, 4, 5]);
     expect(out).not.toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+describe("scaleToMax", () => {
+  it.each([
+    // Appendix C.2: 33/50 quiz points on an exam out of 100 is 66.00, as on paper.
+    ["C.2 online exam", 3300, 5000, 10_000, 6600],
+    ["same scale", 1234, 2000, 2000, 1234],
+    ["full marks", 5000, 5000, 10_000, 10_000],
+    ["zero", 0, 5000, 10_000, 0],
+    // 1/3 of 100 = 33.333… → 33.33; 2/3 = 66.666… → 66.67 (half-up in hundredths).
+    ["thirds down", 100, 300, 10_000, 3333],
+    ["thirds up", 200, 300, 10_000, 6667],
+    ["exact half rounds up", 1, 2, 1, 1],
+  ])("%s", (_, score, total, max, expected) => {
+    expect(scaleToMax(score, total, max)).toBe(expected);
+  });
+
+  it("refuses a quiz with no points", () => {
+    expect(() => scaleToMax(0, 0, 100)).toThrow();
   });
 });

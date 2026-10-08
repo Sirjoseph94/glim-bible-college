@@ -146,9 +146,11 @@ export function QuizPage() {
         </button>
       ) : mine.isSuccess ? (
         <p className="text-sm text-slate-600">
-          {mine.data.attemptsLeft === 0
-            ? "You've used all your attempts."
-            : "This quiz isn't open now."}
+          {!mine.data.eligible
+            ? "You sit this exam on paper in the Room. Ask your Lecturer if you need to take it online."
+            : mine.data.attemptsLeft === 0
+              ? "You've used all your attempts."
+              : "This quiz isn't open now."}
         </p>
       ) : null}
     </div>
@@ -436,6 +438,7 @@ export function QuizGradingPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Quiz attempts</h2>
+      <OnlineGrants quizId={id} />
       {list.data.items.length === 0 ? <p className="text-slate-600">No attempts yet.</p> : null}
       <ul className="space-y-2 text-sm">
         {list.data.items.map((a) => (
@@ -553,5 +556,133 @@ function MarkAttempt({ attemptId, quizId }: { attemptId: string; quizId: string 
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * For an online exam: the On-campus students the Lecturer lets sit it online (C-34). Everyone
+ * else on the course follows their Study Mode.
+ */
+function OnlineGrants({ quizId }: { quizId: string }) {
+  const queryClient = useQueryClient();
+  const { busy, error, fieldErrors, run } = useSubmit();
+  const [formKey, setFormKey] = useState(0);
+  const quiz = useQuery({
+    queryKey: ["quiz", quizId],
+    queryFn: ({ signal }) =>
+      api<typeof assessment.getQuiz>("GET", "/quizzes/:id", { params: { id: quizId }, signal }),
+  });
+  const exam = quiz.data?.eligibleStudyMode === "ONLINE";
+  const offeringId = quiz.data?.courseOfferingId ?? "";
+  const grantsKey = ["quiz", quizId, "online-grants"];
+  const grants = useQuery({
+    queryKey: grantsKey,
+    enabled: exam,
+    queryFn: ({ signal }) =>
+      api<typeof assessment.listOnlineGrants>("GET", "/quizzes/:id/online-grants", {
+        params: { id: quizId },
+        signal,
+      }),
+  });
+  const book = useQuery({
+    queryKey: ["gradebook", offeringId],
+    enabled: exam,
+    queryFn: ({ signal }) =>
+      api<typeof assessment.getGradebook>("GET", "/course-offerings/:id/gradebook", {
+        params: { id: offeringId },
+        signal,
+      }),
+  });
+  if (!exam) return null;
+  const granted = new Set((grants.data?.items ?? []).map((g) => g.studentId));
+  const campus = (book.data?.rows ?? []).filter(
+    (r) => r.studyMode === "ON_CAMPUS" && !granted.has(r.studentId),
+  );
+  return (
+    <section className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm">
+      <h3 className="font-medium">On-campus students sitting online</h3>
+      <p className="text-slate-600">
+        Online students take this exam online; On-campus students sit it on paper unless you let
+        them in here.
+      </p>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <ul className="space-y-1">
+        {(grants.data?.items ?? []).map((g) => (
+          <li key={g.studentId} className="flex flex-wrap items-baseline justify-between gap-2">
+            <span>
+              {g.studentName} <span className="text-slate-500">({g.reason})</span>
+            </span>
+            <button
+              type="button"
+              disabled={busy}
+              className="text-brand underline"
+              onClick={() =>
+                void run(async () => {
+                  await api<typeof assessment.revokeOnline>(
+                    "DELETE",
+                    "/quizzes/:id/online-grants/:studentId",
+                    { params: { id: quizId, studentId: g.studentId } },
+                  );
+                  await queryClient.invalidateQueries({ queryKey: grantsKey });
+                })
+              }
+            >
+              Withdraw
+            </button>
+          </li>
+        ))}
+      </ul>
+      {campus.length > 0 ? (
+        <form
+          key={formKey}
+          aria-label="Let a student sit online"
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const data = new FormData(e.currentTarget);
+            void run(async () => {
+              await api<typeof assessment.grantOnline>(
+                "PUT",
+                "/quizzes/:id/online-grants/:studentId",
+                {
+                  params: { id: quizId, studentId: formText(data, "studentId") },
+                  body: { reason: formText(data, "reason") },
+                },
+              );
+              await queryClient.invalidateQueries({ queryKey: grantsKey });
+              setFormKey((k) => k + 1);
+            });
+          }}
+        >
+          <label className="block">
+            <span className="block text-slate-700">Student</span>
+            <select name="studentId" className="w-full rounded border border-slate-300 px-2 py-2">
+              {campus.map((r) => (
+                <option key={r.studentId} value={r.studentId}>
+                  {r.studentName} ({r.matricNumber})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-slate-700">Reason</span>
+            <input
+              name="reason"
+              required
+              maxLength={500}
+              className="block w-full rounded border border-slate-300 px-3 py-2"
+              aria-invalid={fieldErrors.reason === undefined ? undefined : true}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
+          >
+            Let them sit online
+          </button>
+        </form>
+      ) : null}
+    </section>
   );
 }

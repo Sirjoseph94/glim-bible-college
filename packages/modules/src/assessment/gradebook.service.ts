@@ -19,7 +19,8 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, isNotNull, max, sql } from "drizzle-orm";
-import { GradesService, normaliseScore, toGrade } from "./grades.service";
+import { attemptsScore } from "./exam-scores";
+import { GradesService, normaliseScore, switchesPath, toGrade } from "./grades.service";
 
 type AssessmentRow = typeof schema.assessments.$inferSelect;
 
@@ -91,6 +92,10 @@ export class GradebookService {
                 ),
               ),
             );
+    const online = await this.onlineScores(
+      columns,
+      roster.map((r) => r.studentId),
+    );
     const rows: GradebookRow[] = roster.map((r) => ({
       studentId: r.studentId,
       studentName: `${r.given} ${r.family}`,
@@ -99,6 +104,9 @@ export class GradebookService {
       grades: grades
         .filter((x) => x.studentId === r.studentId)
         .map((x) => ({ ...toGrade(x), assessmentId: x.assessmentId })),
+      onlineScores: online
+        .filter((o) => o.studentId === r.studentId)
+        .map((o) => ({ assessmentId: o.assessmentId, score: formatDecimal(o.scoreX100, 2) })),
     }));
     const total = weightTotal(columns);
     return {
@@ -409,6 +417,12 @@ export class GradebookService {
       for (const p of plan) {
         const current = existing.find((x) => x.studentId === p.studentId);
         p.row.oldScore = current?.score ?? null;
+        if (switchesPath(current, "IMPORT", p.score)) {
+          p.row.outcome = "error";
+          p.row.message =
+            "This student has an online exam score; replace it in the gradebook with a reason.";
+          continue;
+        }
         p.row.outcome =
           current === undefined
             ? "created"
@@ -423,7 +437,7 @@ export class GradebookService {
       const apply = !input.dryRun && errors === 0;
       if (apply)
         for (const p of plan) {
-          if (p.row.outcome === "unchanged") continue;
+          if (p.row.outcome !== "created" && p.row.outcome !== "updated") continue;
           const current = existing.find((x) => x.studentId === p.studentId);
           const released = current?.status === "RELEASED";
           await this.grades.write(db, {
@@ -531,6 +545,15 @@ export class GradebookService {
               ),
             )
             .groupBy(g.assessmentId);
+    const exams = rows.filter((r) => r.kind === "EXAM").map((r) => r.id);
+    const z = schema.quizzes;
+    const online =
+      exams.length === 0
+        ? []
+        : await db
+            .select({ id: z.id, assessmentId: z.assessmentId })
+            .from(z)
+            .where(inArray(z.assessmentId, exams));
     return rows.map((r) => {
       const c = counts.find((x) => x.assessmentId === r.id);
       return {
@@ -543,9 +566,35 @@ export class GradebookService {
         dueAt: r.dueAt?.toISOString() ?? null,
         unreleased: c?.unreleased ?? 0,
         released: c?.released ?? 0,
+        onlineQuizId: online.find((o) => o.assessmentId === r.id)?.id ?? null,
         version: r.version,
       };
     });
+  }
+
+  /** Each student's online exam score per EXAM column with an online part they've sat. */
+  private async onlineScores(
+    columns: GradebookColumn[],
+    studentIds: string[],
+  ): Promise<{ assessmentId: string; studentId: string; scoreX100: number }[]> {
+    const quizIds = columns.flatMap((c) => (c.onlineQuizId === null ? [] : [c.onlineQuizId]));
+    if (quizIds.length === 0 || studentIds.length === 0) return [];
+    const z = schema.quizzes;
+    const quizzes = await this.db.read.select().from(z).where(inArray(z.id, quizIds));
+    const a = schema.quizAttempts;
+    const sat = await this.db.read
+      .selectDistinct({ quizId: a.quizId, studentId: a.studentId })
+      .from(a)
+      .where(and(inArray(a.quizId, quizIds), inArray(a.studentId, studentIds), isNotNull(a.score)));
+    const out: { assessmentId: string; studentId: string; scoreX100: number }[] = [];
+    for (const s of sat) {
+      const quiz = quizzes.find((q) => q.id === s.quizId);
+      if (quiz === undefined) continue;
+      const scoreX100 = await attemptsScore(this.db.read, quiz, s.studentId);
+      if (scoreX100 !== null)
+        out.push({ assessmentId: quiz.assessmentId, studentId: s.studentId, scoreX100 });
+    }
+    return out;
   }
 
   private async roster(db: Database, offeringId: string) {

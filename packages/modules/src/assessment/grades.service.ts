@@ -39,6 +39,22 @@ interface NextGrade {
 
 const SCORE = /^\d{1,5}(\.\d{1,2})?$/;
 
+/** Sources of scores a person entered: never overwritten by a quiz score. */
+const PAPER = new Set<string>(["MANUAL", "IMPORT"]);
+
+/**
+ * Whether a change moves a scored grade between the online path (QUIZ) and a score entered by a
+ * person: the Lecturer chooses, with a reason (C-34).
+ */
+export function switchesPath(
+  current: { source: string; score: string | null } | undefined,
+  source: string,
+  score: string | null,
+): boolean {
+  if (current === undefined || current.score === null || score === null) return false;
+  return (current.source === "QUIZ") !== (source === "QUIZ");
+}
+
 /** Postgres numeric text ("72.50") ⇄ hundredths, exactly. */
 const toHundredths = (value: string) => parseDecimal(value, 2);
 const fromHundredths = (value: number) => formatDecimal(value, 2);
@@ -113,9 +129,23 @@ export class GradesService {
         input.excused === true ? "EXCUSED" : current?.status === "RELEASED" ? "RELEASED" : "DRAFT";
       const changesRecord =
         current !== undefined && (current.score !== score || current.status !== status);
-      if (current?.status === "RELEASED" && changesRecord && input.reason === undefined)
+      // A score typed by hand is MANUAL (SUBMISSION for an assignment); feedback alone keeps the
+      // grade's source, so commenting on an online exam score doesn't turn it into a paper one.
+      const source: GradeSource =
+        current !== undefined && current.score === score
+          ? (current.source as GradeSource)
+          : assessment.kind === "ASSIGNMENT"
+            ? "SUBMISSION"
+            : "MANUAL";
+      const reasonNeeded =
+        current?.status === "RELEASED" && changesRecord
+          ? "Say why a released grade is changing."
+          : switchesPath(current, source, score)
+            ? "Say why you're replacing the online exam score."
+            : null;
+      if (reasonNeeded !== null && input.reason === undefined)
         return err(
-          domainError("VALIDATION_FAILED", "Say why a released grade is changing.", {
+          domainError("VALIDATION_FAILED", reasonNeeded, {
             fieldErrors: [{ path: "body.reason", code: "required", message: "Give a reason." }],
           }),
         );
@@ -126,7 +156,7 @@ export class GradesService {
         next: {
           score,
           status,
-          source: assessment.kind === "ASSIGNMENT" ? "SUBMISSION" : "MANUAL",
+          source,
           feedbackMd: input.feedbackMd,
           gradedBy: actor.userId,
           releasedAt: status === "RELEASED" ? current?.releasedAt : null,
@@ -160,6 +190,9 @@ export class GradesService {
     const score = fromHundredths(input.scoreX100);
     const current = await this.lock(db, input.assessmentId, input.studentId);
     if (current?.score === score && current.source === input.source) return;
+    // A score the Lecturer entered (a paper exam, or an override) stays until they choose the
+    // online score with a reason (C-34).
+    if (current !== undefined && current.score !== null && PAPER.has(current.source)) return;
     const [assessment] = await db
       .select()
       .from(schema.assessments)

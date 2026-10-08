@@ -226,6 +226,13 @@ function EditGrade({
   const [saved, setSaved] = useState(false);
   const id = useId();
   const released = cell?.status === "RELEASED";
+  const online = row.onlineScores.find((o) => o.assessmentId === column.assessmentId);
+  // Moving between the online score and one typed by hand needs a reason (C-34).
+  const reasonLabel = released
+    ? "Reason for changing a released grade"
+    : cell?.source === "QUIZ" || (online !== undefined && cell?.score != null)
+      ? "Reason for choosing this score"
+      : null;
   return (
     <form
       // Remounts with the stored values after each save.
@@ -273,11 +280,45 @@ function EditGrade({
           {cell.source === "IMPORT"
             ? " · imported"
             : cell.source === "QUIZ"
-              ? " · from the quiz"
+              ? column.kind === "EXAM"
+                ? " · from the online exam"
+                : " · from the quiz"
               : ""}
         </p>
       ) : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
+      {online !== undefined && cell?.source !== "QUIZ" ? (
+        <div className="rounded bg-slate-50 p-2">
+          <p>
+            Online exam score: {online.score} / {column.maxScore}
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            className="text-brand underline"
+            onClick={(e) => {
+              const form = e.currentTarget.form;
+              const reason = form === null ? "" : formText(new FormData(form), "reason").trim();
+              setSaved(false);
+              void run(async () => {
+                await api<typeof assessment.useOnlineScore>(
+                  "POST",
+                  "/assessments/:id/grades/:studentId/online-score",
+                  {
+                    params: { id: column.assessmentId, studentId: row.studentId },
+                    body: { reason },
+                    headers: { "if-match": `"${String(cell?.version ?? 0)}"` },
+                  },
+                );
+                await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
+                setSaved(true);
+              });
+            }}
+          >
+            Use the online score
+          </button>
+        </div>
+      ) : null}
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -310,11 +351,9 @@ function EditGrade({
           className={`block w-full ${input}`}
         />
       </label>
-      {released ? (
+      {reasonLabel !== null ? (
         <label className="block">
-          <span className="block font-medium text-slate-700">
-            Reason for changing a released grade
-          </span>
+          <span className="block font-medium text-slate-700">{reasonLabel}</span>
           <input
             name="reason"
             maxLength={500}
@@ -354,27 +393,39 @@ function Columns({ offeringId, columns }: { offeringId: string; columns: Gradebo
         onSubmit={(e) => {
           e.preventDefault();
           const data = new FormData(e.currentTarget);
+          const body = {
+            title: formText(data, "title"),
+            maxScore: formText(data, "maxScore"),
+            weight: formText(data, "weight"),
+          };
+          const headers = { "idempotency-key": crypto.randomUUID() };
           void run(async () => {
-            await api<typeof assessment.createGradebookColumn>(
-              "POST",
-              "/course-offerings/:id/assessments",
-              {
+            if (formText(data, "kind") === "EXAM")
+              await api<typeof assessment.createExam>("POST", "/course-offerings/:id/exams", {
                 params: { id: offeringId },
-                body: {
-                  title: formText(data, "title"),
-                  maxScore: formText(data, "maxScore"),
-                  weight: formText(data, "weight"),
-                },
-                headers: { "idempotency-key": crypto.randomUUID() },
-              },
-            );
+                body,
+                headers,
+              });
+            else
+              await api<typeof assessment.createGradebookColumn>(
+                "POST",
+                "/course-offerings/:id/assessments",
+                { params: { id: offeringId }, body, headers },
+              );
             await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
             setFormKey((k) => k + 1);
           });
         }}
       >
-        <h3 className="font-medium">Add a column for marks entered by hand</h3>
+        <h3 className="font-medium">Add a column</h3>
         {error ? <Alert tone="error">{error}</Alert> : null}
+        <label className="block">
+          <span className="block text-slate-700">Kind</span>
+          <select name="kind" className={`block w-full ${input}`}>
+            <option value="MANUAL">Marks entered by hand</option>
+            <option value="EXAM">Exam (on paper; add an online part under Quizzes)</option>
+          </select>
+        </label>
         <label className="block">
           <span className="block text-slate-700">Title</span>
           <input name="title" required maxLength={200} className={`block w-full ${input}`} />
