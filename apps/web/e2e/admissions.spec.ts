@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { testPhoto } from "./images";
-import { linkToken, nextGoogleSignIn } from "./mailbox";
+import { lastEmail, linkToken, nextGoogleSignIn } from "./mailbox";
 
 const EMAIL = "e2e-admissions@glim.test";
 const PASSWORD = "admissions passphrase 2026";
@@ -104,6 +104,59 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await expect
     .poll(() => photo.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight]))
     .toEqual([467, 600]);
+
+  // The applicant finishes every section, reviews and submits.
+  const next = () => applicant.getByRole("button", { name: "Next" }).click();
+  await applicant.getByRole("button", { name: /1\. Personal information/ }).click();
+  await applicant.getByLabel("Title").selectOption("Mrs");
+  await applicant.getByLabel("Gender").selectOption("Female");
+  await applicant.getByLabel("Marital status").selectOption("Married");
+  await applicant.getByLabel("Nationality").fill("Nigerian");
+  await applicant.getByLabel("Present occupation").fill("Nurse");
+  await next();
+  await applicant.getByLabel("Mobile phone (WhatsApp)").fill("+234 803 123 4567");
+  await next();
+  await applicant.getByLabel("Country of residence").fill("Nigeria");
+  await applicant.getByLabel("State or province").fill("Anambra");
+  await applicant.getByLabel("City").fill("Awka");
+  await applicant.getByLabel("Address", { exact: true }).fill("5 Zik Avenue");
+  await next();
+  await applicant.getByLabel("Church name").fill("Grace Chapel");
+  await applicant.getByLabel("Church address").fill("2 Church Street, Awka");
+  await applicant.getByLabel("Pastor's name").fill("Pastor Obi");
+  await applicant.getByLabel("Pastor's phone").fill("+234 803 987 6543");
+  await next();
+  await applicant.getByRole("group", { name: "Are you born again?" }).getByLabel("Yes").check();
+  await applicant.getByLabel("When?").fill("2010");
+  await applicant.getByLabel("Have you been baptised in water by immersion?").fill("Yes, in 2011");
+  await applicant
+    .getByRole("group", { name: /baptised in the Holy Spirit/ })
+    .getByLabel("No")
+    .check();
+  await next();
+  await applicant.getByLabel("A friend").check();
+  await next();
+  await applicant.getByLabel("Type your full name to sign").fill("Chioma Eze");
+  await applicant
+    .getByLabel(/I have read the GLIM Online Bible College Statement of Faith/)
+    .check();
+  await applicant.getByLabel("I make the declaration above").check();
+  await next();
+  await applicant.getByLabel("I give the consent above").check();
+  await next();
+  await next();
+  await expect(applicant.getByRole("heading", { name: "Review and submit" })).toBeVisible();
+  await expect(applicant.getByText("Everything's answered.", { exact: false })).toBeVisible({
+    timeout: 15_000,
+  });
+  await applicant.getByRole("button", { name: "Submit application" }).click();
+
+  // The status page shows the reference number, and a receipt arrives by email.
+  await expect(applicant.getByText("Application Reference No: GLIM-APP-2030-00001")).toBeVisible();
+  await expect(applicant.getByText("Status: Submitted")).toBeVisible();
+  await expect
+    .poll(async () => (await lastEmail("chioma.applicant@gmail.com"))?.subject, { timeout: 15_000 })
+    .toBe("We've received your application GLIM-APP-2030-00001");
 
   await page.getByRole("button", { name: "Close now" }).click();
   await expect(page.getByText("closed", { exact: true })).toBeVisible();

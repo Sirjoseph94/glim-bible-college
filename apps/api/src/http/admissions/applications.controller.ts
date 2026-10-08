@@ -49,4 +49,24 @@ export class ApplicationsController {
   ): Promise<Reply<typeof applications.saveApplicationDraft>> {
     return unwrap(await this.applications.saveDraft(params.id, version, body));
   }
+
+  @Endpoint(applications.submitApplication)
+  async submit(
+    @Params(applications.submitApplication) params: IdParams,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof applications.submitApplication>> {
+    return unwrap(await this.applications.submit(params.id, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(applications.withdrawApplication)
+  async withdraw(
+    @Params(applications.withdrawApplication) params: IdParams,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof applications.withdrawApplication>> {
+    return unwrap(
+      await this.applications.withdraw(params.id, { ...actor, userId: session.userId }),
+    );
+  }
 }

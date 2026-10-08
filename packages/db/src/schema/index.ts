@@ -5,4 +5,6 @@ export * from "./authorization";
 export * from "./content";
 export * from "./identity";
 export * from "./lecturing";
+export * from "./notifications";
+export * from "./platform";
 export * from "./settings";

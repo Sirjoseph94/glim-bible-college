@@ -22,6 +22,7 @@ import type { PgBoss } from "pg-boss";
 import { AuthGuard } from "./common/auth.guard";
 import { rateLimitKey } from "./common/endpoint";
 import { createErrorRenderer, ErrorFilter } from "./common/error.filter";
+import { IdempotencyInterceptor } from "./common/idempotency.interceptor";
 import { ResponseInterceptor } from "./common/response.interceptor";
 import { helmetOptions } from "./common/security";
 import { BOSS } from "./common/tokens";
@@ -85,6 +86,8 @@ export class AppModule {
       providers: [
         { provide: BOSS, useValue: deps.boss },
         { provide: APP_GUARD, useClass: AuthGuard },
+        // Order matters: idempotency wraps the response interceptor, so it stores the wire body.
+        { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
         { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
       ],
     };

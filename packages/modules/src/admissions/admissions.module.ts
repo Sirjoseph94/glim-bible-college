@@ -3,6 +3,7 @@ import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
 import { ContentModule } from "@glim/modules/content";
 import { IdentityModule } from "@glim/modules/identity";
+import { NotificationsModule } from "@glim/modules/notifications";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { eq } from "drizzle-orm";
@@ -41,7 +42,7 @@ class AdmissionsResources implements OnModuleInit {
 const services = [IntakesService, ApplicationsService];
 
 @Module({
-  imports: [AuditModule, AuthorizationModule, ContentModule, IdentityModule],
+  imports: [AuditModule, AuthorizationModule, ContentModule, IdentityModule, NotificationsModule],
   providers: [...services, AdmissionsResources],
   exports: services,
 })

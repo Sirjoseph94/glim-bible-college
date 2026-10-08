@@ -10,6 +10,12 @@ export async function linkToken(to: string, kind: "invite" | "reset"): Promise<s
   return token;
 }
 
+/** The latest email to an address, or null if none has arrived yet. */
+export async function lastEmail(to: string): Promise<{ subject: string; text: string } | null> {
+  const res = await fetch(`${MAILBOX}/last?to=${encodeURIComponent(to)}`);
+  return res.ok ? ((await res.json()) as { subject: string; text: string }) : null;
+}
+
 /** Who the fake Google signs in next. */
 export async function nextGoogleSignIn(user: {
   sub: string;

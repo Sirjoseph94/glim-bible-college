@@ -10,12 +10,14 @@ import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
+import type { PgBoss } from "pg-boss";
 import { inject } from "vitest";
 import { buildApp } from "../src/app";
 
 export interface TestApp {
   app: NestFastifyApplication;
   db: Db;
+  boss: PgBoss;
   clock: TestClock;
   mailer: MemoryMailer;
   /** Every log line the app wrote, when created with `captureLogs`. */
@@ -77,6 +79,7 @@ export async function createTestApp(
   return {
     app,
     db,
+    boss,
     clock,
     mailer,
     logs,

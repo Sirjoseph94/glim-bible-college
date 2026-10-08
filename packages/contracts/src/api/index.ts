@@ -101,6 +101,8 @@ export const ENDPOINTS = [
   applications.myApplications,
   applications.getApplication,
   applications.saveApplicationDraft,
+  applications.submitApplication,
+  applications.withdrawApplication,
   files.createUpload,
   files.completeUpload,
   files.downloadFile,

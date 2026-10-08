@@ -16,6 +16,10 @@ import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import Fastify from "fastify";
+import { createHandlers } from "../../worker/src/handlers";
+import { subscribers } from "../../worker/src/subscribers";
+import { startWorker } from "../../worker/src/worker";
+import { createWorkerContext } from "../../worker/src/worker.module";
 import { buildApp } from "../src/app";
 import { bootstrapSystemAdmin } from "./bootstrap";
 
@@ -90,6 +94,24 @@ await app
   );
 await app.listen(config.port, "127.0.0.1");
 
+// The worker runs in-process on the general queues (no cron), so queued emails are sent.
+const workerBoss = createBoss(database.appUrl, { max: 2, supervise: false, schedule: false });
+const workerContext = await createWorkerContext({
+  db: new Db(createPool(database.appUrl, 2), workerBoss),
+  clock: systemClock,
+  logger,
+  config,
+  mailer,
+  objectStorage,
+});
+const worker = await startWorker({
+  boss: workerBoss,
+  role: "general",
+  handlers: createHandlers({ context: workerContext, subscribers }),
+  logger,
+  pollingIntervalSeconds: 0.5,
+});
+
 const mailbox = Fastify();
 mailbox.get<{ Querystring: { to: string } }>("/last", (req, reply) => {
   const message = mailer.lastTo(req.query.to);
@@ -104,6 +126,8 @@ logger.warn({ port: config.port }, "e2e stack ready");
 
 async function shutdown(): Promise<void> {
   await mailbox.close();
+  await worker.stop({ graceful: false });
+  await workerContext.close();
   await app.close();
   await boss.stop({ graceful: false });
   await db.pool.end();

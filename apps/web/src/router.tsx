@@ -171,13 +171,23 @@ const applyRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/apply"), "ApplyPage"),
 });
 
+const signedInOrApply = async ({ context }: { context: RouterContext }) => {
+  if ((await context.queryClient.query(meQuery)) === null) throw redirect({ to: "/apply" });
+};
+
+/** The applicant's status page (reference number, timeline, withdraw). */
+const applicationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/application",
+  beforeLoad: signedInOrApply,
+  component: lazyRouteComponent(() => import("./routes/application"), "ApplicationPage"),
+});
+
 /** The applicant's wizard; anyone signed in may start an application, so no role is needed. */
 const applicationEditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/application/edit",
-  beforeLoad: async ({ context }) => {
-    if ((await context.queryClient.query(meQuery)) === null) throw redirect({ to: "/apply" });
-  },
+  beforeLoad: signedInOrApply,
   component: lazyRouteComponent(() => import("./routes/application-edit"), "ApplicationEditPage"),
 });
 
@@ -210,6 +220,7 @@ const routeTree = rootRoute.addChildren([
   adminLecturersRoute,
   teachRoute,
   applyRoute,
+  applicationRoute,
   applicationEditRoute,
   admissionsIntakesRoute,
 ]);

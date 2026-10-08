@@ -120,6 +120,13 @@
       "when": 1791443506959,
       "tag": "0016_wp05_files",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791444094142,
+      "tag": "0017_wp_platform_idempotency_notifications",
+      "breakpoints": true
     }
   ]
 }

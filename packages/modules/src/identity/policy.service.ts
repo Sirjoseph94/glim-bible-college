@@ -1,5 +1,5 @@
 import { POLICY_SCHEMAS, type EditablePolicyType, type PolicyConfig } from "@glim/contracts";
-import { Db, PG, pgError, schema } from "@glim/db";
+import { Db, PG, pgError, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
@@ -26,9 +26,13 @@ export class PolicyService {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  async current<T extends EditablePolicyType>(type: T): Promise<PolicyVersion<T>> {
+  /** The latest version. Inside a transaction, pass its `db` so the read uses the same connection. */
+  async current<T extends EditablePolicyType>(
+    type: T,
+    db: Database = this.db.read,
+  ): Promise<PolicyVersion<T>> {
     const p = schema.policies;
-    const [row] = await this.db.read
+    const [row] = await db
       .select()
       .from(p)
       .where(and(eq(p.policyType, type), eq(p.scopeType, "INSTITUTION"), isNull(p.scopeId)))

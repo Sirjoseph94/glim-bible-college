@@ -1,4 +1,4 @@
-import { Db, schema } from "@glim/db";
+import { Db, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import {
   CLOCK,
@@ -58,11 +58,9 @@ export class SettingsService {
     return (await this.get()).staffEmailDomains.map((d) => d.toLowerCase());
   }
 
-  async get(): Promise<InstitutionSettings> {
-    const [row] = await this.db.read
-      .select()
-      .from(schema.settings)
-      .where(eq(schema.settings.id, 1));
+  /** Inside a transaction, pass its `db` so the read uses the same connection. */
+  async get(db: Database = this.db.read): Promise<InstitutionSettings> {
+    const [row] = await db.select().from(schema.settings).where(eq(schema.settings.id, 1));
     if (row === undefined) throw new Error("The settings row is missing; run the migrations.");
     const { id: _id, ...settings } = row;
     return settings;

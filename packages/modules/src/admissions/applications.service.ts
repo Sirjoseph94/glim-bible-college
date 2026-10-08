@@ -1,8 +1,9 @@
 import type { Application, applications, ApplicationSummary, BodyOf } from "@glim/contracts";
-import { Db, PG, pgError, schema, type Database } from "@glim/db";
+import { Db, PG, pgError, schema, type Database, type Tx } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { FilesService } from "@glim/modules/content";
 import { PolicyService, SettingsService, UserService } from "@glim/modules/identity";
+import { NotificationsService } from "@glim/modules/notifications";
 import {
   CLOCK,
   definedFields,
@@ -23,9 +24,10 @@ const iso = (d: Date | null) => (d === null ? null : d.toISOString());
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
 
 /**
- * The applicant's side of an application (owner: admissions, TRD §10.2): start it in the open
- * intake, then save the draft a section at a time. Spiritual-background answers (INV-15) are
- * stored and shown back to the applicant only; they never go into audit, events or logs.
+ * The applicant's side of an application (owner: admissions, TRD §10.2–10.3): start it in the
+ * open intake, save the draft a section at a time, submit it, or withdraw it. Spiritual-background
+ * answers (INV-15) are stored and shown back to the applicant only; they never go into audit,
+ * events, notifications or logs.
  */
 @Injectable()
 export class ApplicationsService {
@@ -37,6 +39,7 @@ export class ApplicationsService {
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(UserService) private readonly users: UserService,
     @Inject(FilesService) private readonly files: FilesService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   /** Starts a draft in the open intake; that makes the user an Applicant (§7.1). */
@@ -180,7 +183,7 @@ export class ApplicationsService {
       if (
         photoFileId !== undefined &&
         photoFileId !== null &&
-        !(await this.files.isUsable(photoFileId, current.applicantUserId, "PASSPORT_PHOTO"))
+        !(await this.files.isUsable(photoFileId, current.applicantUserId, "PASSPORT_PHOTO", db))
       )
         return err(
           domainError("VALIDATION_FAILED", "Upload the passport photo again.", {
@@ -196,13 +199,173 @@ export class ApplicationsService {
         if (tooYoung !== null) return err(tooYoung);
       }
 
-      const fields = await this.columnsFor(current, change);
+      const fields = await this.columnsFor(db, current, change);
       await db
         .update(a)
         .set({ ...fields, updatedAt: this.clock.now(), version: sql`${a.version} + 1` })
         .where(eq(a.id, id));
       return this.view(db, id);
     });
+  }
+
+  /**
+   * Submits a complete draft while its intake is open: allocates the next reference number from
+   * the intake's sequence under a row lock (gap-free, since it rolls back with a failed submit),
+   * records the event, and queues the receipt email, all in one transaction.
+   */
+  submit(id: string, actor: AuditActor & { userId: string }): Promise<DomainResult<Application>> {
+    return this.db.withTxResult(async (tx) => {
+      const { db } = tx;
+      const a = schema.applications;
+      const [current] = await db.select().from(a).where(eq(a.id, id)).for("update");
+      if (current === undefined) return notFound();
+      if (current.status !== "DRAFT")
+        return err(
+          domainError("APPLICATION_STATE_INVALID", "This application has already been submitted."),
+        );
+      const [found] = await this.query(eq(a.id, id), db);
+      if (found === undefined) return notFound();
+      if (found.intake.status !== "OPEN")
+        return err(domainError("INTAKE_CLOSED", "Applications for this intake have closed."));
+      const missing = Object.entries(missingFields(current)).flatMap(([section, fields]) =>
+        fields.map((field) => ({
+          path: `${section}.${field}`,
+          code: "required",
+          message: "Required.",
+        })),
+      );
+      if (
+        current.photoFileId !== null &&
+        !(await this.files.isUsable(
+          current.photoFileId,
+          current.applicantUserId,
+          "PASSPORT_PHOTO",
+          db,
+        ))
+      )
+        missing.push({
+          path: "photo.fileId",
+          code: "required",
+          message: "Upload the photo again.",
+        });
+      if (missing.length > 0)
+        return err(
+          domainError("APPLICATION_INCOMPLETE", "Some required answers are missing.", {
+            fieldErrors: missing,
+          }),
+        );
+      if (current.dateOfBirth !== null) {
+        const tooYoung = await this.tooYoung(db, current.intakeId, current.dateOfBirth);
+        if (tooYoung !== null) return err(tooYoung);
+      }
+
+      const referenceNo = await this.nextReferenceNo(db, current.intakeId, found.intake.code);
+      const now = this.clock.now();
+      await db
+        .update(a)
+        .set({
+          status: "SUBMITTED",
+          referenceNo,
+          submittedAt: now,
+          updatedAt: now,
+          version: sql`${a.version} + 1`,
+        })
+        .where(eq(a.id, id));
+      await this.recordTransition(tx, current, "SUBMITTED", actor, now, { referenceNo });
+      await this.notifications.notify(tx, {
+        userId: current.applicantUserId,
+        kind: "admissions.application.receipt",
+        title: `Application ${referenceNo} received`,
+        data: {
+          referenceNo,
+          applicationId: id,
+          name: [current.firstName, current.lastName].filter(Boolean).join(" "),
+          programmeName: found.programme.name,
+          studyMode: current.studyMode === "ON_CAMPUS" ? "on campus" : "online",
+          academicSessionName: found.intake.academicSessionName,
+          ...(current.email === null ? {} : { emailTo: current.email }),
+        },
+        email: true,
+        dedupeKey: `application-receipt:${id}`,
+      });
+      return this.view(db, id);
+    });
+  }
+
+  /** Withdraws an application before an offer is accepted; it is deleted after the purge period. */
+  withdraw(id: string, actor: AuditActor & { userId: string }): Promise<DomainResult<Application>> {
+    return this.db.withTxResult(async (tx) => {
+      const { db } = tx;
+      const a = schema.applications;
+      const [current] = await db.select().from(a).where(eq(a.id, id)).for("update");
+      if (current === undefined) return notFound();
+      if (!["DRAFT", "SUBMITTED", "UNDER_REVIEW", "ADMITTED"].includes(current.status))
+        return err(
+          domainError(
+            "APPLICATION_STATE_INVALID",
+            `An application that is ${current.status.toLowerCase().replaceAll("_", " ")} can't be withdrawn.`,
+          ),
+        );
+      const now = this.clock.now();
+      const { config } = await this.policies.current("ADMISSIONS", db);
+      const purgeAfter = new Date(now);
+      purgeAfter.setUTCMonth(purgeAfter.getUTCMonth() + config.purgeAfterMonths);
+      await db
+        .update(a)
+        .set({
+          status: "WITHDRAWN",
+          withdrawnAt: now,
+          purgeAfter,
+          updatedAt: now,
+          version: sql`${a.version} + 1`,
+        })
+        .where(eq(a.id, id));
+      await this.recordTransition(tx, current, "WITHDRAWN", actor, now, {});
+      return this.view(db, id);
+    });
+  }
+
+  /** Locks the intake's sequence row and takes its next number: GLIM-APP-{intake}-{NNNNN}. */
+  private async nextReferenceNo(db: Database, intakeId: string, intakeCode: string) {
+    const q = schema.applicationSequences;
+    await db.insert(q).values({ intakeId }).onConflictDoNothing();
+    const [sequence] = await db.select().from(q).where(eq(q.intakeId, intakeId)).for("update");
+    if (sequence === undefined) throw new Error("application sequence row missing");
+    await db
+      .update(q)
+      .set({ nextValue: sequence.nextValue + 1 })
+      .where(eq(q.intakeId, intakeId));
+    return `GLIM-APP-${intakeCode}-${String(sequence.nextValue).padStart(5, "0")}`;
+  }
+
+  /** Every transition: an application event, an audit row and a domain event (§10.3, INV-11). */
+  private async recordTransition(
+    tx: Tx,
+    current: ApplicationRow,
+    to: "SUBMITTED" | "WITHDRAWN",
+    actor: AuditActor & { userId: string },
+    now: Date,
+    metadata: Record<string, string>,
+  ): Promise<void> {
+    await tx.db.insert(schema.applicationEvents).values({
+      applicationId: current.id,
+      fromStatus: current.status,
+      toStatus: to,
+      actorUserId: actor.userId,
+      createdAt: now,
+    });
+    const action = to === "SUBMITTED" ? "submitted" : "withdrawn";
+    await this.audit.record(tx.db, actor, {
+      action: `admissions.application.${action}`,
+      resourceType: "application",
+      resourceId: current.id,
+      metadata: { from: current.status, ...metadata },
+    });
+    await tx.boss.publish(
+      `admissions.application.${action}`,
+      { applicationId: current.id, ...metadata },
+      { occurredAt: now, actorUserId: actor.userId },
+    );
   }
 
   /** APPLICANT_UNDER_AGE unless they reach the minimum age by the day the Academic Session starts (Q-15). */
@@ -214,7 +377,7 @@ export class ApplicationsService {
       .innerJoin(s, eq(s.id, schema.intakes.academicSessionId))
       .where(eq(schema.intakes.id, intakeId));
     if (session === undefined) throw new Error("intake without an Academic Session");
-    const { config } = await this.policies.current("ADMISSIONS");
+    const { config } = await this.policies.current("ADMISSIONS", db);
     if (ageOn(dateOfBirth, session.startsOn) >= config.minimumAgeYears) return null;
     return domainError(
       "APPLICANT_UNDER_AGE",
@@ -233,6 +396,7 @@ export class ApplicationsService {
 
   /** Maps the sections of a draft save onto columns; dates are the server's, never the client's. */
   private async columnsFor(
+    db: Database,
     current: ApplicationRow,
     change: ApplicationDraftChange,
   ): Promise<Partial<ApplicationRow>> {
@@ -248,7 +412,7 @@ export class ApplicationsService {
         : { dataConsentAt: consent.consented ? (current.dataConsentAt ?? now) : null };
     const texts =
       declaration?.declared === true || consent?.consented === true
-        ? { admissionsPolicyVersion: (await this.policies.current("ADMISSIONS")).version }
+        ? { admissionsPolicyVersion: (await this.policies.current("ADMISSIONS", db)).version }
         : {};
     return definedFields({
       programmeId: change.programmeId,
@@ -278,10 +442,16 @@ export class ApplicationsService {
     if (found === undefined) return notFound();
     const { application: r, intake, programme } = found;
     const [{ config }, settings] = await Promise.all([
-      this.policies.current("ADMISSIONS"),
-      this.settings.get(),
+      this.policies.current("ADMISSIONS", db),
+      this.settings.get(db),
     ]);
     const spiritual = r.spiritualBackground ?? {};
+    const ev = schema.applicationEvents;
+    const timeline = await db
+      .select({ status: ev.toStatus, at: ev.createdAt })
+      .from(ev)
+      .where(eq(ev.applicationId, r.id))
+      .orderBy(asc(ev.createdAt), asc(ev.id));
     return ok({
       id: r.id,
       status: r.status as Application["status"],
@@ -350,6 +520,11 @@ export class ApplicationsService {
       },
       minimumAgeYears: config.minimumAgeYears,
       submittedAt: iso(r.submittedAt),
+      withdrawnAt: iso(r.withdrawnAt),
+      timeline: timeline.map((e) => ({
+        status: e.status as Application["status"],
+        at: e.at.toISOString(),
+      })),
       updatedAt: r.updatedAt.toISOString(),
     });
   }

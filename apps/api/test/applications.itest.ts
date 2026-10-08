@@ -1,6 +1,8 @@
 import type { AcademicSession, Application, Intake, Me, Programme } from "@glim/contracts";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
+import { drainQueues } from "@glim/db/testing";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
+import { NotificationsService } from "@glim/modules/notifications";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cookieValue, viaGoogle } from "./google-flow";
 import { createTestApp, type TestApp } from "./harness";
@@ -328,5 +330,192 @@ describe("saving the draft", () => {
       ).toBe(404);
       expect((await save(headers, draft, { personal: { firstName: "X" } })).statusCode).toBe(404);
     }
+  });
+});
+
+/** Every required answer, as a complete applicant would give them (one section per save). */
+const COMPLETE = (name: string, extra: { spiritual?: object } = {}) => ({
+  personal: {
+    firstName: name,
+    lastName: "Okafor",
+    title: "MR",
+    gender: "MALE",
+    dateOfBirth: "1988-02-14",
+    maritalStatus: "MARRIED",
+    nationality: "Nigerian",
+    occupation: "Farmer",
+  },
+  contact: { email: `${name.toLowerCase()}.mail@gmail.com`, phoneWhatsapp: "+2348031234567" },
+  address: { country: "Nigeria", stateProvince: "Enugu", city: "Nsukka", address: "1 Market Road" },
+  church: {
+    churchName: "Grace Chapel",
+    churchAddress: "2 Church Street",
+    pastorName: "Pastor Obi",
+    pastorPhone: "+2348039876543",
+  },
+  spiritual: {
+    bornAgain: true,
+    bornAgainWhen: "2005",
+    waterBaptism: "Yes, 2006",
+    holySpiritBaptism: false,
+    ...extra.spiritual,
+  },
+  feedback: { heardVia: ["FRIEND"] },
+  declaration: { fullName: `${name} Okafor`, statementOfFaithRead: true, declared: true },
+  consent: { consented: true },
+});
+
+/** A new applicant with a complete draft (photo included), ready to submit. */
+async function completeApplicant(
+  name: string,
+  extra?: { spiritual?: object },
+): Promise<{ headers: Record<string, string>; application: Application }> {
+  const headers = await applicant({
+    sub: `google-${name.toLowerCase()}`,
+    email: `${name.toLowerCase()}@gmail.com`,
+  });
+  let application = (await start(headers)).json<Application>();
+  const photo = await uploadPhoto(t, headers);
+  application = (
+    await save(headers, application, { ...COMPLETE(name, extra), photo: { fileId: photo.id } })
+  ).json<Application>();
+  expect(Object.values(application.missing).flat()).toEqual([]);
+  return { headers, application };
+}
+
+let keys = 0;
+const idempotencyKey = () => `submit-key-${String(++keys).padStart(8, "0")}`;
+
+function submit(headers: Record<string, string>, id: string, key = idempotencyKey()) {
+  return t.request({
+    method: "POST",
+    url: `/api/v1/applications/${id}/submit`,
+    headers: { ...headers, "idempotency-key": key },
+  });
+}
+
+async function sendQueuedEmails() {
+  const notifications = t.app.get(NotificationsService);
+  return drainQueues(t.boss, {
+    "notify.send": (job) =>
+      notifications.deliver((job.data as { notificationId: string }).notificationId),
+  });
+}
+
+describe("submitting", () => {
+  it("is refused while answers are missing, listing them", async () => {
+    const headers = await applicant({ sub: "google-hasty", email: "hasty@gmail.com" });
+    const draft = (await start(headers)).json<Application>();
+    const res = await submit(headers, draft.id);
+    expect(res.statusCode).toBe(422);
+    const body = res.json<{ error: { code: string; fieldErrors: { path: string }[] } }>();
+    expect(body.error.code).toBe("APPLICATION_INCOMPLETE");
+    expect(body.error.fieldErrors.map((f) => f.path)).toEqual(
+      expect.arrayContaining(["personal.firstName", "consent.consented", "photo.fileId"]),
+    );
+  });
+
+  it("needs an Idempotency-Key", async () => {
+    const { headers, application } = await completeApplicant("Keyless");
+    const res = await t.request({
+      method: "POST",
+      url: `/api/v1/applications/${application.id}/submit`,
+      headers,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("allocates the reference number, records the event and emails a receipt, once", async () => {
+    const secret = "SPIRITUAL-SENTINEL-91c2";
+    const { headers, application } = await completeApplicant("Emeka", {
+      spiritual: { bornAgainWhen: secret },
+    });
+    const key = idempotencyKey();
+    const res = await submit(headers, application.id, key);
+    expect(res.statusCode).toBe(200);
+    const submitted = res.json<Application>();
+    expect(submitted.status).toBe("SUBMITTED");
+    expect(submitted.referenceNo).toMatch(/^GLIM-APP-2027-\d{5}$/);
+    expect(submitted.submittedAt).not.toBeNull();
+    expect(submitted.timeline.map((e) => e.status)).toEqual(["DRAFT", "SUBMITTED"]);
+
+    // A retry with the same key replays the first response; nothing happens twice.
+    const retry = await submit(headers, application.id, key);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.headers["idempotent-replayed"]).toBe("true");
+    expect(retry.json()).toEqual(submitted);
+    const reused = await t.request({
+      method: "POST",
+      url: `/api/v1/applications/${application.id}/submit`,
+      headers: { ...headers, "idempotency-key": key },
+      payload: { different: true },
+    });
+    expect(reused.statusCode).toBe(422);
+    expect(reused.json()).toMatchObject({ error: { code: "IDEMPOTENCY_KEY_REUSED" } });
+    // A new key is a new request, and a submitted application can't be submitted again.
+    const again = await submit(headers, application.id);
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toMatchObject({ error: { code: "APPLICATION_STATE_INVALID" } });
+
+    expect(await sendQueuedEmails()).toEqual({ completed: 1, failed: 0 });
+    const receipt = t.mailer.lastTo("emeka.mail@gmail.com");
+    expect(receipt?.subject).toBe(`We've received your application ${submitted.referenceNo ?? ""}`);
+    expect(receipt?.text).toContain(
+      `Your Application Reference No is ${submitted.referenceNo ?? ""}`,
+    );
+    expect(receipt?.html).toContain("/application");
+    // INV-15: the answers never reach the email, the notification or the audit log.
+    expect(JSON.stringify(receipt)).not.toContain(secret);
+    const { rows } = await t.db.pool.query<{ row: string }>(
+      "SELECT row_to_json(n)::text AS row FROM notifications n UNION ALL SELECT row_to_json(a)::text FROM audit_logs a",
+    );
+    for (const { row } of rows) expect(row).not.toContain(secret);
+  });
+
+  it("gives concurrent submissions consecutive reference numbers with no gaps", async () => {
+    const ready = await Promise.all(
+      ["Ada", "Bayo", "Chidi", "Dupe", "Efe"].map((name) => completeApplicant(name)),
+    );
+    const { rows } = await t.db.pool.query<{ next_value: number }>(
+      "SELECT next_value FROM application_sequences WHERE intake_id = $1",
+      [intake.id],
+    );
+    const first = rows[0]?.next_value ?? 0;
+    const results = await Promise.all(ready.map((r) => submit(r.headers, r.application.id)));
+    expect(results.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200]);
+    const numbers = results
+      .map((r) => Number(r.json<Application>().referenceNo?.slice(-5)))
+      .sort((x, y) => x - y);
+    expect(numbers).toEqual([first, first + 1, first + 2, first + 3, first + 4]);
+  });
+});
+
+describe("withdrawing", () => {
+  it("withdraws the application, keeping it only until the purge date", async () => {
+    const { headers, application } = await completeApplicant("Fola");
+    await submit(headers, application.id);
+    const res = await t.request({
+      method: "POST",
+      url: `/api/v1/applications/${application.id}/withdraw`,
+      headers,
+    });
+    expect(res.statusCode).toBe(200);
+    const withdrawn = res.json<Application>();
+    expect(withdrawn.status).toBe("WITHDRAWN");
+    expect(withdrawn.timeline.map((e) => e.status)).toEqual(["DRAFT", "SUBMITTED", "WITHDRAWN"]);
+    const { rows } = await t.db.pool.query<{ months: number }>(
+      "SELECT (EXTRACT(year FROM age(purge_after, withdrawn_at)) * 12 + EXTRACT(month FROM age(purge_after, withdrawn_at)))::int AS months FROM applications WHERE id = $1",
+      [application.id],
+    );
+    expect(rows[0]?.months).toBe(12);
+
+    const twice = await t.request({
+      method: "POST",
+      url: `/api/v1/applications/${application.id}/withdraw`,
+      headers,
+    });
+    expect(twice.statusCode).toBe(409);
+    // Having withdrawn, they may apply again to the same intake.
+    expect((await start(headers)).statusCode).toBe(201);
   });
 });

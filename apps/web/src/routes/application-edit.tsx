@@ -1,18 +1,14 @@
 import type { Application, ApplicationSection, applications } from "@glim/contracts";
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { applicationQuery, ENDED, mineQuery } from "../api/applications";
 import { api, ApiError } from "../api/client";
 import { Alert, SubmitButton } from "../components/form";
 import { preparePassportPhoto, uploadPassportPhoto } from "../components/passport-photo";
 import { CalendarDate } from "../components/time";
 import { useSubmit } from "../components/use-submit";
 import { currentIntakeQuery } from "./apply";
-
-const mineQuery = queryOptions({
-  queryKey: ["applications", "mine"],
-  queryFn: ({ signal }) =>
-    api<typeof applications.myApplications>("GET", "/applications/mine", { signal }),
-});
 
 /** Autosave interval (TRD §10.2: every 5–10 s). */
 const AUTOSAVE_MS = 5000;
@@ -204,6 +200,9 @@ const SECTIONS: { key: ApplicationSection; title: string; fields: FieldDef[] }[]
   },
 ];
 
+/** The step after the last section: review what's missing, then submit. */
+const REVIEW = SECTIONS.length;
+
 const text = (v: string | null) => v ?? "";
 
 /** The form's answers as the wizard edits them. */
@@ -248,17 +247,11 @@ export function ApplicationEditPage() {
   if (mine.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
   if (mine.isError)
     return <Alert tone="error">We couldn't load your application. Please try again.</Alert>;
-  const current =
-    mine.data.items.find((a) => a.status === "DRAFT") ?? mine.data.items[0] ?? undefined;
-  if (current === undefined) return <StartApplication />;
-  if (current.status !== "DRAFT")
-    return (
-      <Alert tone="success">
-        Your application {current.referenceNo ?? ""} has been submitted. We'll email you about its
-        progress.
-      </Alert>
-    );
-  return <LoadApplication id={current.id} />;
+  const draft = mine.data.items.find((a) => a.status === "DRAFT");
+  if (draft !== undefined) return <LoadApplication id={draft.id} />;
+  // A submitted application can't be edited; after one ends, the applicant may start again.
+  if (mine.data.items.some((a) => !ENDED.includes(a.status))) return <Navigate to="/application" />;
+  return <StartApplication />;
 }
 
 function StartApplication() {
@@ -330,12 +323,7 @@ function StartApplication() {
 
 function LoadApplication({ id }: { id: string }) {
   const application = useQuery({
-    queryKey: ["applications", id],
-    queryFn: ({ signal }) =>
-      api<typeof applications.getApplication>("GET", "/applications/:id", {
-        params: { id },
-        signal,
-      }),
+    ...applicationQuery(id),
     // The wizard owns the draft once loaded; refetching would fight the autosave.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -363,12 +351,10 @@ function Wizard({ initial }: { initial: Application }) {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Resume where the applicant left off: the first section with something still to answer.
-  const [step, setStep] = useState(() =>
-    Math.max(
-      0,
-      SECTIONS.findIndex((s) => initial.missing[s.key].length > 0),
-    ),
-  );
+  const [step, setStep] = useState(() => {
+    const unfinished = SECTIONS.findIndex((s) => initial.missing[s.key].length > 0);
+    return unfinished === -1 ? REVIEW : unfinished;
+  });
 
   const valuesRef = useRef(values);
   const version = useRef(initial.version);
@@ -448,8 +434,55 @@ function Wizard({ initial }: { initial: Application }) {
     window.scrollTo({ top: 0 });
   };
 
-  const section = SECTIONS[step] ?? SECTIONS[0];
-  if (section === undefined) return null;
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // One key per submission attempt, reused on retry, so a lost response can't submit twice.
+  const submitKey = useRef(crypto.randomUUID());
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      for (let i = 0; i < 20 && (inFlight.current || dirty.current.size > 0); i++) {
+        await save();
+        if (inFlight.current) await new Promise((resolve) => setTimeout(resolve, 250));
+        if (held.current) break;
+      }
+      if (dirty.current.size > 0) {
+        setSubmitError("Your latest answers haven't been saved yet. Check them, then try again.");
+        return;
+      }
+      const submitted = await api<typeof applications.submitApplication>(
+        "POST",
+        "/applications/:id/submit",
+        { params: { id: initial.id }, headers: { "idempotency-key": submitKey.current } },
+      );
+      queryClient.setQueryData(applicationQuery(initial.id).queryKey, submitted);
+      await queryClient.invalidateQueries({ queryKey: ["applications", "mine"] });
+      await navigate({ to: "/application" });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setSubmitError(error.message);
+        if (error.code === "APPLICATION_INCOMPLETE") {
+          setApplication(
+            await api<typeof applications.getApplication>("GET", "/applications/:id", {
+              params: { id: initial.id },
+            }),
+          );
+        }
+      } else {
+        setSubmitError(
+          "We couldn't reach the server. Your answers are saved; try submitting again.",
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const section = SECTIONS[step];
   const done = SECTIONS.filter((s) => application.missing[s.key].length === 0).length;
 
   return (
@@ -506,29 +539,51 @@ function Wizard({ initial }: { initial: Application }) {
               </li>
             );
           })}
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                go(REVIEW);
+              }}
+              aria-current={step === REVIEW ? "step" : undefined}
+              className={`rounded border px-2 py-1 ${step === REVIEW ? "border-brand bg-brand text-white" : "border-slate-300 bg-white"}`}
+            >
+              Review and submit
+            </button>
+          </li>
         </ol>
       </nav>
 
-      <section className="space-y-4 rounded border border-slate-200 bg-white p-4">
-        <h3 className="text-lg font-semibold">
-          {step + 1}. {section.title}
-        </h3>
-        <SectionIntro section={section.key} application={application} />
-        {section.fields
-          .filter((f) => f.when?.(values[section.key]) ?? true)
-          .map((field) => (
-            <FieldInput
-              key={field.name}
-              id={`${section.key}-${field.name}`}
-              field={field}
-              value={values[section.key][field.name] ?? null}
-              error={errors[`${section.key}.${field.name}`]}
-              onChange={(value) => {
-                change(section.key, field.name, value);
-              }}
-            />
-          ))}
-      </section>
+      {section === undefined ? (
+        <Review
+          application={application}
+          onGo={go}
+          submitting={submitting}
+          error={submitError}
+          onSubmit={() => void submit()}
+        />
+      ) : (
+        <section className="space-y-4 rounded border border-slate-200 bg-white p-4">
+          <h3 className="text-lg font-semibold">
+            {step + 1}. {section.title}
+          </h3>
+          <SectionIntro section={section.key} application={application} />
+          {section.fields
+            .filter((f) => f.when?.(values[section.key]) ?? true)
+            .map((field) => (
+              <FieldInput
+                key={field.name}
+                id={`${section.key}-${field.name}`}
+                field={field}
+                value={values[section.key][field.name] ?? null}
+                error={errors[`${section.key}.${field.name}`]}
+                onChange={(value) => {
+                  change(section.key, field.name, value);
+                }}
+              />
+            ))}
+        </section>
+      )}
 
       <div className="flex justify-between">
         <button
@@ -541,7 +596,7 @@ function Wizard({ initial }: { initial: Application }) {
         >
           Back
         </button>
-        {step < SECTIONS.length - 1 ? (
+        {step < REVIEW ? (
           <button
             type="button"
             onClick={() => {
@@ -830,5 +885,75 @@ function PhotoField({
         </p>
       )}
     </div>
+  );
+}
+
+function Review({
+  application,
+  onGo,
+  submitting,
+  error,
+  onSubmit,
+}: {
+  application: Application;
+  onGo: (step: number) => void;
+  submitting: boolean;
+  error: string | null;
+  onSubmit: () => void;
+}) {
+  const gaps = SECTIONS.map((section, index) => ({
+    section,
+    index,
+    fields: application.missing[section.key],
+  })).filter((gap) => gap.fields.length > 0);
+  const label = (section: (typeof SECTIONS)[number], name: string) =>
+    section.fields.find((f) => f.name === name)?.label ?? name;
+  const open = application.intake.status === "OPEN";
+
+  return (
+    <section className="space-y-4 rounded border border-slate-200 bg-white p-4">
+      <h3 className="text-lg font-semibold">Review and submit</h3>
+      {open ? null : (
+        <Alert tone="error">
+          Applications for the {application.intake.academicSessionName} have closed, so this
+          application can't be submitted.
+        </Alert>
+      )}
+      {gaps.length > 0 ? (
+        <div className="space-y-2">
+          <p>These answers are still needed before you can submit:</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {gaps.map((gap) => (
+              <li key={gap.section.key}>
+                <button
+                  type="button"
+                  className="text-brand underline"
+                  onClick={() => {
+                    onGo(gap.index);
+                  }}
+                >
+                  {gap.index + 1}. {gap.section.title}
+                </button>
+                : {gap.fields.map((f) => label(gap.section, f)).join(", ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p>
+          Everything's answered. Check your answers in each section, then submit. You can't change
+          them after submitting.
+        </p>
+      )}
+      {error === null ? null : <Alert tone="error">{error}</Alert>}
+      <button
+        type="button"
+        disabled={gaps.length > 0 || !open || submitting}
+        onClick={onSubmit}
+        className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
+      >
+        {submitting ? "Submitting…" : "Submit application"}
+      </button>
+    </section>
   );
 }

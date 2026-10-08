@@ -40,7 +40,7 @@ export function RootLayout() {
               </Link>
             ) : null}
             {me.data.roles.isApplicant ? (
-              <Link to="/application/edit" className="underline">
+              <Link to="/application" className="underline">
                 My application
               </Link>
             ) : null}

@@ -324,6 +324,19 @@ const SAMPLES: Record<string, Sample> = {
     headers: { "if-match": '"999"' },
     owner: "applicant",
   }),
+  // The fixture draft is incomplete, so the owner gets a 422 and nothing changes.
+  "POST /applications/:id/submit": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/applications/${await applicationFixture(t)}/submit`,
+      headers: { "idempotency-key": `authz-submit-${String(n).padStart(8, "0")}` },
+      owner: "applicant",
+    };
+  },
+  "POST /applications/:id/withdraw": async (t) => ({
+    url: `/api/v1/applications/${await applicationFixture(t)}/withdraw`,
+    owner: "applicant",
+  }),
   "POST /curricula/:id/clone": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
     payload: { effectiveFrom: "2027-09-01" },

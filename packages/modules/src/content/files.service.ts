@@ -5,7 +5,7 @@ import {
   type Permission,
   type UploadPurpose,
 } from "@glim/contracts";
-import { Db, schema } from "@glim/db";
+import { Db, schema, type Database } from "@glim/db";
 import { OBJECT_STORAGE, type ObjectStorage } from "@glim/integrations/storage/port";
 import { AuthorizationService } from "@glim/modules/authorization";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
@@ -168,10 +168,18 @@ export class FilesService {
     });
   }
 
-  /** Whether a file is the user's own, available, upload for a purpose (e.g. to attach it). */
-  async isUsable(id: string, ownerUserId: string, purpose: UploadPurpose): Promise<boolean> {
+  /**
+   * Whether a file is the user's own, available, upload for a purpose (e.g. to attach it). Inside a
+   * transaction, pass its `db` so the read uses the same connection.
+   */
+  async isUsable(
+    id: string,
+    ownerUserId: string,
+    purpose: UploadPurpose,
+    db: Database = this.db.read,
+  ): Promise<boolean> {
     const f = schema.files;
-    const [row] = await this.db.read
+    const [row] = await db
       .select({ id: f.id })
       .from(f)
       .where(

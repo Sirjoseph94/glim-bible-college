@@ -207,6 +207,11 @@ export const applicationSchema = z.object({
   }),
   minimumAgeYears: z.number().int(),
   submittedAt: z.iso.datetime().nullable(),
+  withdrawnAt: z.iso.datetime().nullable(),
+  /** Status history, oldest first (application_events; never any notes). */
+  timeline: z.array(
+    z.object({ status: z.enum(ENUMS["applications.status"]), at: z.iso.datetime() }),
+  ),
   updatedAt: z.iso.datetime(),
 });
 
@@ -275,4 +280,31 @@ export const saveApplicationDraft = endpoint({
   params: idParams,
   body: applicationDraftSchema,
   response: applicationSchema,
+});
+
+export const submitApplication = endpoint({
+  method: "POST",
+  path: "/applications/:id/submit",
+  summary: "Submit a complete application: allocates the reference number and emails a receipt",
+  tag: "Applications",
+  auth: "session",
+  permission: "admissions:application:own-edit",
+  resource: { type: "application", param: "id" },
+  idempotent: true,
+  params: idParams,
+  response: applicationSchema,
+  successStatus: 200,
+});
+
+export const withdrawApplication = endpoint({
+  method: "POST",
+  path: "/applications/:id/withdraw",
+  summary: "Withdraw the application (before an offer is accepted)",
+  tag: "Applications",
+  auth: "session",
+  permission: "admissions:application:own-edit",
+  resource: { type: "application", param: "id" },
+  params: idParams,
+  response: applicationSchema,
+  successStatus: 200,
 });
