@@ -481,8 +481,54 @@ function MeetingActions({ meeting }: { meeting: ScheduleItem }) {
   );
 }
 
+/** All of an offering's Class Meetings, with links to roll call and attendance. */
+function OfferingMeetings({ offeringId }: { offeringId: string }) {
+  const list = useQuery({
+    queryKey: ["offering-meetings", offeringId],
+    queryFn: ({ signal }) =>
+      api<typeof meetings.listClassMeetings>("GET", "/course-offerings/:id/class-meetings", {
+        params: { id: offeringId },
+        signal,
+      }),
+  });
+  if (list.isPending) return <p className="text-sm text-slate-600">Loading…</p>;
+  if (list.isError) return null;
+  if (list.data.items.length === 0)
+    return <p className="text-sm text-slate-600">No Class Meetings yet.</p>;
+  return (
+    <ul className="space-y-1 text-sm">
+      {list.data.items.map((m) => (
+        <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className={m.state === "CANCELLED" ? "text-slate-500 line-through" : ""}>
+            {m.title}, <Time value={m.scheduledStart} />
+          </span>
+          {m.state === "CANCELLED" ? null : (
+            <span className="flex gap-3">
+              <Link
+                to="/teach/meetings/$meetingId/roll-call"
+                params={{ meetingId: m.id }}
+                className="text-brand underline"
+              >
+                Roll call
+              </Link>
+              <Link
+                to="/teach/meetings/$meetingId/attendance"
+                params={{ meetingId: m.id }}
+                className="text-brand underline"
+              >
+                Attendance
+              </Link>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function OfferingItem({ offering }: { offering: Offering }) {
   const [scheduling, setScheduling] = useState(false);
+  const [showMeetings, setShowMeetings] = useState(false);
   return (
     <li className="space-y-2 rounded border border-slate-200 bg-white p-3">
       <div className="font-medium">
@@ -497,6 +543,16 @@ function OfferingItem({ offering }: { offering: Offering }) {
           .map((l) => `${l.lecturerName} (${ROLE_LABELS[l.role] ?? l.role})`)
           .join(", ")}
       </div>
+      <button
+        type="button"
+        className="block text-sm text-brand underline"
+        onClick={() => {
+          setShowMeetings((v) => !v);
+        }}
+      >
+        {showMeetings ? "Hide Class Meetings" : "Class Meetings"}
+      </button>
+      {showMeetings ? <OfferingMeetings offeringId={offering.id} /> : null}
       {offering.status === "COMPLETED" || offering.status === "CANCELLED" ? null : scheduling ? (
         <ScheduleMeetingForm
           offering={offering}

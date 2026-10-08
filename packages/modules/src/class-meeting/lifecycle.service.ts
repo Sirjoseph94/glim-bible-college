@@ -52,6 +52,29 @@ export class MeetingLifecycleService {
     @Inject(ClassMeetingsService) private readonly meetings: ClassMeetingsService,
   ) {}
 
+  /**
+   * Attendance records its progress on the meeting (owner: class-meeting): PROVISIONAL once
+   * records exist, then FINAL (or REVIEW_REQUIRED) with `finalized_at` (§12.6).
+   */
+  async recordAttendanceState(
+    db: Database,
+    id: string,
+    change: {
+      attendanceState: "PROVISIONAL" | "FINAL" | "REVIEW_REQUIRED";
+      finalizedAt?: Date;
+    },
+  ): Promise<void> {
+    const m = schema.classMeetings;
+    await db
+      .update(m)
+      .set({
+        attendanceState: change.attendanceState,
+        ...(change.finalizedAt === undefined ? {} : { finalizedAt: change.finalizedAt }),
+        updatedAt: this.clock.now(),
+      })
+      .where(eq(m.id, id));
+  }
+
   /** Attendance tells the lifecycle whether roll call was taken (no-show vs ended). */
   registerRollCallCheck(check: RollCallCheck): void {
     this.rollCall = check;

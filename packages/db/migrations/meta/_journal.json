@@ -183,6 +183,20 @@
       "when": 1791456579759,
       "tag": "0025_wp_roll_call",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791457253117,
+      "tag": "0026_wp_attendance_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791457253865,
+      "tag": "0027_wp_attendance_status_virtual",
+      "breakpoints": true
     }
   ]
 }

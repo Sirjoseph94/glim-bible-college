@@ -1,5 +1,6 @@
 import type { DomainEvent, DomainEventName } from "@glim/contracts";
 import { Db } from "@glim/db";
+import { AttendanceService } from "@glim/modules/attendance";
 import type { INestApplicationContext } from "@nestjs/common";
 
 /** An idempotent reaction to a domain event (TRD §17.3). Delivery is at-least-once. */
@@ -13,12 +14,20 @@ export type SubscriberRegistry = Partial<Record<DomainEventName, Subscriber[]>>;
  */
 export function createSubscribers(context: INestApplicationContext): SubscriberRegistry {
   const db = context.get(Db);
+  const attendance = context.get(AttendanceService);
   return {
     // Year 1 → Year 2 progression when an Academic Session is activated (§9.1, D-03).
     "academic.session.activated": [
       async (event) => {
         const { sessionId } = event.payload as { sessionId: string };
         await db.withTx(({ boss }) => boss.send("academic.progression", { sessionId }));
+      },
+    ],
+    // A class that ended is finalized after the finalize delay (§12.6).
+    "meeting.ended": [
+      async (event) => {
+        const { meetingId } = event.payload as { meetingId: string };
+        await db.withTx(({ boss }) => attendance.queueFinalize(boss, meetingId));
       },
     ],
     // Compulsory courses are registered when a semester opens registration (§9.3).

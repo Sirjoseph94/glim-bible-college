@@ -498,6 +498,10 @@ const SAMPLES: Record<string, Sample> = {
     headers: { "if-match": '"0"' },
     offering: "O1",
   }),
+  "GET /class-meetings/:id/attendance": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/attendance`,
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,

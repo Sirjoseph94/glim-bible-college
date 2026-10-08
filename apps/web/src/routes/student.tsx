@@ -1,9 +1,15 @@
-import type { enrollment, offerings, SemesterRegistration } from "@glim/contracts";
+import type {
+  attendance,
+  enrollment,
+  MyAttendance,
+  offerings,
+  SemesterRegistration,
+} from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
 import { useSubmit } from "../components/use-submit";
-import { CalendarDate } from "../components/time";
+import { CalendarDate, Time } from "../components/time";
 
 const SELECTION: Record<string, string> = {
   COMPULSORY: "Compulsory",
@@ -77,11 +83,52 @@ export function RegistrationPage() {
 }
 
 /** A student's courses: the offerings they're registered for (via v_offering_access). */
+const STATUS_LABEL: Record<string, string> = {
+  PRESENT: "Present",
+  PARTIAL: "Partly present",
+  ABSENT: "Absent",
+  EXCUSED: "Excused",
+};
+
+/** My attendance on one course (TRD §12): a summary, and each Class Meeting on request. */
+function MyCourseAttendance({ course }: { course: MyAttendance["courses"][number] }) {
+  const s = course.summary;
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-slate-700">
+        Attendance: {s.present} present, {s.partial} partly, {s.absent} absent
+        {s.excused > 0 ? `, ${String(s.excused)} excused` : ""}
+        {s.late > 0 ? ` · ${String(s.late)} late` : ""}
+      </summary>
+      <ul className="mt-2 space-y-1">
+        {course.meetings.map((m) => (
+          <li key={m.meetingId} className="flex flex-wrap justify-between gap-2">
+            <span>
+              {m.title}, <Time value={m.scheduledStart} />
+            </span>
+            <span>
+              {STATUS_LABEL[m.status] ?? m.status}
+              {m.mode === "IN_PERSON" ? " in the room" : m.mode === "ONLINE" ? " online" : ""}
+              {m.late ? ", late" : ""}
+              {m.final ? "" : " (provisional)"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 export function CoursesPage() {
   const list = useQuery({
     queryKey: ["offerings", "mine"],
     queryFn: ({ signal }) =>
       api<typeof offerings.listOfferings>("GET", "/course-offerings", { signal }),
+  });
+  const myAttendance = useQuery({
+    queryKey: ["me", "attendance"],
+    queryFn: ({ signal }) =>
+      api<typeof attendance.getMyAttendance>("GET", "/me/attendance", { signal }),
   });
   if (list.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
   if (list.isError) return <Alert tone="error">We couldn't load your courses.</Alert>;
@@ -105,6 +152,11 @@ export function CoursesPage() {
                 {o.lecturers.map((l) => l.lecturerName).join(", ")}
               </div>
             ) : null}
+            {myAttendance.data?.courses
+              .filter((c) => c.offeringId === o.id)
+              .map((c) => (
+                <MyCourseAttendance key={c.offeringId} course={c} />
+              ))}
           </li>
         ))}
       </ul>

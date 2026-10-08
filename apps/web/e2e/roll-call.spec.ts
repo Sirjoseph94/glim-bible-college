@@ -74,4 +74,19 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
     "true",
   );
   await expect(bola.getByLabel("Late")).toBeChecked();
+
+  // The worker recomputes attendance from the roll call.
+  await page.goto(page.url().replace(/roll-call$/, "attendance"));
+  await expect(page.getByRole("heading", { name: "Attendance" })).toBeVisible();
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole("listitem").filter({ hasText: "Bola Online" })).toContainText(
+      "Present online, late",
+      { timeout: 1000 },
+    );
+  }).toPass({ timeout: 20_000 });
+  await expect(page.getByRole("listitem").filter({ hasText: "Ada Campus" })).toContainText(
+    "Present in the room",
+  );
+  await expect(page.getByText(/Provisional/)).toBeVisible();
 });

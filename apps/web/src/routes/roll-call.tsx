@@ -1,4 +1,5 @@
 import type { attendance, RollCall, RollCallMark } from "@glim/contracts";
+import { Time } from "../components/time";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -252,6 +253,76 @@ export function RollCallPage() {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+const RECORD_LABEL: Record<string, string> = {
+  PRESENT: "Present",
+  PARTIAL: "Partly present",
+  ABSENT: "Absent",
+  EXCUSED: "Excused",
+};
+
+/** A Class Meeting's attendance records, for its Lecturers (TRD §12.5). */
+export function MeetingAttendancePage() {
+  const { meetingId } = useParams({ from: "/teach/meetings/$meetingId/attendance" });
+  const records = useQuery({
+    queryKey: ["attendance", meetingId],
+    queryFn: ({ signal }) =>
+      api<typeof attendance.getMeetingAttendance>("GET", "/class-meetings/:id/attendance", {
+        params: { id: meetingId },
+        signal,
+      }),
+  });
+  if (records.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
+  if (records.isError) return <Alert tone="error">{records.error.message}</Alert>;
+  const view = records.data;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Attendance</h2>
+      <div className="flex gap-4 text-sm">
+        <Link to="/teach" className="text-brand underline">
+          Back to my offerings
+        </Link>
+        <Link
+          to="/teach/meetings/$meetingId/roll-call"
+          params={{ meetingId }}
+          className="text-brand underline"
+        >
+          Roll call
+        </Link>
+      </div>
+      <p className="text-sm text-slate-700">
+        {view.attendanceState === "FINAL" ? (
+          <>
+            Final. Roll call can still change it until <Time value={view.lockedAt} />.
+          </>
+        ) : view.attendanceState === "PENDING" ? (
+          "Not taken yet."
+        ) : (
+          "Provisional: it becomes final shortly after the class ends."
+        )}
+      </p>
+      {view.records.length === 0 ? (
+        <p className="text-slate-600">No attendance yet. Take roll call to record it.</p>
+      ) : (
+        <ul className="divide-y divide-slate-200 rounded border border-slate-200 bg-white text-sm">
+          {view.records.map((r) => (
+            <li key={r.studentId} className="flex flex-wrap justify-between gap-2 p-3">
+              <span>
+                {r.name} <span className="text-slate-500">{r.matricNumber}</span>
+              </span>
+              <span>
+                {RECORD_LABEL[r.status] ?? r.status}
+                {r.mode === "IN_PERSON" ? " in the room" : r.mode === "ONLINE" ? " online" : ""}
+                {r.late ? ", late" : ""}
+                {r.overrideStatus === null ? "" : " (changed by staff)"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
