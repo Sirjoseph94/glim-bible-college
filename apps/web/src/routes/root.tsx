@@ -76,6 +76,9 @@ export function RootLayout() {
                 <Link to="/admin/lecturers" className="underline">
                   Lecturers
                 </Link>
+                <Link to="/admin/imports" className="underline">
+                  Imports
+                </Link>
               </>
             ) : null}
             {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (

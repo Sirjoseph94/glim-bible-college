@@ -12,6 +12,11 @@ const idParams = z.object({ id: z.uuid() });
 /** What each purpose accepts. Purposes join as their features land (materials, submissions, …). */
 export const UPLOAD_PURPOSES = {
   PASSPORT_PHOTO: { mimes: ["image/jpeg", "image/png"], maxBytes: 2 * 1024 * 1024 },
+  // Windows browsers often label CSV files as Excel or plain text.
+  IMPORT: {
+    mimes: ["text/csv", "application/vnd.ms-excel", "text/plain"],
+    maxBytes: 10 * 1024 * 1024,
+  },
 } as const;
 
 export type UploadPurpose = keyof typeof UPLOAD_PURPOSES;

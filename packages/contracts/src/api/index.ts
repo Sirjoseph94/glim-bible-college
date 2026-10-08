@@ -6,6 +6,7 @@ import * as auth from "./auth";
 import * as calendar from "./calendar";
 import * as enrollment from "./enrollment";
 import * as files from "./files";
+import * as imports from "./imports";
 import * as me from "./me";
 import * as offerings from "./offerings";
 import * as platform from "./platform";
@@ -22,6 +23,7 @@ export {
   calendar,
   enrollment,
   files,
+  imports,
   me,
   offerings,
   platform,
@@ -127,6 +129,10 @@ export const ENDPOINTS = [
   files.createUpload,
   files.completeUpload,
   files.downloadFile,
+  imports.startImport,
+  imports.listImports,
+  imports.getImport,
+  imports.getImportTemplate,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -142,6 +148,7 @@ export {
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
 export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";
+export { IMPORT_KINDS, type ImportJob, type ImportKind } from "./imports";
 export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollment";
 export type { Me } from "./me";
 export type { AdmissionsReport, ReferralReport } from "./reports";

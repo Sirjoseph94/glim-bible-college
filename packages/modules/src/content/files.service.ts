@@ -18,6 +18,7 @@ type FileRow = typeof schema.files.$inferSelect;
 /** Who besides the owner may fetch a file of each purpose, and where it is kept in the bucket. */
 const PURPOSE_RULES: Record<UploadPurpose, { readPermission: Permission; prefix: string }> = {
   PASSPORT_PHOTO: { readPermission: "admissions:application:read", prefix: "passport-photos" },
+  IMPORT: { readPermission: "identity:import:run", prefix: "imports" },
 };
 
 const UPLOAD_URL_SECONDS = 15 * 60;
@@ -206,5 +207,53 @@ export class FilesService {
   /** Removes a stored object; best effort, since its record is already gone. */
   async removeObject(storageKey: string): Promise<void> {
     await this.storage.remove({ bucket: this.config.storage.bucket, key: storageKey });
+  }
+
+  /** A file's bytes and record, for server-side processing (e.g. an import); null if unavailable. */
+  async read(id: string): Promise<{ file: FileView; bytes: Uint8Array } | null> {
+    const f = schema.files;
+    const [row] = await this.db.read.select().from(f).where(eq(f.id, id));
+    if (row?.status !== "AVAILABLE") return null;
+    const bytes = await this.storage.download({
+      bucket: this.config.storage.bucket,
+      key: row.storageKey,
+    });
+    return bytes === null ? null : { file: fileView(row), bytes };
+  }
+
+  /** Stores a file the server made (e.g. an import's error report), owned by `ownerUserId`. */
+  async store(input: {
+    ownerUserId: string;
+    purpose: UploadPurpose;
+    name: string;
+    mime: string;
+    bytes: Uint8Array;
+  }): Promise<FileView> {
+    const storageKey = `${PURPOSE_RULES[input.purpose].prefix}/${randomUUID()}`;
+    await this.storage.upload({
+      bucket: this.config.storage.bucket,
+      key: storageKey,
+      body: input.bytes,
+      contentType: input.mime,
+    });
+    const now = this.clock.now();
+    const [row] = await this.db.withTx(({ db }) =>
+      db
+        .insert(schema.files)
+        .values({
+          ownerUserId: input.ownerUserId,
+          purpose: input.purpose,
+          storageKey,
+          originalName: input.name,
+          mime: input.mime,
+          sizeBytes: input.bytes.byteLength,
+          status: "AVAILABLE",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning(),
+    );
+    if (row === undefined) throw new Error("file insert returned nothing");
+    return fileView(row);
   }
 }

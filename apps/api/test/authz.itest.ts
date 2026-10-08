@@ -380,6 +380,19 @@ const SAMPLES: Record<string, Sample> = {
     payload: { reason: "Left the college" },
     offering: "O1",
   }),
+  "GET /imports/templates/:kind": () =>
+    Promise.resolve({ url: "/api/v1/imports/templates/STUDENTS" }),
+  "GET /imports": () => Promise.resolve({ url: "/api/v1/imports" }),
+  "GET /imports/:id": async (t) => ({ url: `/api/v1/imports/${await importFixture(t)}` }),
+  // Not an uploaded import file, so allowed callers get a 400 and nothing is queued.
+  "POST /imports": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/imports",
+      payload: { kind: "STUDENTS", fileId: "00000000-0000-7000-8000-000000000000" },
+      headers: { "idempotency-key": `authz-import-${String(n).padStart(8, "0")}` },
+    });
+  },
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -474,6 +487,24 @@ async function matricOf(t: TestApp, name: PersonaName): Promise<string> {
     [personas[name].userId],
   );
   return rows[0]?.matric_number ?? "";
+}
+
+let importShared: string | undefined;
+/** A finished import job, written directly. */
+async function importFixture(t: TestApp): Promise<string> {
+  if (importShared !== undefined) return importShared;
+  const { rows: files } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO files (owner_user_id, purpose, storage_key, original_name, mime, size_bytes, status)
+     VALUES ($1, 'IMPORT', 'imports/authz', 'students.csv', 'text/csv', 10, 'AVAILABLE') RETURNING id`,
+    [personas.acadAdmin.userId],
+  );
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO import_jobs (kind, file_id, file_sha256, status, created_by)
+     VALUES ('STUDENTS', $1, 'x', 'COMPLETED', $2) RETURNING id`,
+    [files[0]?.id, personas.acadAdmin.userId],
+  );
+  importShared = rows[0]?.id ?? "";
+  return importShared;
 }
 
 let applicationShared: string | undefined;

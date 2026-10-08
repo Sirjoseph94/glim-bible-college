@@ -67,6 +67,8 @@ export async function api<E extends EndpointSpec>(
     const envelope = (await res.json().catch(() => null)) as ErrorEnvelope | null;
     throw new ApiError(res.status, envelope);
   }
-  if (res.status === 204 || res.status === 202) return undefined as ResponseOf<E>;
-  return (await res.json()) as ResponseOf<E>;
+  if (res.status === 204) return undefined as ResponseOf<E>;
+  // A 202 may carry the queued resource (e.g. an import) or nothing at all.
+  const text = await res.text();
+  return (text === "" ? undefined : JSON.parse(text)) as ResponseOf<E>;
 }

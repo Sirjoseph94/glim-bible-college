@@ -2,7 +2,7 @@ import { ENUMS, type EnumKey } from "@glim/contracts";
 import { eq } from "drizzle-orm";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
-import { createBoss, createPool, Db, schema } from "../src/index";
+import { createBoss, createPool, Db, schema, withSavepoint } from "../src/index";
 import { createTestDatabase, drainQueues, type TestDatabase } from "../src/testing/index";
 
 let database: TestDatabase;
@@ -173,5 +173,23 @@ describe("Db.withTxResult", () => {
       return { ok: true as const, value: "saved" };
     });
     expect(result).toEqual({ ok: true, value: "saved" });
+  });
+});
+
+describe("withSavepoint", () => {
+  it("undoes only the failed step's writes; the transaction carries on and commits", async () => {
+    const r = schema.rooms;
+    await db.withTx(async ({ db: tx }) => {
+      await withSavepoint(tx, () => tx.insert(r).values({ code: "SP-1", name: "Kept" }));
+      await expect(
+        withSavepoint(tx, async () => {
+          await tx.insert(r).values({ code: "SP-2", name: "Undone" });
+          throw new Error("this step fails");
+        }),
+      ).rejects.toThrow("this step fails");
+      await tx.insert(r).values({ code: "SP-3", name: "Also kept" });
+    });
+    const codes = (await db.read.select({ code: r.code }).from(r)).map((x) => x.code).sort();
+    expect(codes).toEqual(["SP-1", "SP-3"]);
   });
 });

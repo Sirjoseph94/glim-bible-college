@@ -6,6 +6,7 @@ export * from "./cohorts";
 export * from "./content";
 export * from "./enrollment";
 export * from "./identity";
+export * from "./imports";
 export * from "./lecturing";
 export * from "./notifications";
 export * from "./platform";

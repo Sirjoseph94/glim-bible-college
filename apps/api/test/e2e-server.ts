@@ -74,6 +74,7 @@ const E2E_STAFF: [email: string, displayName: string, role: StaffRole][] = [
   ["e2e-settings@glim.test", "Sade Settings", "SYSTEM_ADMIN"],
   ["e2e-academic@glim.test", "Ade Academic", "ACADEMIC_ADMIN"],
   ["e2e-admissions@glim.test", "Amaka Admissions", "ADMISSIONS_OFFICER"],
+  ["e2e-imports@glim.test", "Ike Imports", "ACADEMIC_ADMIN"],
 ];
 for (const [email, displayName, role] of E2E_STAFF) {
   await app

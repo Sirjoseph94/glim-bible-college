@@ -1,5 +1,6 @@
 import type { DomainEvent, DomainEventName, QueueName } from "@glim/contracts";
 import { newId, type Result } from "@glim/shared";
+import { sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PgBoss, SendOptions } from "pg-boss";
 import pg from "pg";
@@ -115,6 +116,27 @@ export class Db {
     } catch {
       return false;
     }
+  }
+}
+
+let savepoints = 0;
+
+/**
+ * Runs `fn` inside a SAVEPOINT of the caller's transaction: if it throws, only its own writes are
+ * undone and the transaction carries on. Use this, never `db.transaction()`, inside `withTx`:
+ * the transaction is opened with a plain BEGIN, so Drizzle's nested `transaction()` would issue
+ * its own BEGIN/COMMIT and commit the outer work early.
+ */
+export async function withSavepoint<T>(db: Database, fn: () => Promise<T>): Promise<T> {
+  const name = sql.raw(`sp_${String(++savepoints)}`);
+  await db.execute(sql`SAVEPOINT ${name}`);
+  try {
+    const result = await fn();
+    await db.execute(sql`RELEASE SAVEPOINT ${name}`);
+    return result;
+  } catch (error) {
+    await db.execute(sql`ROLLBACK TO SAVEPOINT ${name}`);
+    throw error;
   }
 }
 

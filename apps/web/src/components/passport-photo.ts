@@ -1,5 +1,4 @@
-import type { files } from "@glim/contracts";
-import { api } from "../api/client";
+import { uploadFile } from "./upload";
 
 /** Passport photos are 35 × 45 mm. */
 const RATIO = 35 / 45;
@@ -54,47 +53,14 @@ export async function preparePassportPhoto(file: File): Promise<Blob> {
   }
 }
 
-/** PUTs bytes to a presigned URL, reporting progress (fetch can't report upload progress). */
-function put(
-  url: string,
-  headers: Record<string, string>,
-  body: Blob,
-  onProgress: (fraction: number) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(event.loaded / event.total);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error("The upload didn't finish. Please try again."));
-    };
-    xhr.onerror = () => {
-      reject(new Error("The upload was interrupted. Check your connection and try again."));
-    };
-    xhr.send(body);
-  });
-}
-
 /** Uploads a prepared passport photo straight to the bucket; returns the new file's id. */
-export async function uploadPassportPhoto(
+export function uploadPassportPhoto(
   photo: Blob,
   onProgress: (fraction: number) => void,
 ): Promise<string> {
-  const { file, upload } = await api<typeof files.createUpload>("POST", "/files/uploads", {
-    body: {
-      name: "passport-photo.jpg",
-      mime: "image/jpeg",
-      sizeBytes: photo.size,
-      purpose: "PASSPORT_PHOTO",
-    },
-  });
-  await put(upload.url, upload.headers, photo, onProgress);
-  await api<typeof files.completeUpload>("POST", "/files/:id/complete", {
-    params: { id: file.id },
-  });
-  return file.id;
+  return uploadFile(
+    photo,
+    { name: "passport-photo.jpg", mime: "image/jpeg", purpose: "PASSPORT_PHOTO" },
+    onProgress,
+  );
 }

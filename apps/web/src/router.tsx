@@ -125,6 +125,13 @@ const adminCurriculumRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-curriculum"), "AdminCurriculumPage"),
 });
 
+const adminImportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/imports",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-imports"), "AdminImportsPage"),
+});
+
 const adminCalendarRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin/calendar",
@@ -271,6 +278,7 @@ const routeTree = rootRoute.addChildren([
   applyRoute,
   applicationRoute,
   applicationEditRoute,
+  adminImportsRoute,
   admissionsQueueRoute,
   admissionsReportsRoute,
   admissionsApplicationRoute,

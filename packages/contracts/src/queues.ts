@@ -87,6 +87,8 @@ export const QUEUES = {
   "video.purge-deleted": { role: "general", retryLimit: 3, expireInSeconds: 30 * MIN, slice: "v1" },
   "quiz.expire": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN, slice: "v1" },
   "import.run": { role: "general", retryLimit: 2, expireInSeconds: HOUR, slice: "v1" },
+  /** One invite email; imports spread these out with `startAfter` (rate cap). */
+  "identity.invite": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN, slice: "v1" },
   "semester.open-registration": {
     role: "general",
     retryLimit: 3,
