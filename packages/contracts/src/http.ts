@@ -58,7 +58,10 @@ export type ResourceType =
   | "class-meeting"
   | "video"
   | "course-material"
-  | "announcement";
+  | "announcement"
+  | "assessment"
+  | "assignment"
+  | "assignment-submission";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

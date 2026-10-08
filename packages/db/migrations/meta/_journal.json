@@ -225,6 +225,13 @@
       "when": 1791473863057,
       "tag": "0031_wp_materials_announcements",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791486938285,
+      "tag": "0032_wp_assignments",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,10 @@ import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { VideosService } from "@glim/modules/video";
+import {
+  AssignmentsService as CourseworkAssignments,
+  SubmissionsService,
+} from "@glim/modules/assessment";
 import { FilesService, MaterialsService } from "@glim/modules/content";
 import { FAKE_CHANNEL_URL } from "@glim/integrations/video-host/fake";
 import { assignmentHasCapability, AuthorizationService, MATRIX } from "@glim/modules/authorization";
@@ -597,6 +601,88 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/videos/${await playableVideoFixture(t)}/recheck`,
     offering: "O1",
   }),
+  "GET /course-offerings/:id/assignments": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/assignments`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/assignments": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/assignments`,
+      payload: {
+        title: "Essay",
+        instructionsMd: "Write.",
+        dueAt: "2080-12-01T12:00:00Z",
+        maxScore: "10",
+        weight: "5",
+      },
+      headers: { "idempotency-key": `authz-assignment-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  "GET /assignments/:id": async (t) => ({
+    url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}`,
+    offering: "O1",
+  }),
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "PATCH /assignments/:id": async (t) => ({
+    url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
+  // Already published: allowed callers change nothing.
+  "POST /assignments/:id/publish": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}/publish`,
+      headers: { "idempotency-key": `authz-publish-a-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  "GET /assignments/:id/my-submissions": async (t) => ({
+    url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}/my-submissions`,
+    offering: "O1",
+    ownPart: true,
+  }),
+  "PUT /assignments/:id/my-submissions/draft": async (t) => ({
+    url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}/my-submissions/draft`,
+    payload: { textBody: "My answer" },
+    offering: "O1",
+    ownPart: true,
+  }),
+  "POST /assignments/:id/my-submissions/submit": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}/my-submissions/submit`,
+      headers: { "idempotency-key": `authz-submit-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+      ownPart: true,
+    };
+  },
+  "GET /assignments/:id/submissions": async (t) => ({
+    url: `/api/v1/assignments/${(await assignmentFixture(t)).assignmentId}/submissions`,
+    offering: "O1",
+  }),
+  "GET /assignment-submissions/:id/files/:fileId/download": async (t) => {
+    const f = await assignmentFixture(t);
+    return {
+      url: `/api/v1/assignment-submissions/${f.submissionId}/files/${f.fileId}/download`,
+      offering: "O1",
+      owner: "sEnrolled",
+    };
+  },
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "PUT /assessments/:id/grades/:studentId": async (t) => {
+    const f = await assignmentFixture(t);
+    return {
+      url: `/api/v1/assessments/${f.assessmentId}/grades/${f.studentId}`,
+      payload: { score: "5" },
+      headers: { "if-match": '"999"' },
+      offering: "O1",
+    };
+  },
   "GET /course-offerings/:id/materials": () =>
     Promise.resolve({
       url: `/api/v1/course-offerings/${personas.world.offerings.O1}/materials`,
@@ -790,6 +876,58 @@ async function materialFixture(t: TestApp, key = "shared"): Promise<string> {
   );
   materialShared.set(key, created.id);
   return created.id;
+}
+
+let assignmentShared:
+  | {
+      assignmentId: string;
+      assessmentId: string;
+      submissionId: string;
+      fileId: string;
+      studentId: string;
+    }
+  | undefined;
+/** A published assignment on O1 with sEnrolled's submitted attempt (with a file). */
+async function assignmentFixture(t: TestApp) {
+  if (assignmentShared !== undefined) return assignmentShared;
+  const created = unwrap(
+    await t.app.get(CourseworkAssignments).create(personas.world.offerings.O1, {
+      title: "Fixture assignment",
+      instructionsMd: "Write.",
+      dueAt: "2080-12-01T12:00:00Z",
+      maxScore: "10",
+      weight: "5",
+      maxAttempts: 10,
+    }),
+  );
+  unwrap(await t.app.get(CourseworkAssignments).publish(created.id));
+  const file = await t.app.get(FilesService).store({
+    ownerUserId: personas.sEnrolled.userId,
+    purpose: "SUBMISSION",
+    name: "essay.pdf",
+    mime: "application/pdf",
+    bytes: Buffer.from("%PDF-1.4 essay"),
+  });
+  const submissions = t.app.get(SubmissionsService);
+  unwrap(
+    await submissions.saveDraft(created.id, personas.sEnrolled.userId, {
+      textBody: "Answer",
+      fileIds: [file.id],
+    }),
+  );
+  const submitted = unwrap(await submissions.submit(created.id, personas.sEnrolled.userId));
+  const student = await t.db.pool.query<{ id: string }>(
+    "SELECT id FROM students WHERE user_id = $1",
+    [personas.sEnrolled.userId],
+  );
+  assignmentShared = {
+    assignmentId: created.id,
+    assessmentId: created.assessmentId,
+    submissionId: submitted.id,
+    fileId: file.id,
+    studentId: student.rows[0]?.id ?? "",
+  };
+  return assignmentShared;
 }
 
 let fileMaterialShared: string | undefined;

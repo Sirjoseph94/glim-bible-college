@@ -15,6 +15,7 @@ import * as platform from "./platform";
 import * as reports from "./reports";
 import * as settings from "./settings";
 import * as users from "./users";
+import * as assessment from "./assessment";
 import * as content from "./content";
 import * as video from "./video";
 
@@ -36,6 +37,7 @@ export {
   reports,
   settings,
   users,
+  assessment,
   content,
   video,
 };
@@ -68,6 +70,17 @@ export const ENDPOINTS = [
   attendance.overrideAttendance,
   attendance.clearAttendanceOverride,
   attendance.getAttendanceReport,
+  assessment.listAssignments,
+  assessment.createAssignment,
+  assessment.getAssignment,
+  assessment.updateAssignment,
+  assessment.publishAssignment,
+  assessment.getMySubmissions,
+  assessment.saveDraft,
+  assessment.submitDraft,
+  assessment.listSubmissions,
+  assessment.downloadSubmissionFile,
+  assessment.putGrade,
   content.listMaterials,
   content.createMaterial,
   content.updateMaterial,
@@ -224,5 +237,12 @@ export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";
 export type { UserDetail, UserListItem } from "./users";
+export type {
+  Assignment,
+  Grade,
+  MySubmissions,
+  Submission,
+  SubmissionForGrading,
+} from "./assessment";
 export type { Announcement, Material } from "./content";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";

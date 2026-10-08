@@ -24,6 +24,8 @@ const PURPOSE_RULES: Record<UploadPurpose, { readPermission?: Permission; prefix
   IMPORT: { readPermission: "identity:import:run", prefix: "imports" },
   // Students download materials through the material, which checks their course (§14.1).
   MATERIAL: { prefix: "materials" },
+  // Graders download submissions through the submission, which checks their course (§14.2).
+  SUBMISSION: { prefix: "submissions" },
 };
 
 /** Part URLs stay valid long enough for a slow connection to send a 100 MB file. */
@@ -75,6 +77,11 @@ export class FilesService {
   > {
     if (input.purpose === "MATERIAL" && !(await this.mayUploadMaterials(ownerUserId)))
       return err(domainError("FORBIDDEN", "Only course staff can upload course materials."));
+    if (
+      input.purpose === "SUBMISSION" &&
+      !(await this.authorization.principal(ownerUserId).isStudent())
+    )
+      return err(domainError("FORBIDDEN", "Only students upload coursework."));
     const limits = UPLOAD_PURPOSES[input.purpose];
     if (!(limits.mimes as readonly string[]).includes(input.mime))
       return err(

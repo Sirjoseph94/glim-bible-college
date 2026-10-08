@@ -228,6 +228,26 @@ const recordingRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/recording"), "RecordingPage"),
 });
 
+const assignmentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assignments/$assignmentId",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/assignment"), "AssignmentPage"),
+});
+
+const gradeAssignmentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/teach/assignments/$assignmentId/grade",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/assignment"), "GradeAssignmentPage"),
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
@@ -297,6 +317,8 @@ const routeTree = rootRoute.addChildren([
   rollCallRoute,
   meetingAttendanceRoute,
   recordingRoute,
+  assignmentRoute,
+  gradeAssignmentRoute,
   adminVideosRoute,
   loginRoute,
   forgotRoute,

@@ -37,6 +37,20 @@ export const UPLOAD_PURPOSES = {
     ],
     maxBytes: 100 * 1024 * 1024,
   },
+  // Coursework: documents and photos of handwritten work, up to the assignment's limit (≤ 20 MB).
+  SUBMISSION: {
+    mimes: [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.oasis.opendocument.text",
+      "text/plain",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ],
+    maxBytes: 20 * 1024 * 1024,
+  },
 } as const;
 
 /** Files above this go up in parts, so a dropped connection costs one part, not the file (§14.1). */
