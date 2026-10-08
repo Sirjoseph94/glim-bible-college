@@ -1,5 +1,5 @@
 import { admissions, type BodyOf, type ParamsOf, type QueryOf } from "@glim/contracts";
-import { ReviewService } from "@glim/modules/admissions";
+import { OffersService, ReviewService } from "@glim/modules/admissions";
 import type { AuditActor } from "@glim/modules/audit";
 import type { ActiveSession } from "@glim/modules/identity";
 import { AppError, unwrap } from "@glim/shared";
@@ -13,7 +13,10 @@ type IdParams = ParamsOf<typeof admissions.getReviewedApplication>;
 /** The Admissions Officers' queue, review and decision (TRD §10.3). */
 @Controller()
 export class ReviewController {
-  constructor(@Inject(ReviewService) private readonly review: ReviewService) {}
+  constructor(
+    @Inject(ReviewService) private readonly review: ReviewService,
+    @Inject(OffersService) private readonly offers: OffersService,
+  ) {}
 
   @Endpoint(admissions.listApplications)
   queue(
@@ -61,5 +64,17 @@ export class ReviewController {
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof admissions.decideApplication>> {
     return unwrap(await this.review.decide(params.id, body, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(admissions.reopenOffer)
+  async reopen(
+    @Params(admissions.reopenOffer) params: IdParams,
+    @Body(admissions.reopenOffer) body: BodyOf<typeof admissions.reopenOffer>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof admissions.reopenOffer>> {
+    return unwrap(
+      await this.offers.reopen(params.id, body.reason, { ...actor, userId: session.userId }),
+    );
   }
 }

@@ -1,5 +1,5 @@
 import type { DomainEvent, QueueName } from "@glim/contracts";
-import { IntakesService } from "@glim/modules/admissions";
+import { IntakesService, OffersService } from "@glim/modules/admissions";
 import { SessionService } from "@glim/modules/identity";
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService } from "@glim/modules/ops";
@@ -22,11 +22,13 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const backup = deps.context.get(BackupService);
   const intakes = deps.context.get(IntakesService);
   const notifications = deps.context.get(NotificationsService);
+  const offers = deps.context.get(OffersService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
     "auth.session-cleanup": () => sessions.deleteEnded(),
     "db.logical-backup": () => backup.run(),
     "admissions.intake-status": () => intakes.syncStatuses({ userId: null, type: "JOB" }),
+    "admissions.offer-sweep": () => offers.sweep(),
     "notify.send": (job) =>
       notifications.deliver((job.data as { notificationId: string }).notificationId),
   };

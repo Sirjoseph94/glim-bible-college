@@ -307,7 +307,7 @@ function Decision({
   // One key per decision attempt, so a retried request can't decide twice.
   const key = useRef(crypto.randomUUID());
 
-  if (application.decision.decidedAt !== null)
+  if (application.decision.decidedAt !== null && application.status !== "LAPSED")
     return (
       <Section title="Decision">
         <Rows
@@ -325,6 +325,8 @@ function Decision({
         />
       </Section>
     );
+  if (application.status === "LAPSED")
+    return <Reopen application={application} onChange={onChange} />;
   if (application.status !== "UNDER_REVIEW") return null;
 
   return (
@@ -406,6 +408,64 @@ function Decision({
           </div>
         </div>
       )}
+    </Section>
+  );
+}
+
+/** Reopening a lapsed offer (spec story 34): a new deadline, with the reason kept as a note. */
+function Reopen({
+  application,
+  onChange,
+}: {
+  application: ReviewedApplication;
+  onChange: (next: ReviewedApplication) => void;
+}) {
+  const { busy, error, run } = useSubmit();
+  const [reason, setReason] = useState("");
+  return (
+    <Section title="Offer lapsed">
+      <p className="text-sm text-slate-600">
+        The offer wasn't accepted by <Time value={application.decision.offerExpiresAt} />. Reopening
+        gives the applicant a new deadline and emails them the offer again.
+      </p>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <form
+        className="space-y-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void run(async () => {
+            onChange(
+              await api<typeof admissions.reopenOffer>(
+                "POST",
+                "/admissions/applications/:id/reopen-offer",
+                { params: { id: application.id }, body: { reason } },
+              ),
+            );
+          });
+        }}
+      >
+        <label htmlFor="reopen-reason" className="block text-sm font-medium text-slate-700">
+          Reason for reopening
+        </label>
+        <textarea
+          id="reopen-reason"
+          rows={2}
+          required
+          minLength={3}
+          value={reason}
+          onChange={(e) => {
+            setReason(e.target.value);
+          }}
+          className="block w-full rounded border border-slate-300 px-3 py-2"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded bg-brand px-4 py-2 font-medium text-white"
+        >
+          Reopen offer
+        </button>
+      </form>
     </Section>
   );
 }

@@ -76,6 +76,38 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
     });
   },
 
+  "admissions.offer.reminder": ({ data, appOrigin }) => {
+    const zone = str(data.timeZone) || "Africa/Lagos";
+    const deadline = formatDualTime(str(data.offerExpiresAt), {
+      viewerZone: zone,
+      institutionZone: zone,
+      withDate: true,
+    });
+    const days = typeof data.daysLeft === "number" ? data.daysLeft : 0;
+    return email({
+      subject: `Reminder: your offer from GLIM Online Bible College expires in ${String(days)} day${days === 1 ? "" : "s"}`,
+      category: "offer-reminder",
+      paragraphs: [
+        `Dear ${str(data.name)},`,
+        `This is a reminder that your offer of a place on the ${str(data.programmeName)} expires on ${deadline}.`,
+        "If you'd like to study with us, please accept it before then. If you have a question, reply to this email.",
+      ],
+      link: { label: "Accept your offer", url: `${appOrigin}/application` },
+    });
+  },
+
+  "admissions.application.lapsed": ({ data, appOrigin }) =>
+    email({
+      subject: "Your offer from GLIM Online Bible College has lapsed",
+      category: "offer-lapsed",
+      paragraphs: [
+        `Dear ${str(data.name)},`,
+        `Your offer of a place on the ${str(data.programmeName)} (Application Reference No ${str(data.referenceNo)}) wasn't accepted in time, so it has lapsed.`,
+        "If you'd still like to study with us, please contact Admissions. They can reopen your offer.",
+      ],
+      link: { label: "View your application", url: `${appOrigin}/application` },
+    }),
+
   "admissions.application.accepted": ({ data, appOrigin }) =>
     email({
       subject: `Welcome to GLIM Online Bible College: your Matric Number is ${str(data.matricNumber)}`,

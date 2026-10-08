@@ -43,19 +43,7 @@ async function admitted(
   if (programmeId !== world.certificate.id)
     application = (await kit.save(ready.headers, application, { programmeId })).json<Application>();
   expect((await kit.submit(ready.headers, application.id)).statusCode).toBe(200);
-  const officer = p.admOfficer.headers;
-  await t.request({
-    method: "POST",
-    url: `/api/v1/admissions/applications/${application.id}/review`,
-    headers: officer,
-  });
-  const decided = await t.request({
-    method: "POST",
-    url: `/api/v1/admissions/applications/${application.id}/decide`,
-    headers: { ...officer, "idempotency-key": idempotencyKey() },
-    payload: { decision: "ADMIT" },
-  });
-  expect(decided.statusCode).toBe(200);
+  await kit.admit(application.id, p.admOfficer.headers);
   return { headers: ready.headers, application };
 }
 

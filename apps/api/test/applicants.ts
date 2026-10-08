@@ -117,5 +117,21 @@ export function applicantKit(t: TestApp, issuer: FakeOidcIssuer, defaultProgramm
     });
   }
 
-  return { signUp, start, save, complete, submit, sendQueuedEmails };
+  /** An officer opens the application for review and admits it. */
+  async function admit(applicationId: string, officerHeaders: Record<string, string>) {
+    await t.request({
+      method: "POST",
+      url: `/api/v1/admissions/applications/${applicationId}/review`,
+      headers: officerHeaders,
+    });
+    const decided = await t.request({
+      method: "POST",
+      url: `/api/v1/admissions/applications/${applicationId}/decide`,
+      headers: { ...officerHeaders, "idempotency-key": idempotencyKey() },
+      payload: { decision: "ADMIT" },
+    });
+    expect(decided.statusCode, decided.body).toBe(200);
+  }
+
+  return { signUp, start, save, complete, submit, admit, sendQueuedEmails };
 }

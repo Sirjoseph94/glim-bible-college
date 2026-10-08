@@ -102,6 +102,7 @@ export const ENDPOINTS = [
   admissions.startReview,
   admissions.addApplicationNote,
   admissions.decideApplication,
+  admissions.reopenOffer,
   applications.startApplication,
   applications.myApplications,
   applications.getApplication,

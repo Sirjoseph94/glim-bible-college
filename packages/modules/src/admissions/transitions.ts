@@ -10,6 +10,7 @@ const VERBS: Partial<Record<ApplicationStatus, string>> = {
   REJECTED: "rejected",
   WITHDRAWN: "withdrawn",
   ACCEPTED: "accepted",
+  LAPSED: "lapsed",
 };
 
 /**
@@ -27,9 +28,11 @@ export async function recordTransition(
     actor: AuditActor & { userId: string | null };
     now: Date;
     metadata?: Record<string, string>;
+    /** Overrides the audit verb, e.g. "offer-reopened" for LAPSED → ADMITTED. */
+    verb?: string;
   },
 ): Promise<void> {
-  const verb = VERBS[input.to];
+  const verb = input.verb ?? VERBS[input.to];
   if (verb === undefined) throw new Error(`No transition is recorded for ${input.to}`);
   const metadata = input.metadata ?? {};
   await tx.db.insert(schema.applicationEvents).values({

@@ -357,6 +357,11 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}/notes`,
     payload: { note: "Spoke to the pastor" },
   }),
+  // The fixture never lapsed, so allowed callers get a 409 and nothing changes.
+  "POST /admissions/applications/:id/reopen-offer": async (t) => ({
+    url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}/reopen-offer`,
+    payload: { reason: "Late but genuine" },
+  }),
   "POST /admissions/applications/:id/decide": async (t) => {
     n++;
     return {

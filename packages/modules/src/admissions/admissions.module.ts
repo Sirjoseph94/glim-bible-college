@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import { AcceptanceService } from "./acceptance.service";
 import { ApplicationsService } from "./applications.service";
 import { IntakesService } from "./intakes.service";
+import { OffersService } from "./offers.service";
 import { ReviewService } from "./review.service";
 
 /**
@@ -43,7 +44,13 @@ class AdmissionsResources implements OnModuleInit {
   }
 }
 
-const services = [IntakesService, ApplicationsService, ReviewService, AcceptanceService];
+const services = [
+  IntakesService,
+  ApplicationsService,
+  ReviewService,
+  AcceptanceService,
+  OffersService,
+];
 
 @Module({
   imports: [

@@ -210,3 +210,14 @@ export const decideApplication = endpoint({
     .strict(),
   successStatus: 200,
 });
+
+export const reopenOffer = endpoint({
+  ...reviewResource,
+  method: "POST",
+  path: "/admissions/applications/:id/reopen-offer",
+  summary: "Reopen a lapsed offer with a new deadline; a reason is required",
+  tag: "Admissions",
+  permission: "admissions:application:decide",
+  body: z.object({ reason: z.string().trim().min(3).max(500) }).strict(),
+  successStatus: 200,
+});
