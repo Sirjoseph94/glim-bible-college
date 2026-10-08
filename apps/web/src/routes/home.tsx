@@ -1,5 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { meQuery } from "../api/session";
+import { UpcomingMeetings } from "../components/meetings";
 
 export function HomePage() {
   const { data: me } = useSuspenseQuery(meQuery);
@@ -12,6 +13,7 @@ export function HomePage() {
           Signed in as {me.roles.staff.map((r) => r.replaceAll("_", " ").toLowerCase()).join(", ")}.
         </p>
       ) : null}
+      <UpcomingMeetings title="Your Class Meetings in the next two weeks" />
     </section>
   );
 }

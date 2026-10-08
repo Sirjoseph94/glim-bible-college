@@ -27,7 +27,7 @@ const MESSAGES: Partial<Record<ErrorCode, string>> = {
 export type SpaFallback = (req: FastifyRequest, reply: FastifyReply) => boolean;
 
 /**
- * Renders every error as the envelope `{ error: { code, message, fieldErrors?, requestId } }`
+ * Renders every error as the envelope `{ error: { code, message, fieldErrors?, conflicts?, requestId } }`
  * (§5.4). Never includes stack traces, SQL or provider payloads. A browser navigation that misses
  * the API falls back to the SPA's index.html.
  */
@@ -36,11 +36,13 @@ export function createErrorRenderer(logger: Logger, spaFallback: SpaFallback | n
     let code: ErrorCode;
     let message: string | undefined;
     let fieldErrors: ErrorEnvelope["error"]["fieldErrors"];
+    let conflicts: ErrorEnvelope["error"]["conflicts"];
 
     if (isAppError(exception)) {
       code = exception.code;
       message = exception.message;
       fieldErrors = exception.fieldErrors;
+      conflicts = exception.conflicts;
       for (const [name, value] of Object.entries(exception.headers ?? {}))
         void reply.header(name, value);
     } else {
@@ -61,6 +63,7 @@ export function createErrorRenderer(logger: Logger, spaFallback: SpaFallback | n
         code,
         message: message ?? MESSAGES[code] ?? "The request could not be completed.",
         ...(fieldErrors === undefined ? {} : { fieldErrors }),
+        ...(conflicts === undefined ? {} : { conflicts }),
         requestId: req.id,
       },
     };

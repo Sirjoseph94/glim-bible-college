@@ -8,6 +8,7 @@ import {
 } from "@glim/modules/academic";
 import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
+import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { assignmentHasCapability, AuthorizationService, MATRIX } from "@glim/modules/authorization";
 import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
 import { unwrap } from "@glim/shared";
@@ -393,6 +394,37 @@ const SAMPLES: Record<string, Sample> = {
       headers: { "idempotency-key": `authz-import-${String(n).padStart(8, "0")}` },
     });
   },
+  // Each allowed create books a fresh two-hour slot, so allowed callers never clash.
+  "POST /course-offerings/:id/class-meetings": () => {
+    n++;
+    const start = new Date(Date.UTC(2080, 10, 1) + n * 2 * 3_600_000);
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/class-meetings`,
+      payload: {
+        title: "Authz class",
+        scheduledStart: start.toISOString(),
+        scheduledEnd: new Date(start.getTime() + 3_600_000).toISOString(),
+      },
+      headers: { "idempotency-key": `authz-meeting-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  "GET /course-offerings/:id/class-meetings": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/class-meetings`,
+      offering: "O1",
+    }),
+  "GET /class-meetings/:id": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}`,
+    offering: "O1",
+  }),
+  // A stale version: allowed callers get 412 and nothing changes.
+  "PATCH /class-meetings/:id": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -424,6 +456,25 @@ const SAMPLES: Record<string, Sample> = {
 };
 
 /** A new draft offering of the fixture course in the persona world's semester. */
+let meetingShared: string | undefined;
+/** One Class Meeting on O1, for the read and change samples. */
+async function meetingFixture(t: TestApp): Promise<string> {
+  if (meetingShared !== undefined) return meetingShared;
+  const created = unwrap(
+    await t.app.get(ClassMeetingsService).create(
+      personas.world.offerings.O1,
+      {
+        title: "Fixture class",
+        scheduledStart: "2080-10-01T09:00:00Z",
+        scheduledEnd: "2080-10-01T10:00:00Z",
+      },
+      { ...SYSTEM_ACTOR, userId: personas.acadAdmin.userId },
+    ),
+  );
+  meetingShared = created.meeting.id;
+  return meetingShared;
+}
+
 async function freshOffering(t: TestApp): Promise<string> {
   n++;
   return unwrap(

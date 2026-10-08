@@ -1,4 +1,8 @@
-export { AssignmentsService, type LecturerRole } from "./assignments.service";
+export {
+  AssignmentsService,
+  type AssignmentListener,
+  type LecturerRole,
+} from "./assignments.service";
 export {
   LecturersService,
   lecturerName,

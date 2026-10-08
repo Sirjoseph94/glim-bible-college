@@ -13,9 +13,12 @@ import {
   CalendarService,
   CoursesService,
   CurriculaService,
+  OfferingsService,
   ProgrammesService,
+  RoomsService,
 } from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
+import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
 import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock, unwrap } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
@@ -133,6 +136,60 @@ await app
     { code: "2030/2031", name: "2030/2031 Session", startsOn: "2030-09-01", endsOn: "2031-06-30" },
     SYSTEM_ACTOR,
   );
+// A Lecturer (invited) teaching a published offering, and a Room, for the Class Meeting spec.
+// Its own session, so the admissions spec's session stays untouched.
+const calendar = app.get(CalendarService);
+const teachingSession = unwrap(
+  await calendar.createSession(
+    { code: "2032/2033", name: "2032/2033 Session", startsOn: "2032-09-01", endsOn: "2033-06-30" },
+    SYSTEM_ACTOR,
+  ),
+);
+const teachingSemester = unwrap(
+  await calendar.createSemester(
+    {
+      academicSessionId: teachingSession.id,
+      code: "S1",
+      name: "First Semester",
+      sequence: 1,
+      startsOn: "2032-09-06",
+      endsOn: "2033-01-28",
+    },
+    SYSTEM_ACTOR,
+  ),
+);
+unwrap(
+  await app
+    .get(RoomsService)
+    .create({ code: "CHAPEL", name: "Chapel", capacity: 60 }, SYSTEM_ACTOR),
+);
+const { lecturer: e2eLecturer } = unwrap(
+  await app.get(LecturersService).create(
+    {
+      email: "e2e-lecturer@glim.test",
+      title: "Rev",
+      givenName: "Lola",
+      familyName: "Lecturer",
+      kind: "INTERNAL",
+      staffCode: null,
+    },
+    SYSTEM_ACTOR,
+  ),
+);
+const teachingOffering = unwrap(
+  await app.get(AssignmentsService).createOfferingWithLecturers(
+    {
+      courseId: pastoral.id,
+      semesterId: teachingSemester.id,
+      sectionCode: "01",
+      titleOverride: null,
+      capacity: null,
+      lecturers: [{ lecturerId: e2eLecturer.id, role: "PRIMARY" }],
+    },
+    SYSTEM_ACTOR,
+  ),
+);
+unwrap(await app.get(OfferingsService).publish(teachingOffering, SYSTEM_ACTOR));
 await app.listen(config.port, "127.0.0.1");
 
 // The worker runs in-process on the general queues (no cron), so queued emails are sent.

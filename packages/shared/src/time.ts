@@ -105,3 +105,40 @@ function toDate(instant: Date | string): Date {
   if (Number.isNaN(at.getTime())) throw new RangeError(`Invalid instant: ${String(instant)}`);
   return at;
 }
+
+/** The zone's offset from UTC at an instant, in minutes (e.g. +60 for Lagos). */
+function offsetMinutes(at: Date, zone: string): number {
+  const w = wallClock(at, zone);
+  const asUtc = Date.UTC(
+    Number(w.isoDate.slice(0, 4)),
+    Number(w.isoDate.slice(5, 7)) - 1,
+    Number(w.isoDate.slice(8, 10)),
+    Number(w.hour),
+    Number(w.minute),
+  );
+  return Math.round((asUtc - Math.floor(at.getTime() / 60_000) * 60_000) / 60_000);
+}
+
+/**
+ * The instant a wall-clock date and time (`YYYY-MM-DD`, `HH:mm`) names in a zone, as an ISO
+ * string. Used when a Lecturer types a class time in the institution's timezone. A time skipped
+ * by a daylight-saving change resolves to the instant after the gap.
+ */
+export function zonedToInstant(date: string, time: string, zone: string): string {
+  if (!isValidTimeZone(zone)) throw new RangeError(`Invalid zone: ${zone}`);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const clock = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  if (match === null || clock === null)
+    throw new RangeError(`Invalid date or time: ${date} ${time}`);
+  const naive = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(clock[1]),
+    Number(clock[2]),
+  );
+  // Two passes settle the offset when the first guess lands on the other side of a change.
+  let instant = naive - offsetMinutes(new Date(naive), zone) * 60_000;
+  instant = naive - offsetMinutes(new Date(instant), zone) * 60_000;
+  return new Date(instant).toISOString();
+}

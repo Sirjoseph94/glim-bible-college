@@ -22,9 +22,24 @@ const PRIMARY_REQUIRED = domainError(
   "This offering needs an active Primary Lecturer. Assign a new Primary instead (that replaces the current one).",
 );
 
+/**
+ * Work another module does in the same transaction when a Lecturer joins or leaves an offering
+ * (§9.4): scheduling books or frees their future Class Meetings. `added` may refuse the change
+ * (e.g. the Lecturer is busy then).
+ */
+export interface AssignmentListener {
+  added(
+    db: Database,
+    change: { offeringId: string; lecturerId: string },
+  ): Promise<DomainError | null>;
+  ended(db: Database, change: { offeringId: string; lecturerId: string }): Promise<void>;
+}
+
 /** Who teaches what (owner: lecturing, TRD §9.4). Exactly one active PRIMARY per offering. */
 @Injectable()
 export class AssignmentsService implements OnModuleInit {
+  private readonly listeners: AssignmentListener[] = [];
+
   constructor(
     @Inject(Db) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -38,6 +53,11 @@ export class AssignmentsService implements OnModuleInit {
     this.offerings.registerPublishRequirement(async (db, offeringId) =>
       (await this.hasActivePrimary(db, offeringId)) ? null : PRIMARY_REQUIRED,
     );
+  }
+
+  /** Registers work to run whenever an assignment starts or ends. */
+  onAssignmentChange(listener: AssignmentListener): void {
+    this.listeners.push(listener);
   }
 
   /** Creates an offering and its first assignments in one transaction (§9.2). */
@@ -184,6 +204,10 @@ export class AssignmentsService implements OnModuleInit {
       })
       .returning({ id: la.id });
     if (row === undefined) throw new Error("Assignment insert returned no row");
+    for (const listener of this.listeners) {
+      const problem = await listener.added(db, { offeringId, lecturerId });
+      if (problem !== null) return err(problem);
+    }
     await this.audit.record(db, actor, {
       action: "lecturing.assignment.created",
       resourceType: "course-offering",
@@ -215,6 +239,11 @@ export class AssignmentsService implements OnModuleInit {
         version: sql`${la.version} + 1`,
       })
       .where(eq(la.id, assignment.id));
+    for (const listener of this.listeners)
+      await listener.ended(db, {
+        offeringId: assignment.courseOfferingId,
+        lecturerId: assignment.lecturerId,
+      });
     await this.audit.record(db, actor, {
       action: "lecturing.assignment.ended",
       resourceType: "course-offering",

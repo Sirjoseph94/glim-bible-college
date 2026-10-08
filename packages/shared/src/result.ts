@@ -1,4 +1,9 @@
-import { ERROR_STATUS, type ErrorCode, type FieldError } from "@glim/contracts";
+import {
+  ERROR_STATUS,
+  type ErrorCode,
+  type FieldError,
+  type ScheduleConflict,
+} from "@glim/contracts";
 
 /** Expected domain failures are returned as values; exceptions are for bugs and infrastructure (§5.8). */
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
@@ -16,6 +21,7 @@ export interface DomainError {
   code: ErrorCode;
   message: string;
   fieldErrors?: FieldError[];
+  conflicts?: ScheduleConflict[];
   headers?: Record<string, string>;
 }
 
@@ -24,7 +30,11 @@ export type DomainResult<T> = Result<T, DomainError>;
 export function domainError(
   code: ErrorCode,
   message: string,
-  extra: { fieldErrors?: FieldError[]; headers?: Record<string, string> } = {},
+  extra: {
+    fieldErrors?: FieldError[];
+    conflicts?: ScheduleConflict[];
+    headers?: Record<string, string>;
+  } = {},
 ): DomainError {
   return { code, message, ...extra };
 }
@@ -37,18 +47,25 @@ export class AppError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
   readonly fieldErrors: FieldError[] | undefined;
+  readonly conflicts: ScheduleConflict[] | undefined;
   readonly headers: Record<string, string> | undefined;
 
   constructor(
     code: ErrorCode,
     message: string,
-    options: { fieldErrors?: FieldError[]; headers?: Record<string, string>; cause?: unknown } = {},
+    options: {
+      fieldErrors?: FieldError[];
+      conflicts?: ScheduleConflict[];
+      headers?: Record<string, string>;
+      cause?: unknown;
+    } = {},
   ) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "AppError";
     this.code = code;
     this.status = ERROR_STATUS[code];
     this.fieldErrors = options.fieldErrors;
+    this.conflicts = options.conflicts;
     this.headers = options.headers;
   }
 }
@@ -60,9 +77,10 @@ export function isAppError(e: unknown): e is AppError {
 /** The value of a success; an expected failure becomes an AppError for the API to render. */
 export function unwrap<T>(result: Result<T, DomainError>): T {
   if (result.ok) return result.value;
-  const { code, message, fieldErrors, headers } = result.error;
+  const { code, message, fieldErrors, conflicts, headers } = result.error;
   throw new AppError(code, message, {
     ...(fieldErrors === undefined ? {} : { fieldErrors }),
+    ...(conflicts === undefined ? {} : { conflicts }),
     ...(headers === undefined ? {} : { headers }),
   });
 }

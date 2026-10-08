@@ -8,6 +8,7 @@ export * from "./enrollment";
 export * from "./identity";
 export * from "./imports";
 export * from "./lecturing";
+export * from "./meetings";
 export * from "./notifications";
 export * from "./platform";
 export * from "./settings";

@@ -9,6 +9,7 @@ import { AdmissionsModule } from "@glim/modules/admissions";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
+import { ClassMeetingModule } from "@glim/modules/class-meeting";
 import { ImportsModule } from "@glim/modules/imports";
 import { OpsModule } from "@glim/modules/ops";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -31,6 +32,7 @@ class WorkerModule {
         OpsModule,
         AdmissionsModule,
         ImportsModule,
+        ClassMeetingModule,
       ],
     };
   }

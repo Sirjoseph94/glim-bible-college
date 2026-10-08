@@ -155,6 +155,20 @@
       "when": 1791448862368,
       "tag": "0021_wp_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791454130334,
+      "tag": "0022_wp_meetings",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791454134826,
+      "tag": "0023_wp_meeting_exclusions",
+      "breakpoints": true
     }
   ]
 }

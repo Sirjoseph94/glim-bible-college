@@ -99,12 +99,22 @@ export interface FieldError {
   message: string;
 }
 
+/** A Class Meeting that a new or moved one would overlap (§9.5). */
+export interface ScheduleConflict {
+  meetingId: string;
+  title: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+}
+
 /** The error envelope every non-2xx API response uses (§5.4). */
 export interface ErrorEnvelope {
   error: {
     code: ErrorCode;
     message: string;
     fieldErrors?: FieldError[];
+    /** For `LECTURER_SCHEDULE_CONFLICT` and `ROOM_CONFLICT`: the meetings in the way. */
+    conflicts?: ScheduleConflict[];
     requestId: string;
   };
 }
