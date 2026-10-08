@@ -11,6 +11,7 @@ import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { ContentModule } from "@glim/modules/content";
 import { EnrollmentModule } from "@glim/modules/enrollment";
+import { AttendanceModule } from "@glim/modules/attendance";
 import { ClassMeetingModule } from "@glim/modules/class-meeting";
 import { ImportsModule } from "@glim/modules/imports";
 import { IdentityModule, SESSION_COOKIE, SessionService } from "@glim/modules/identity";
@@ -38,6 +39,7 @@ import { CourseEnrollmentsController } from "./http/enrollment/course-enrollment
 import { RegistrationController } from "./http/enrollment/registration.controller";
 import { ImportsController } from "./http/imports/imports.controller";
 import { ClassMeetingsController } from "./http/meetings/class-meetings.controller";
+import { RollCallController } from "./http/attendance/roll-call.controller";
 import { IntakesController } from "./http/admissions/intakes.controller";
 import { AdmissionsReportsController } from "./http/admissions/reports.controller";
 import { ReviewController } from "./http/admissions/review.controller";
@@ -76,6 +78,7 @@ export class AppModule {
         AdmissionsModule,
         ImportsModule,
         ClassMeetingModule,
+        AttendanceModule,
       ],
       controllers: [
         InstitutionController,
@@ -100,6 +103,7 @@ export class AppModule {
         CourseEnrollmentsController,
         ImportsController,
         ClassMeetingsController,
+        RollCallController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

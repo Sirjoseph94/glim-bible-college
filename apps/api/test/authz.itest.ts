@@ -478,6 +478,26 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/end`,
     offering: "O1",
   }),
+  "GET /class-meetings/:id/roll-call": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/roll-call`,
+    offering: "O1",
+  }),
+  // The fixture is in 2080, so roll call isn't open: allowed callers get 409, nothing changes.
+  "PUT /class-meetings/:id/roll-call": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/roll-call`,
+    payload: {
+      marks: [
+        {
+          studentId: "00000000-0000-7000-8000-000000000000",
+          present: true,
+          late: false,
+          mode: "IN_PERSON",
+        },
+      ],
+    },
+    headers: { "if-match": '"0"' },
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,

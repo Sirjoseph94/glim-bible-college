@@ -191,6 +191,16 @@ const teachRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/teach"), "TeachPage"),
 });
 
+const rollCallRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/teach/meetings/$meetingId/roll-call",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/roll-call"), "RollCallPage"),
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
@@ -257,6 +267,7 @@ const admissionsIntakesRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
+  rollCallRoute,
   loginRoute,
   forgotRoute,
   resetRoute,

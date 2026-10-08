@@ -1,6 +1,7 @@
 import * as academic from "./academic";
 import * as admissions from "./admissions";
 import * as applications from "./applications";
+import * as attendance from "./attendance";
 import * as audit from "./audit";
 import * as auth from "./auth";
 import * as calendar from "./calendar";
@@ -19,6 +20,7 @@ export {
   academic,
   admissions,
   applications,
+  attendance,
   audit,
   auth,
   calendar,
@@ -55,6 +57,8 @@ export const ENDPOINTS = [
   meetings.joinClassMeeting,
   meetings.startClassMeeting,
   meetings.endClassMeeting,
+  attendance.getRollCall,
+  attendance.putRollCall,
   meetings.getMySchedule,
   auth.login,
   auth.logout,
@@ -157,6 +161,7 @@ export {
   type ApplicationSummary,
   type ReviewedApplication,
 } from "./applications";
+export type { RollCall, RollCallMark } from "./attendance";
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
 export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";

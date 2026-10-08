@@ -11,7 +11,7 @@ import { AuthorizationService } from "@glim/modules/authorization";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
 import { CONFIG, type Config } from "@glim/shared/config";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 type FileRow = typeof schema.files.$inferSelect;
 
@@ -167,6 +167,32 @@ export class FilesService {
       fileName: row.originalName,
       expiresInSeconds: DOWNLOAD_URL_SECONDS,
     });
+  }
+
+  /**
+   * A short-lived download URL for files the caller has already decided may be shown, e.g. the
+   * passport photos on a roll call, shown to the class's Lecturer (§12.3). Null if unavailable.
+   */
+  async presignedReadUrls(ids: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (ids.length === 0) return out;
+    const f = schema.files;
+    const rows = await this.db.read
+      .select({ id: f.id, storageKey: f.storageKey, name: f.originalName, status: f.status })
+      .from(f)
+      .where(inArray(f.id, ids));
+    for (const row of rows)
+      if (row.status === "AVAILABLE")
+        out.set(
+          row.id,
+          await this.storage.presignGet({
+            bucket: this.config.storage.bucket,
+            key: row.storageKey,
+            fileName: row.name,
+            expiresInSeconds: DOWNLOAD_URL_SECONDS,
+          }),
+        );
+    return out;
   }
 
   /**

@@ -176,6 +176,13 @@
       "when": 1791456011191,
       "tag": "0024_wp_meeting_join_log",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791456579759,
+      "tag": "0025_wp_roll_call",
+      "breakpoints": true
     }
   ]
 }

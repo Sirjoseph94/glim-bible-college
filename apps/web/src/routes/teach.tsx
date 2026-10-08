@@ -1,6 +1,7 @@
 import type { calendar, meetings, Offering, offerings, ScheduleWarning } from "@glim/contracts";
 import { zonedToInstant } from "@glim/shared/time";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import { meQuery } from "../api/session";
@@ -365,6 +366,13 @@ function MeetingActions({ meeting }: { meeting: ScheduleItem }) {
             Open Google Meet
           </a>
         ) : null}
+        <Link
+          to="/teach/meetings/$meetingId/roll-call"
+          params={{ meetingId: meeting.id }}
+          className="ml-4 text-brand underline"
+        >
+          Roll call
+        </Link>
         <button
           type="button"
           disabled={busy}
@@ -390,6 +398,13 @@ function MeetingActions({ meeting }: { meeting: ScheduleItem }) {
             Start class
           </button>
         ) : null}
+        <Link
+          to="/teach/meetings/$meetingId/roll-call"
+          params={{ meetingId: meeting.id }}
+          className="text-brand underline"
+        >
+          Roll call
+        </Link>
         <button
           type="button"
           className="text-brand underline"

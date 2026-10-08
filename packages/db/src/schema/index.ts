@@ -1,4 +1,5 @@
 export * from "./academic";
+export * from "./attendance";
 export * from "./admissions";
 export * from "./audit";
 export * from "./authorization";

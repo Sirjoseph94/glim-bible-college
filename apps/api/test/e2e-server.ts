@@ -176,6 +176,19 @@ const { lecturer: e2eLecturer } = unwrap(
     SYSTEM_ACTOR,
   ),
 );
+const { lecturer: e2eRollCaller } = unwrap(
+  await app.get(LecturersService).create(
+    {
+      email: "e2e-rollcall@glim.test",
+      title: null,
+      givenName: "Remi",
+      familyName: "Rollcall",
+      kind: "INTERNAL",
+      staffCode: null,
+    },
+    SYSTEM_ACTOR,
+  ),
+);
 const teachingOffering = unwrap(
   await app.get(AssignmentsService).createOfferingWithLecturers(
     {
@@ -184,12 +197,45 @@ const teachingOffering = unwrap(
       sectionCode: "01",
       titleOverride: null,
       capacity: null,
-      lecturers: [{ lecturerId: e2eLecturer.id, role: "PRIMARY" }],
+      lecturers: [
+        { lecturerId: e2eLecturer.id, role: "PRIMARY" },
+        { lecturerId: e2eRollCaller.id, role: "CO_LECTURER" },
+      ],
     },
     SYSTEM_ACTOR,
   ),
 );
 unwrap(await app.get(OfferingsService).publish(teachingOffering, SYSTEM_ACTOR));
+// Two students on that offering, one on campus and one online, for the roll-call spec.
+for (const [n, given, family, mode] of [
+  [1, "Ada", "Campus", "ON_CAMPUS"],
+  [2, "Bola", "Online", "ONLINE"],
+] as const) {
+  const one = async (text: string, values: unknown[]) =>
+    (await db.pool.query<{ id: string }>(text, values)).rows[0]?.id;
+  const userId = await one(
+    "INSERT INTO users (email, display_name, status) VALUES ($1, $2, 'ACTIVE') RETURNING id",
+    [`e2e-student${String(n)}@glim.test`, `${given} ${family}`],
+  );
+  const studentId = await one(
+    "INSERT INTO students (user_id, given_name, family_name) VALUES ($1, $2, $3) RETURNING id",
+    [userId, given, family],
+  );
+  const enrollmentId = await one(
+    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, entry_session_id, matric_number, study_mode, started_on)
+     VALUES ($1, $2, $3, $4, $5, $6, '2032-09-01') RETURNING id`,
+    [studentId, ministry.id, draft.id, teachingSession.id, `GLIM/DIP/2032/000${String(n)}`, mode],
+  );
+  const semesterEnrollmentId = await one(
+    "INSERT INTO semester_enrollments (programme_enrollment_id, semester_id, level_no) VALUES ($1, $2, 1) RETURNING id",
+    [enrollmentId, teachingSemester.id],
+  );
+  await db.pool.query(
+    `INSERT INTO course_enrollments (semester_enrollment_id, programme_enrollment_id, course_offering_id, student_id, selection, status)
+     VALUES ($1, $2, $3, $4, 'COMPULSORY', 'ENROLLED')`,
+    [semesterEnrollmentId, enrollmentId, teachingOffering, studentId],
+  );
+}
 await app.listen(config.port, "127.0.0.1");
 
 // The worker runs in-process on the general queues (no cron), so queued emails are sent.
