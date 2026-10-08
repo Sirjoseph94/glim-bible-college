@@ -192,4 +192,19 @@ export class FilesService {
       );
     return row !== undefined;
   }
+
+  /**
+   * Deletes a file's record inside the caller's transaction (e.g. when its application is purged)
+   * and returns its object key; remove the object with `removeObject` once that commits.
+   */
+  async deleteRecord(db: Database, id: string): Promise<string | null> {
+    const f = schema.files;
+    const [row] = await db.delete(f).where(eq(f.id, id)).returning({ key: f.storageKey });
+    return row?.key ?? null;
+  }
+
+  /** Removes a stored object; best effort, since its record is already gone. */
+  async removeObject(storageKey: string): Promise<void> {
+    await this.storage.remove({ bucket: this.config.storage.bucket, key: storageKey });
+  }
 }

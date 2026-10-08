@@ -198,6 +198,16 @@ const admissionsQueueRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admissions-queue"), "AdmissionsQueuePage"),
 });
 
+const admissionsReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admissions/reports",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ADMISSIONS_OFFICER"),
+  component: lazyRouteComponent(
+    () => import("./routes/admissions-reports"),
+    "AdmissionsReportsPage",
+  ),
+});
+
 const admissionsApplicationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admissions/applications/$applicationId",
@@ -240,6 +250,7 @@ const routeTree = rootRoute.addChildren([
   applicationRoute,
   applicationEditRoute,
   admissionsQueueRoute,
+  admissionsReportsRoute,
   admissionsApplicationRoute,
   admissionsIntakesRoute,
 ]);

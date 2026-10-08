@@ -36,6 +36,7 @@ export class MeService {
         // Viewers without their own zone see the institution's (§5.1).
         timezone: user.timezone ?? institution.timezone,
         timezoneSet: user.timezone !== null,
+        referralCode: user.referralCode,
       },
       institution,
       roles: {

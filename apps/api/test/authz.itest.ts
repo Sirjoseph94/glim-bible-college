@@ -346,6 +346,10 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/applications/${await applicationFixture(t)}/withdraw`,
     owner: "applicant",
   }),
+  "GET /reports/admissions": () => Promise.resolve({ url: "/api/v1/reports/admissions" }),
+  "GET /reports/referrals": () => Promise.resolve({ url: "/api/v1/reports/referrals" }),
+  "GET /admissions/applications/export": () =>
+    Promise.resolve({ url: "/api/v1/admissions/applications/export" }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,

@@ -8,6 +8,8 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { map, type Observable } from "rxjs";
+import { Csv } from "@glim/shared";
+import type { FastifyReply } from "fastify";
 import { ENDPOINT_METADATA } from "./endpoint";
 
 /**
@@ -34,15 +36,20 @@ export class ResponseInterceptor implements NestInterceptor {
       context.getHandler(),
     );
     if (spec === undefined) return next.handle();
-    return next
-      .handle()
-      .pipe(
-        map((body: unknown) =>
-          spec.successStatus === 204 || spec.successStatus === 302
-            ? undefined
-            : spec.response.parse(toWire(body)),
-        ),
-      );
+    const reply = context.switchToHttp().getResponse<FastifyReply>();
+    return next.handle().pipe(
+      map((body: unknown) => {
+        if (spec.successStatus === 204 || spec.successStatus === 302) return undefined;
+        // A report asked for as CSV is sent as a download instead of the JSON contract.
+        if (body instanceof Csv) {
+          void reply
+            .header("content-type", "text/csv; charset=utf-8")
+            .header("content-disposition", `attachment; filename="${body.filename}"`);
+          return body.text;
+        }
+        return spec.response.parse(toWire(body));
+      }),
+    );
   }
 }
 
@@ -51,6 +58,9 @@ export class ResponseInterceptor implements NestInterceptor {
  * be a Date (dates are serialised as RFC 3339 by the interceptor).
  */
 export type Reply<E extends EndpointSpec> = WithDates<ResponseOf<E>>;
+
+/** What a handler may return for an endpoint that also offers `?format=csv`. */
+export type ReplyOrCsv<E extends EndpointSpec> = Reply<E> | Csv;
 
 type WithDates<T> = T extends string
   ? string | Date

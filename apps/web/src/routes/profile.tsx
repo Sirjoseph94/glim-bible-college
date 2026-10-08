@@ -27,6 +27,17 @@ export function ProfilePage() {
         <dd>{me.user.displayName}</dd>
         <dt className="text-slate-600">Email</dt>
         <dd>{me.user.email}</dd>
+        {me.user.referralCode === null ? null : (
+          <>
+            <dt className="text-slate-600">Referral code</dt>
+            <dd>
+              <strong className="font-mono tracking-wider">{me.user.referralCode}</strong>
+              <p className="text-sm text-slate-600">
+                Share it with people you encourage to apply, so the college knows who referred them.
+              </p>
+            </dd>
+          </>
+        )}
       </dl>
       <TimezoneForm current={me.user.timezone} />
       <section className="space-y-2 rounded border border-slate-200 bg-white p-4">

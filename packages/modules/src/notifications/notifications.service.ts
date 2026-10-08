@@ -2,7 +2,7 @@ import { Db, schema, type Database, type TxQueue } from "@glim/db";
 import { MAILER, type Mailer } from "@glim/integrations/mail/port";
 import { CONFIG, type Config } from "@glim/shared/config";
 import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { TEMPLATES } from "./templates";
 
 export interface NotificationInput {
@@ -79,5 +79,15 @@ export class NotificationsService {
     await this.mailer.send({ to, ...template({ data, appOrigin: this.config.appOrigin }) });
     await setStatus("SENT");
     return "SENT";
+  }
+
+  /** Deletes the notifications about an application (its purge, §10.5). */
+  async forgetApplication(db: Database, applicationId: string): Promise<number> {
+    const n = schema.notifications;
+    const rows = await db
+      .delete(n)
+      .where(sql`${n.data}->>'applicationId' = ${applicationId}`)
+      .returning({ id: n.id });
+    return rows.length;
   }
 }

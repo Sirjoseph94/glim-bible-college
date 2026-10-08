@@ -100,6 +100,7 @@ export class LecturersService {
           invite = made.value;
         } else {
           userId = existing.id;
+          await this.users.ensureReferralCode(db, userId);
         }
         const now = this.clock.now();
         const [row] = await db

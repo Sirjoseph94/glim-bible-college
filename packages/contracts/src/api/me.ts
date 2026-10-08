@@ -16,6 +16,8 @@ export const meSchema = z.object({
     timezone: z.string(),
     /** False until the user (or their browser, on first sign-in) has chosen a zone (§5.1). */
     timezoneSet: z.boolean(),
+    /** Personal referral code (students, alumni and staff, §10.6); null for others. */
+    referralCode: z.string().nullable(),
   }),
   institution: institutionSchema,
   roles: z.object({

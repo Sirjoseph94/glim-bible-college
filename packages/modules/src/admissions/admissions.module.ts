@@ -13,6 +13,8 @@ import { AcceptanceService } from "./acceptance.service";
 import { ApplicationsService } from "./applications.service";
 import { IntakesService } from "./intakes.service";
 import { OffersService } from "./offers.service";
+import { PurgeService } from "./purge.service";
+import { AdmissionsReportsService } from "./reports.service";
 import { ReviewService } from "./review.service";
 
 /**
@@ -50,6 +52,8 @@ const services = [
   ReviewService,
   AcceptanceService,
   OffersService,
+  PurgeService,
+  AdmissionsReportsService,
 ];
 
 @Module({

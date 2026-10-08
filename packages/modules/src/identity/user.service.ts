@@ -17,6 +17,8 @@ export interface UserProfile extends Recipient {
   id: string;
   status: UserStatus;
   timezone: string | null;
+  /** Personal referral code for students, alumni and staff (§10.6); null until one is needed. */
+  referralCode: string | null;
 }
 
 /** Users (owner: identity, §6.2). */
@@ -98,5 +100,6 @@ export function toProfile(row: schema.UserRow): UserProfile {
     displayName: row.displayName,
     status: row.status as UserStatus,
     timezone: row.timezone,
+    referralCode: row.referralCode,
   };
 }

@@ -23,7 +23,7 @@ import { and, asc, eq, gt, ilike, isNull, or, sql, type SQL } from "drizzle-orm"
 import { AccountMailer } from "./account-mailer";
 import { AuthService } from "./auth.service";
 import { SessionService } from "./session.service";
-import { toProfile, type UserProfile, type UserStatus } from "./user.service";
+import { toProfile, UserService, type UserProfile, type UserStatus } from "./user.service";
 
 export interface UserListItem {
   id: string;
@@ -62,6 +62,7 @@ export class UserAdminService implements OnModuleInit {
     @Inject(AccountMailer) private readonly mail: AccountMailer,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(UserService) private readonly users: UserService,
   ) {}
 
   /** Identity owns users, so it tells the AuthorizationService whether one exists (§7.2). */
@@ -267,6 +268,8 @@ export class UserAdminService implements OnModuleInit {
       if (user === undefined) return notFound();
       if (user.status === "DEACTIVATED")
         return err(domainError("CONFLICT", "A deactivated user can't be given a role."));
+      // Staff can refer applicants (§10.6).
+      await this.users.ensureReferralCode(db, userId);
       return this.roles.grant(db, actor, { userId, role, reason });
     });
   }

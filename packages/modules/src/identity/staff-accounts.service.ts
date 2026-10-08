@@ -70,6 +70,8 @@ export class StaffAccountsService {
   ): Promise<DomainResult<{ user: UserProfile; token: string }>> {
     const user = await this.users.createInvitedUser(db, input);
     if (!user.ok) return user;
+    // Staff and Lecturers can refer applicants (§10.6).
+    await this.users.ensureReferralCode(db, user.value.id);
     await this.audit.record(db, actor, {
       action: "identity.user.invited",
       resourceType: "user",

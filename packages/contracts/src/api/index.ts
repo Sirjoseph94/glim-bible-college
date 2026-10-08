@@ -8,6 +8,7 @@ import * as files from "./files";
 import * as me from "./me";
 import * as offerings from "./offerings";
 import * as platform from "./platform";
+import * as reports from "./reports";
 import * as settings from "./settings";
 import * as users from "./users";
 
@@ -22,6 +23,7 @@ export {
   me,
   offerings,
   platform,
+  reports,
   settings,
   users,
 };
@@ -103,6 +105,9 @@ export const ENDPOINTS = [
   admissions.addApplicationNote,
   admissions.decideApplication,
   admissions.reopenOffer,
+  admissions.exportApplications,
+  reports.getAdmissionsReport,
+  reports.getReferralReport,
   applications.startApplication,
   applications.myApplications,
   applications.getApplication,
@@ -129,6 +134,7 @@ export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
 export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";
 export type { Me } from "./me";
+export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";
 export type { UserDetail, UserListItem } from "./users";

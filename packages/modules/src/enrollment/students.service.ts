@@ -131,6 +131,20 @@ export class StudentsService {
     return row?.matric ?? null;
   }
 
+  /** Whether the user has ever been a student (current, graduated or withdrawn). */
+  async hasStudentRecord(userId: string, db: Database = this.db.read): Promise<boolean> {
+    const s = schema.students;
+    const [row] = await db.select({ id: s.id }).from(s).where(eq(s.userId, userId));
+    return row !== undefined;
+  }
+
+  /** Whether a file is a student's photo (a passport photo reused on acceptance, C-29). */
+  async usesPhoto(fileId: string, db: Database = this.db.read): Promise<boolean> {
+    const s = schema.students;
+    const [row] = await db.select({ id: s.id }).from(s).where(eq(s.photoFileId, fileId));
+    return row !== undefined;
+  }
+
   /** Whether the user is a student now (an ACTIVE student row, §7.1). */
   async isActiveStudent(userId: string, db: Database = this.db.read): Promise<boolean> {
     const s = schema.students;

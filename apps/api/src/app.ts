@@ -32,6 +32,7 @@ import { AcademicController } from "./http/academic/academic.controller";
 import { ApplicationsController } from "./http/admissions/applications.controller";
 import { FilesController } from "./http/content/files.controller";
 import { IntakesController } from "./http/admissions/intakes.controller";
+import { AdmissionsReportsController } from "./http/admissions/reports.controller";
 import { ReviewController } from "./http/admissions/review.controller";
 import { CalendarController } from "./http/academic/calendar.controller";
 import { LecturersController } from "./http/lecturing/lecturers.controller";
@@ -82,6 +83,7 @@ export class AppModule {
         LecturersController,
         IntakesController,
         ApplicationsController,
+        AdmissionsReportsController,
         ReviewController,
         FilesController,
       ],

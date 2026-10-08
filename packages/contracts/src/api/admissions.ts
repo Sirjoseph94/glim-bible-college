@@ -221,3 +221,28 @@ export const reopenOffer = endpoint({
   body: z.object({ reason: z.string().trim().min(3).max(500) }).strict(),
   successStatus: 200,
 });
+
+/** One application per row for the export (§10.5); section 5 only when asked for and allowed. */
+export const exportRowSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+);
+
+export const exportApplications = endpoint({
+  method: "GET",
+  path: "/admissions/applications/export",
+  summary:
+    "Every submitted application as rows; includeSensitive adds spiritual background (read-sensitive only, audited)",
+  tag: "Admissions",
+  auth: "session",
+  permission: "admissions:application:read",
+  query: z.object({
+    intakeId: z.uuid().optional(),
+    includeSensitive: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((v) => v === "true"),
+    format: z.enum(["json", "csv"]).default("csv"),
+  }),
+  response: z.object({ items: z.array(exportRowSchema) }),
+});
