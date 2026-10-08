@@ -39,6 +39,7 @@ export const APPLICATION_SECTIONS = [
   "feedback",
   "declaration",
   "consent",
+  "photo",
 ] as const;
 export type ApplicationSection = (typeof APPLICATION_SECTIONS)[number];
 
@@ -126,6 +127,8 @@ export const applicationDraftSchema = z
       .strict()
       .optional(),
     consent: z.object({ consented: z.boolean() }).strict().optional(),
+    /** A completed PASSPORT_PHOTO upload of the applicant's own; null removes it. */
+    photo: z.object({ fileId: z.uuid().nullable() }).strict().optional(),
   })
   .strict();
 
@@ -193,6 +196,7 @@ export const applicationSchema = z.object({
     declaredAt: z.iso.datetime().nullable(),
   }),
   consent: z.object({ consentedAt: z.iso.datetime().nullable() }),
+  photo: z.object({ fileId: z.uuid(), downloadPath: z.string() }).nullable(),
   /** Required fields still unanswered, per section; empty everywhere once ready to submit. */
   missing: z.record(z.enum(APPLICATION_SECTIONS), z.array(z.string())),
   /** The texts the applicant declares and consents to, and where to read the Statement of Faith. */

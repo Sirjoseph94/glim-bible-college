@@ -4,33 +4,36 @@ import type { StaffRole } from "@glim/contracts";
 import "reflect-metadata";
 import { fileURLToPath } from "node:url";
 import { createBoss, createPool, Db } from "@glim/db";
-import { createTestDatabase, prepareTemplate } from "@glim/db/testing";
+import { createTestDatabase, startTestServices } from "@glim/db/testing";
 import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
-import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { S3ObjectStorage } from "@glim/integrations/storage/s3";
 import { CalendarService, ProgrammesService } from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import Fastify from "fastify";
 import { buildApp } from "../src/app";
 import { bootstrapSystemAdmin } from "./bootstrap";
 
 export const E2E_ADMIN = { email: "e2e-admin@glim.test", displayName: "Esther Admin" };
 
-const config = loadConfig();
+const services = await startTestServices();
+const base = loadConfig();
+// The browser uploads straight to this bucket, so presigned URLs (and the CSP) name its server.
+const config = { ...base, storage: { ...base.storage, endpoint: services.s3.endpoint } };
 const logger = createLogger({ service: "e2e", level: "warn" });
-
-let adminUrl = config.testing.postgresUrl;
-const container =
-  adminUrl === undefined ? await new PostgreSqlContainer("postgres:18").start() : null;
-adminUrl ??= container?.getConnectionUri() ?? "";
-await prepareTemplate(adminUrl);
-const database = await createTestDatabase(adminUrl);
+const objectStorage = new S3ObjectStorage({
+  endpoint: services.s3.endpoint,
+  region: config.storage.region,
+  accessKeyId: services.s3.accessKey,
+  secretAccessKey: services.s3.secretKey,
+});
+await objectStorage.ensureBucket(config.storage.bucket);
+const database = await createTestDatabase(services.postgresAdminUrl);
 
 const boss = createBoss(database.appUrl, { max: 2 });
 await boss.start();
@@ -51,7 +54,7 @@ const app = await buildApp({
     clientSecret: google.clientSecret,
     allowHttp: true,
   }),
-  objectStorage: createObjectStorage(config),
+  objectStorage,
   staticDir: fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });
 await bootstrapSystemAdmin(app, E2E_ADMIN);
@@ -105,7 +108,7 @@ async function shutdown(): Promise<void> {
   await boss.stop({ graceful: false });
   await db.pool.end();
   await database.drop();
-  await container?.stop();
+  await services.stop();
   await google.stop();
   process.exit(0);
 }

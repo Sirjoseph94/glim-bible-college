@@ -1,6 +1,7 @@
 import type { Application, applications, ApplicationSummary, BodyOf } from "@glim/contracts";
 import { Db, PG, pgError, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
+import { FilesService } from "@glim/modules/content";
 import { PolicyService, SettingsService, UserService } from "@glim/modules/identity";
 import {
   CLOCK,
@@ -35,6 +36,7 @@ export class ApplicationsService {
     @Inject(PolicyService) private readonly policies: PolicyService,
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(UserService) private readonly users: UserService,
+    @Inject(FilesService) private readonly files: FilesService,
   ) {}
 
   /** Starts a draft in the open intake; that makes the user an Applicant (§7.1). */
@@ -174,6 +176,20 @@ export class ApplicationsService {
           );
       }
 
+      const photoFileId = change.photo?.fileId;
+      if (
+        photoFileId !== undefined &&
+        photoFileId !== null &&
+        !(await this.files.isUsable(photoFileId, current.applicantUserId, "PASSPORT_PHOTO"))
+      )
+        return err(
+          domainError("VALIDATION_FAILED", "Upload the passport photo again.", {
+            fieldErrors: [
+              { path: "photo.fileId", code: "invalid", message: "That photo isn't available." },
+            ],
+          }),
+        );
+
       const dateOfBirth = change.personal?.dateOfBirth;
       if (dateOfBirth !== undefined && dateOfBirth !== null) {
         const tooYoung = await this.tooYoung(db, current.intakeId, dateOfBirth);
@@ -250,6 +266,7 @@ export class ApplicationsService {
       referralCodeEntered: feedback?.referralCode,
       declarationFullName: declaration?.fullName,
       statementOfFaithRead: declaration?.statementOfFaithRead,
+      photoFileId: change.photo?.fileId,
       ...declared,
       ...consented,
       ...texts,
@@ -321,6 +338,10 @@ export class ApplicationsService {
         declaredAt: iso(r.declaredAt),
       },
       consent: { consentedAt: iso(r.dataConsentAt) },
+      photo:
+        r.photoFileId === null
+          ? null
+          : { fileId: r.photoFileId, downloadPath: `/api/v1/files/${r.photoFileId}/download` },
       missing: missingFields(r),
       texts: {
         declarationText: config.declarationText,

@@ -3,11 +3,15 @@ import {
   DeleteObjectCommand,
   HeadBucketCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   NoSuchKey,
+  NotFound,
+  PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ObjectStorage } from "./port";
 
 export interface S3Options {
@@ -74,6 +78,47 @@ export class S3ObjectStorage implements ObjectStorage {
 
   async remove(input: { bucket: string; key: string }): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: input.bucket, Key: input.key }));
+  }
+
+  async head(input: { bucket: string; key: string }) {
+    try {
+      const res = await this.client.send(
+        new HeadObjectCommand({ Bucket: input.bucket, Key: input.key }),
+      );
+      return { sizeBytes: res.ContentLength ?? 0, contentType: res.ContentType ?? null };
+    } catch (error) {
+      if (error instanceof NotFound || error instanceof NoSuchKey) return null;
+      throw error;
+    }
+  }
+
+  presignPut(input: Parameters<ObjectStorage["presignPut"]>[0]): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        ContentType: input.contentType,
+        ContentLength: input.sizeBytes,
+      }),
+      {
+        expiresIn: input.expiresInSeconds,
+        signableHeaders: new Set(["content-type", "content-length"]),
+      },
+    );
+  }
+
+  presignGet(input: Parameters<ObjectStorage["presignGet"]>[0]): Promise<string> {
+    const safeName = input.fileName.replaceAll(/[^\w.-]+/g, "_");
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        ResponseContentDisposition: `attachment; filename="${safeName}"`,
+      }),
+      { expiresIn: input.expiresInSeconds },
+    );
   }
 
   destroy(): void {

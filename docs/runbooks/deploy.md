@@ -39,3 +39,5 @@ Rolling back doesn't undo the database migration. If a migration itself is wrong
   - `production` has **required reviewers** (the System Admin and one other person).
 - **Repository secret:** `DIGITALOCEAN_ACCESS_TOKEN`, a token with access to Apps and the Container Registry.
 - **Creating the apps for the first time:** run `scripts/render-app-spec.sh .do/app.staging.yaml > app.yaml` with the variables set, then `doctl apps create --spec app.yaml`. Note the app's ID for `APP_ID`. Do the same with `.do/app.yaml` for production.
+- **Spaces buckets:** create the files bucket (`STORAGE_BUCKET`, private) and the backups bucket (`STORAGE_BACKUP_BUCKET`, private, with a lifecycle rule expiring objects after 12 weeks).
+  - Browsers upload files (such as passport photos) straight to the files bucket and load them from it, so the files bucket needs a **CORS rule**: in **Spaces → the bucket → Settings → CORS**, allow the origin `APP_ORIGIN`, the methods `GET` and `PUT`, the header `content-type`, and a max age of 3000 seconds. Without it, uploads fail in the browser with a network error.

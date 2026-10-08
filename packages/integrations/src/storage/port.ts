@@ -13,6 +13,29 @@ export interface ObjectStorage {
   download(input: { bucket: string; key: string }): Promise<Uint8Array | null>;
   list(input: { bucket: string; prefix: string }): Promise<string[]>;
   remove(input: { bucket: string; key: string }): Promise<void>;
+  /** The object's size and type, or null if it doesn't exist. */
+  head(input: {
+    bucket: string;
+    key: string;
+  }): Promise<{ sizeBytes: number; contentType: string | null } | null>;
+  /**
+   * A URL the browser PUTs the bytes to directly (TRD §14.1). The content type and length are
+   * signed, so the upload must send exactly those.
+   */
+  presignPut(input: {
+    bucket: string;
+    key: string;
+    contentType: string;
+    sizeBytes: number;
+    expiresInSeconds: number;
+  }): Promise<string>;
+  /** A short-lived URL that downloads the object as an attachment named `fileName`. */
+  presignGet(input: {
+    bucket: string;
+    key: string;
+    fileName: string;
+    expiresInSeconds: number;
+  }): Promise<string>;
 }
 
 export const OBJECT_STORAGE = Symbol.for("glim.ObjectStorage");

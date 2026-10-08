@@ -10,7 +10,8 @@ export function helmetOptions(config: Config) {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "https://www.youtube.com"],
         frameSrc: ["https://www.youtube-nocookie.com"],
-        imgSrc: ["'self'", "data:", "https://i.ytimg.com"],
+        // Photos and files load through a redirect to a presigned URL on the bucket.
+        imgSrc: ["'self'", "data:", "blob:", "https://i.ytimg.com", spaces],
         connectSrc: ["'self'", spaces],
         styleSrc: ["'self'"],
         fontSrc: ["'self'"],

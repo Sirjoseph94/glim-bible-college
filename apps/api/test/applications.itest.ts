@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cookieValue, viaGoogle } from "./google-flow";
 import { createTestApp, type TestApp } from "./harness";
 import { createPersonas, type Personas } from "./personas";
+import { startUpload, uploadPhoto, type StartedUpload } from "./uploads";
 
 let issuer: FakeOidcIssuer;
 let t: TestApp;
@@ -301,6 +302,22 @@ describe("saving the draft", () => {
     for (const { row } of [...audit, ...events]) expect(row).not.toContain(secret);
     expect(t.logs.length).toBeGreaterThan(0);
     expect(t.logs.filter((line) => line.includes(secret))).toEqual([]);
+  });
+
+  it("attaches the applicant's own uploaded passport photo, and nobody else's", async () => {
+    expect(draft.missing.photo).toEqual(["fileId"]);
+    const theirs = await uploadPhoto(t, p.noRole.headers);
+    const notMine = await save(headers, draft, { photo: { fileId: theirs.id } });
+    expect(notMine.statusCode).toBe(400);
+    const pending = (await startUpload(t, headers)).json<StartedUpload>().file;
+    expect((await save(headers, draft, { photo: { fileId: pending.id } })).statusCode).toBe(400);
+
+    const mine = await uploadPhoto(t, headers);
+    const res = await save(headers, draft, { photo: { fileId: mine.id } });
+    expect(res.statusCode).toBe(200);
+    draft = res.json<Application>();
+    expect(draft.photo).toEqual({ fileId: mine.id, downloadPath: mine.downloadPath });
+    expect(draft.missing.photo).toEqual([]);
   });
 
   it("is the applicant's own: anyone else gets a 404", async () => {

@@ -1,6 +1,7 @@
 import { Db, schema } from "@glim/db";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
+import { ContentModule } from "@glim/modules/content";
 import { IdentityModule } from "@glim/modules/identity";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
@@ -40,7 +41,7 @@ class AdmissionsResources implements OnModuleInit {
 const services = [IntakesService, ApplicationsService];
 
 @Module({
-  imports: [AuditModule, AuthorizationModule, IdentityModule],
+  imports: [AuditModule, AuthorizationModule, ContentModule, IdentityModule],
   providers: [...services, AdmissionsResources],
   exports: services,
 })

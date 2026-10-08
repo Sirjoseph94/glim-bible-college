@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { testPhoto } from "./images";
 import { linkToken, nextGoogleSignIn } from "./mailbox";
 
 const EMAIL = "e2e-admissions@glim.test";
@@ -71,6 +72,38 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await expect(applicant.getByRole("heading", { name: "1. Personal information" })).toBeVisible();
   await expect(applicant.getByLabel("First name")).toHaveValue("Chioma");
   await expect(applicant.getByRole("link", { name: "My application" })).toBeVisible();
+
+  // The passport photo is shrunk on the phone and uploads over a slow mobile connection.
+  const network = await applicant.context().newCDPSession(applicant);
+  await network.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 400,
+    downloadThroughput: (400 * 1024) / 8,
+    uploadThroughput: (200 * 1024) / 8,
+  });
+  await applicant.getByRole("button", { name: /Passport photo/ }).click();
+  await applicant.getByLabel("Choose a photo").setInputFiles({
+    name: "selfie.png",
+    mimeType: "image/png",
+    buffer: testPhoto(),
+  });
+  await expect(applicant.getByText("Saved", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(applicant.getByRole("button", { name: /Passport photo.*complete/ })).toBeVisible();
+  await network.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+
+  // Back later, the photo comes from the private bucket, already cropped and shrunk.
+  await applicant.reload();
+  await applicant.getByRole("button", { name: /Passport photo/ }).click();
+  const photo = applicant.getByRole("img", { name: "Your passport photo" });
+  await expect(photo).toBeVisible();
+  await expect
+    .poll(() => photo.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight]))
+    .toEqual([467, 600]);
 
   await page.getByRole("button", { name: "Close now" }).click();
   await expect(page.getByText("closed", { exact: true })).toBeVisible();

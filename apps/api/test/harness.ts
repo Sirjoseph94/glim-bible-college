@@ -42,7 +42,17 @@ export async function createTestApp(
   options: { staticDir?: string; identityProvider?: IdentityProvider; captureLogs?: boolean } = {},
 ): Promise<TestApp> {
   const database: TestDatabase = await createTestDatabase(inject("glim").postgresAdminUrl);
-  const config = loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" });
+  const s3 = inject("glim").s3;
+  const base = loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" });
+  // Presigned URLs point at the test bucket's server, as they point at Spaces in production.
+  const config = { ...base, storage: { ...base.storage, endpoint: s3.endpoint } };
+  const storage = new S3ObjectStorage({
+    endpoint: s3.endpoint,
+    region: config.storage.region,
+    accessKeyId: s3.accessKey,
+    secretAccessKey: s3.secretKey,
+  });
+  await storage.ensureBucket(config.storage.bucket);
   const boss = createBoss(database.appUrl, { max: 2 });
   await boss.start();
   const db = new Db(createPool(database.appUrl, 4), boss);
@@ -59,12 +69,7 @@ export async function createTestApp(
     clock,
     mailer,
     identityProvider: options.identityProvider ?? new DisabledIdentityProvider(),
-    objectStorage: new S3ObjectStorage({
-      endpoint: inject("glim").s3.endpoint,
-      region: "us-east-1",
-      accessKeyId: inject("glim").s3.accessKey,
-      secretAccessKey: inject("glim").s3.secretKey,
-    }),
+    objectStorage: storage,
     logger,
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });

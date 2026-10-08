@@ -4,6 +4,7 @@ import * as applications from "./applications";
 import * as audit from "./audit";
 import * as auth from "./auth";
 import * as calendar from "./calendar";
+import * as files from "./files";
 import * as me from "./me";
 import * as offerings from "./offerings";
 import * as platform from "./platform";
@@ -17,6 +18,7 @@ export {
   audit,
   auth,
   calendar,
+  files,
   me,
   offerings,
   platform,
@@ -99,6 +101,9 @@ export const ENDPOINTS = [
   applications.myApplications,
   applications.getApplication,
   applications.saveApplicationDraft,
+  files.createUpload,
+  files.completeUpload,
+  files.downloadFile,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -111,6 +116,7 @@ export {
 } from "./applications";
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
+export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";
 export type { Me } from "./me";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";

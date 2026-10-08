@@ -3,6 +3,7 @@ import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiError } from "../api/client";
 import { Alert, SubmitButton } from "../components/form";
+import { preparePassportPhoto, uploadPassportPhoto } from "../components/passport-photo";
 import { CalendarDate } from "../components/time";
 import { useSubmit } from "../components/use-submit";
 import { currentIntakeQuery } from "./apply";
@@ -22,7 +23,17 @@ type Values = Record<ApplicationSection, Record<string, Value>>;
 interface FieldDef {
   name: string;
   label: string;
-  kind: "text" | "textarea" | "date" | "email" | "tel" | "select" | "yesno" | "check" | "multi";
+  kind:
+    | "text"
+    | "textarea"
+    | "date"
+    | "email"
+    | "tel"
+    | "select"
+    | "yesno"
+    | "check"
+    | "multi"
+    | "photo";
   options?: readonly (readonly [string, string])[];
   hint?: string;
   /** Shown only when this returns true for the section's current answers. */
@@ -186,6 +197,11 @@ const SECTIONS: { key: ApplicationSection; title: string; fields: FieldDef[] }[]
     title: "Data processing consent",
     fields: [{ name: "consented", label: "I give the consent above", kind: "check" }],
   },
+  {
+    key: "photo",
+    title: "Passport photo",
+    fields: [{ name: "fileId", label: "Passport photo", kind: "photo" }],
+  },
 ];
 
 const text = (v: string | null) => v ?? "";
@@ -217,6 +233,7 @@ function toValues(a: Application): Values {
       declared: a.declaration.declaredAt !== null,
     },
     consent: { consented: a.consent.consentedAt !== null },
+    photo: { fileId: a.photo?.fileId ?? null },
   };
 }
 
@@ -421,6 +438,8 @@ function Wizard({ initial }: { initial: Application }) {
       held.current = false;
       setSaveState("pending");
     }
+    // A new photo is saved at once rather than at the next autosave tick.
+    if (section === "photo") void save();
   };
 
   const go = (to: number) => {
@@ -580,6 +599,13 @@ function SectionIntro({
       );
     case "consent":
       return <p className="rounded bg-slate-50 p-3 text-sm">{application.texts.consentText}</p>;
+    case "photo":
+      return (
+        <p className="text-sm text-slate-600">
+          A recent head-and-shoulders photo, as for a passport, with a plain background. We crop and
+          shrink it on your phone before sending it, so it uploads quickly.
+        </p>
+      );
     default:
       return null;
   }
@@ -676,6 +702,10 @@ function FieldInput({
           <span>{field.label}</span>
         </label>
       );
+    case "photo":
+      return (
+        <PhotoField id={id} fileId={typeof value === "string" ? value : null} onChange={onChange} />
+      );
     case "multi": {
       const chosen = Array.isArray(value) ? value : [];
       return (
@@ -727,6 +757,78 @@ function FieldInput({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function PhotoField({
+  id,
+  fileId,
+  onChange,
+}: {
+  id: string;
+  fileId: string | null;
+  onChange: (value: Value) => void;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(
+    () => () => {
+      if (preview !== null) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
+  const src = preview ?? (fileId === null ? null : `/api/v1/files/${fileId}/download`);
+
+  return (
+    <div className="space-y-2">
+      {src === null ? null : (
+        <img
+          src={src}
+          alt="Your passport photo"
+          className="h-48 w-[149px] rounded border border-slate-200 object-cover"
+        />
+      )}
+      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
+        {src === null ? "Choose a photo" : "Choose a different photo"}
+      </label>
+      <input
+        id={id}
+        type="file"
+        accept="image/jpeg,image/png"
+        disabled={progress !== null}
+        onChange={(event) => {
+          const input = event.currentTarget;
+          const file = input.files?.[0];
+          if (file === undefined) return;
+          setError(null);
+          setProgress(0);
+          void (async () => {
+            try {
+              const photo = await preparePassportPhoto(file);
+              setPreview(URL.createObjectURL(photo));
+              onChange(await uploadPassportPhoto(photo, setProgress));
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "The photo couldn't be uploaded.");
+            } finally {
+              setProgress(null);
+              input.value = "";
+            }
+          })();
+        }}
+      />
+      {progress === null ? null : (
+        <div className="space-y-1">
+          <p className="text-sm text-slate-600">Uploading… {Math.round(progress * 100)}%</p>
+          <progress className="w-full" value={progress} max={1} />
+        </div>
+      )}
+      {error === null ? null : (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

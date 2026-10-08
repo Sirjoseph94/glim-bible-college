@@ -59,6 +59,7 @@ export function missingFields(row: ApplicationRow): Record<ApplicationSection, s
       ...(row.declaredAt === null ? ["declared"] : []),
     ],
     consent: row.dataConsentAt === null ? ["consented"] : [],
+    photo: row.photoFileId === null ? ["fileId"] : [],
   };
 }
 

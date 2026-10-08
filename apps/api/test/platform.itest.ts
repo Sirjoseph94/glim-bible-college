@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENDPOINTS } from "@glim/contracts";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createTestApp, type TestApp } from "./harness";
 
 let t: TestApp;
@@ -66,7 +66,10 @@ describe("security headers", () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("frame-src https://www.youtube-nocookie.com");
     expect(csp).toContain("script-src 'self' https://www.youtube.com");
-    expect(csp).toContain("img-src 'self' data: https://i.ytimg.com");
+    // Files load and upload through presigned URLs on the bucket's server.
+    const bucket = new URL(inject("glim").s3.endpoint).origin;
+    expect(csp).toContain(`img-src 'self' data: blob: https://i.ytimg.com ${bucket}`);
+    expect(csp).toContain(`connect-src 'self' ${bucket}`);
     expect(csp).toContain("frame-ancestors 'none'");
     expect(res.headers["referrer-policy"]).toBe("no-referrer");
     expect(res.headers["x-content-type-options"]).toBe("nosniff");

@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { academicSessions, programmes } from "./academic";
 import { citext, enumCheck, std, stdRo, tstz } from "./columns";
+import { files } from "./content";
 import { users } from "./identity";
 
 /**
@@ -124,8 +125,8 @@ export const applications = pgTable(
     dataConsentAt: tstz("data_consent_at"),
     /** The ADMISSIONS policy version whose declaration and consent texts were shown (§10.2). */
     admissionsPolicyVersion: integer("admissions_policy_version"),
-    /** The passport photo; its foreign key to `files` arrives with photo uploads (ticket 13). */
-    photoFileId: uuid("photo_file_id"),
+    /** The passport photo, later reused as the student photo (C-29). */
+    photoFileId: uuid("photo_file_id").references(() => files.id, { onDelete: "restrict" }),
     // Workflow
     submittedAt: tstz("submitted_at"),
     reviewStartedAt: tstz("review_started_at"),
