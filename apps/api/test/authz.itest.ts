@@ -502,6 +502,21 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/attendance`,
     offering: "O1",
   }),
+  // sEnrolled has a record on the fixture; overriding it again and clearing it are harmless.
+  "POST /class-meetings/:id/attendance/:studentId/override": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/attendance/${await attendanceRecordFixture(t)}/override`,
+    payload: { status: "EXCUSED", reason: "Authz test" },
+    offering: "O1",
+  }),
+  "DELETE /class-meetings/:id/attendance/:studentId/override": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/attendance/${await attendanceRecordFixture(t)}/override`,
+    offering: "O1",
+  }),
+  "GET /reports/attendance": () =>
+    Promise.resolve({
+      url: `/api/v1/reports/attendance?offeringId=${personas.world.offerings.O1}`,
+      offering: "O1",
+    }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -550,6 +565,25 @@ async function meetingFixture(t: TestApp): Promise<string> {
   );
   meetingShared = created.meeting.id;
   return meetingShared;
+}
+
+let recordShared: string | undefined;
+/** An attendance record for sEnrolled on the fixture meeting; returns the student id. */
+async function attendanceRecordFixture(t: TestApp): Promise<string> {
+  if (recordShared !== undefined) return recordShared;
+  const meetingId = await meetingFixture(t);
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    "SELECT id FROM students WHERE user_id = $1",
+    [personas.sEnrolled.userId],
+  );
+  const studentId = rows[0]?.id ?? "";
+  await t.db.pool.query(
+    `INSERT INTO attendance_records (class_meeting_id, student_id, computed_status, attendance_mode, attended_seconds, effective_seconds, ratio_bp, policy_version, computed_at)
+     VALUES ($1, $2, 'ABSENT', 'NONE', 0, 0, 0, 0, now()) ON CONFLICT DO NOTHING`,
+    [meetingId, studentId],
+  );
+  recordShared = studentId;
+  return studentId;
 }
 
 async function freshOffering(t: TestApp): Promise<string> {

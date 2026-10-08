@@ -1,7 +1,14 @@
-import { attendancePolicy, type MeetingAttendance, type MyAttendance } from "@glim/contracts";
+import {
+  attendancePolicy,
+  type AttendanceReport,
+  type MeetingAttendance,
+  type MyAttendance,
+} from "@glim/contracts";
 import { Db, schema, type Database, type TxQueue } from "@glim/db";
+import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { MeetingLifecycleService } from "@glim/modules/class-meeting";
-import { CLOCK, type Clock } from "@glim/shared";
+import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
+import { toLocalDate } from "@glim/shared/time";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
@@ -9,6 +16,7 @@ import { computeAttendance, type AttendanceResult, type RollCallInput } from "./
 
 type MeetingRow = typeof schema.classMeetings.$inferSelect;
 type RecordRow = typeof schema.attendanceRecords.$inferSelect;
+type RecordView = MeetingAttendance["records"][number];
 
 const DAY = 86_400_000;
 /**
@@ -61,6 +69,7 @@ export class AttendanceService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(MeetingLifecycleService) private readonly lifecycle: MeetingLifecycleService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   /** The `attendance.recompute` job. Returns how many records changed, or why it didn't run. */
@@ -223,6 +232,178 @@ export class AttendanceService {
       });
     }
     return { courses: [...courses.values()] };
+  }
+
+  /**
+   * Overrides a student's attendance with a reason (§12.7), or clears the override (`status`
+   * null). Audited with an event in the same transaction; recompute never touches it, and it's
+   * allowed after the lock too.
+   */
+  async setOverride(
+    meetingId: string,
+    studentId: string,
+    change: { status: RecordView["status"]; reason: string } | null,
+    actor: AuditActor & { userId: string },
+  ): Promise<DomainResult<RecordView>> {
+    const result = await this.db.withTxResult(async ({ db, boss }) => {
+      const meeting = await this.lock(db, meetingId);
+      if (meeting === null) return err(domainError("NOT_FOUND", "Not found."));
+      const r = schema.attendanceRecords;
+      const [row] = await db
+        .select({ record: r, status: schema.attendanceStatus })
+        .from(r)
+        .where(and(eq(r.classMeetingId, meetingId), eq(r.studentId, studentId)));
+      if (row === undefined)
+        return err(
+          domainError("NOT_FOUND", "There's no attendance for that student in this class yet."),
+        );
+      if (change === null && row.record.overrideStatus === null) return ok(null);
+      const now = this.clock.now();
+      await db
+        .update(r)
+        .set({
+          overrideStatus: change?.status ?? null,
+          overrideReason: change?.reason ?? null,
+          overrideBy: change === null ? null : actor.userId,
+          overriddenAt: change === null ? null : now,
+          updatedAt: now,
+          version: sql`${r.version} + 1`,
+        })
+        .where(eq(r.id, row.record.id));
+      await this.audit.record(db, actor, {
+        action:
+          change === null ? "attendance.record.override-cleared" : "attendance.record.overridden",
+        resourceType: "class-meeting",
+        resourceId: meetingId,
+        metadata: {
+          studentId,
+          from: row.status,
+          to: change?.status ?? row.record.computedStatus,
+          ...(change === null
+            ? { clearedReason: row.record.overrideReason }
+            : { reason: change.reason }),
+        },
+      });
+      await boss.publish(
+        "attendance.record.overridden",
+        { meetingId, studentId, status: change?.status ?? null },
+        { occurredAt: now, actorUserId: actor.userId },
+      );
+      return ok(null);
+    });
+    if (!result.ok) return result;
+    const view = await this.forMeeting(meetingId);
+    const record = view?.records.find((x) => x.studentId === studentId);
+    return record === undefined ? err(domainError("NOT_FOUND", "Not found.")) : ok(record);
+  }
+
+  /**
+   * The offering's attendance as a student × Class Meeting matrix (§12.7, AC-11): meetings that
+   * took place (or have records), each cell with its status and mode, and each meeting with the
+   * policy version used.
+   */
+  async report(offeringId: string): Promise<AttendanceReport | null> {
+    const o = schema.courseOfferings;
+    const [offering] = await this.db.read
+      .select({ id: o.id, courseCode: schema.courses.code, courseTitle: schema.courses.title })
+      .from(o)
+      .innerJoin(schema.courses, eq(schema.courses.id, o.courseId))
+      .where(eq(o.id, offeringId));
+    if (offering === undefined) return null;
+    const m = schema.classMeetings;
+    const meetings = await this.db.read
+      .select()
+      .from(m)
+      .where(
+        and(
+          eq(m.courseOfferingId, offeringId),
+          or(
+            inArray(m.state, ["LIVE", "ENDED"]),
+            inArray(m.attendanceState, ["PROVISIONAL", "FINAL", "REVIEW_REQUIRED"]),
+          ),
+        ),
+      )
+      .orderBy(asc(m.scheduledStart));
+    const r = schema.attendanceRecords;
+    const records =
+      meetings.length === 0
+        ? []
+        : await this.db.read
+            .select({ record: r, status: schema.attendanceStatus })
+            .from(r)
+            .where(
+              inArray(
+                r.classMeetingId,
+                meetings.map((x) => x.id),
+              ),
+            );
+    const s = schema.students;
+    const pe = schema.programmeEnrollments;
+    const ce = schema.courseEnrollments;
+    const people = await this.db.read
+      .selectDistinctOn([s.familyName, s.givenName, s.id], {
+        studentId: s.id,
+        givenName: s.givenName,
+        familyName: s.familyName,
+        matricNumber: pe.matricNumber,
+      })
+      .from(ce)
+      .innerJoin(s, eq(s.id, ce.studentId))
+      .innerJoin(pe, eq(pe.id, ce.programmeEnrollmentId))
+      .where(eq(ce.courseOfferingId, offeringId))
+      .orderBy(asc(s.familyName), asc(s.givenName), asc(s.id));
+    const cell = new Map(
+      records.map((x) => [`${x.record.studentId}:${x.record.classMeetingId}`, x]),
+    );
+    return {
+      offering,
+      meetings: meetings.map((meeting) => ({
+        meetingId: meeting.id,
+        title: meeting.title,
+        scheduledStart: meeting.scheduledStart.toISOString(),
+        attendanceState:
+          meeting.attendanceState as AttendanceReport["meetings"][number]["attendanceState"],
+        policyVersion: snapshot(meeting).version,
+      })),
+      students: people.map((p) => ({
+        studentId: p.studentId,
+        name: `${p.givenName} ${p.familyName}`,
+        matricNumber: p.matricNumber,
+        cells: meetings.map((meeting) => {
+          const found = cell.get(`${p.studentId}:${meeting.id}`);
+          return found === undefined
+            ? null
+            : {
+                status: found.status as RecordView["status"],
+                mode: found.record.attendanceMode as RecordView["mode"],
+                late: found.record.late,
+                overridden: found.record.overrideStatus !== null,
+              };
+        }),
+      })),
+    };
+  }
+
+  /** The report as CSV rows: one row per student, one column per meeting (date, title, policy). */
+  reportCsv(report: AttendanceReport, zone: string): { headers: string[]; rows: string[][] } {
+    const headers = [
+      "Matric Number",
+      "Student",
+      ...report.meetings.map(
+        (meeting) =>
+          `${toLocalDate(meeting.scheduledStart, zone)} ${meeting.title} (policy v${String(meeting.policyVersion ?? 0)})`,
+      ),
+    ];
+    const rows = report.students.map((student) => [
+      student.matricNumber,
+      student.name,
+      ...student.cells.map((c) =>
+        c === null
+          ? ""
+          : `${c.status}${c.mode === "NONE" ? "" : ` ${c.mode}`}${c.late ? " LATE" : ""}${c.overridden ? " *" : ""}`,
+      ),
+    ]);
+    return { headers, rows };
   }
 
   // ---- helpers ----

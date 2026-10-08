@@ -496,33 +496,41 @@ function OfferingMeetings({ offeringId }: { offeringId: string }) {
   if (list.data.items.length === 0)
     return <p className="text-sm text-slate-600">No Class Meetings yet.</p>;
   return (
-    <ul className="space-y-1 text-sm">
-      {list.data.items.map((m) => (
-        <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className={m.state === "CANCELLED" ? "text-slate-500 line-through" : ""}>
-            {m.title}, <Time value={m.scheduledStart} />
-          </span>
-          {m.state === "CANCELLED" ? null : (
-            <span className="flex gap-3">
-              <Link
-                to="/teach/meetings/$meetingId/roll-call"
-                params={{ meetingId: m.id }}
-                className="text-brand underline"
-              >
-                Roll call
-              </Link>
-              <Link
-                to="/teach/meetings/$meetingId/attendance"
-                params={{ meetingId: m.id }}
-                className="text-brand underline"
-              >
-                Attendance
-              </Link>
+    <>
+      <a
+        href={`/api/v1/reports/attendance?offeringId=${offeringId}&format=csv`}
+        className="block text-sm text-brand underline"
+      >
+        Download attendance (CSV)
+      </a>
+      <ul className="space-y-1 text-sm">
+        {list.data.items.map((m) => (
+          <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className={m.state === "CANCELLED" ? "text-slate-500 line-through" : ""}>
+              {m.title}, <Time value={m.scheduledStart} />
             </span>
-          )}
-        </li>
-      ))}
-    </ul>
+            {m.state === "CANCELLED" ? null : (
+              <span className="flex gap-3">
+                <Link
+                  to="/teach/meetings/$meetingId/roll-call"
+                  params={{ meetingId: m.id }}
+                  className="text-brand underline"
+                >
+                  Roll call
+                </Link>
+                <Link
+                  to="/teach/meetings/$meetingId/attendance"
+                  params={{ meetingId: m.id }}
+                  className="text-brand underline"
+                >
+                  Attendance
+                </Link>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 

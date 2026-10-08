@@ -20,7 +20,8 @@ export interface EndpointSpec {
    * With `resource`, the decision is made for that resource, and one the caller can't see is a 404.
    */
   permission?: Permission;
-  resource?: { type: ResourceType; param: string };
+  /** `param` names a path parameter, or a query parameter with `in: "query"`. */
+  resource?: { type: ResourceType; param: string; in?: "path" | "query" };
   params?: z.ZodType;
   query?: z.ZodType;
   body?: z.ZodType;

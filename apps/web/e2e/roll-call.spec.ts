@@ -89,4 +89,12 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
     "Present in the room",
   );
   await expect(page.getByText(/Provisional/)).toBeVisible();
+
+  // Excuse Ada with a reason; the change shows on the record.
+  const adaRow = page.getByRole("listitem").filter({ hasText: "Ada Campus" });
+  await adaRow.getByRole("button", { name: "Change" }).click();
+  await adaRow.getByLabel("Status").selectOption("EXCUSED");
+  await adaRow.getByLabel("Reason (at least 5 characters)").fill("Hospital appointment");
+  await adaRow.getByRole("button", { name: "Save" }).click();
+  await expect(adaRow).toContainText("Excused in the room (changed by staff)");
 });

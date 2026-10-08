@@ -1,8 +1,15 @@
-import type { ClassMeeting, DomainEvent, MeetingAttendance, MyAttendance } from "@glim/contracts";
+import type {
+  AttendanceReport,
+  ClassMeeting,
+  DomainEvent,
+  MeetingAttendance,
+  MyAttendance,
+} from "@glim/contracts";
 import { drainQueues } from "@glim/db/testing";
 import { AttendanceService } from "@glim/modules/attendance";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { ClassMeetingsService, MeetingLifecycleService } from "@glim/modules/class-meeting";
+import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
 import { unwrap } from "@glim/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDispatcher, createSubscribers } from "../../worker/src/subscribers";
@@ -309,6 +316,178 @@ describe("reading attendance", () => {
     for (const who of ["sEnrolled", "sOther", "l4Other"] as const) {
       const denied = await t.request({
         url: `/api/v1/class-meetings/${m.id}/attendance`,
+        headers: p[who].headers,
+      });
+      expect([403, 404], who).toContain(denied.statusCode);
+    }
+  });
+});
+
+describe("overrides and reports", () => {
+  let fresh: ClassMeeting;
+  const override = (as: PersonaName, meetingId: string, studentId: string, payload: unknown) =>
+    t.request({
+      method: "POST",
+      url: `/api/v1/class-meetings/${meetingId}/attendance/${studentId}/override`,
+      headers: p[as].headers,
+      payload,
+    });
+
+  beforeAll(async () => {
+    await at("2026-11-10T10:00:00Z");
+    fresh = unwrap(
+      await t.app.get(ClassMeetingsService).create(
+        p.world.offerings.O1,
+        {
+          title: "Override class",
+          scheduledStart: "2026-11-10T12:00:00Z",
+          scheduledEnd: "2026-11-10T13:00:00Z",
+        },
+        { ...SYSTEM_ACTOR, userId: p.acadAdmin.userId },
+      ),
+    ).meeting;
+    await at("2026-11-10T11:50:00Z");
+    const res = await t.request({
+      method: "PUT",
+      url: `/api/v1/class-meetings/${fresh.id}/roll-call`,
+      headers: { ...p.l1Primary.headers, "if-match": '"0"' },
+      payload: { marks: [mark(people.bola, true)] },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    await t.app.get(AttendanceService).recompute(fresh.id);
+  });
+
+  it("overrides with a reason, audited, and the override survives recompute", async () => {
+    expect(
+      (await override("l1Primary", fresh.id, people.bola, { status: "EXCUSED", reason: "Ill" }))
+        .statusCode,
+    ).toBe(400);
+    const res = await override("l2Co", fresh.id, people.bola, {
+      status: "EXCUSED",
+      reason: "Family emergency",
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({
+      status: "EXCUSED",
+      computedStatus: "PRESENT",
+      overrideStatus: "EXCUSED",
+    });
+    const audit = await q<{ metadata: { reason: string; from: string; to: string } }>(
+      "SELECT metadata FROM audit_logs WHERE action = 'attendance.record.overridden' AND resource_id = $1",
+      [fresh.id],
+    );
+    expect(audit.rows[0]?.metadata).toMatchObject({
+      reason: "Family emergency",
+      from: "PRESENT",
+      to: "EXCUSED",
+    });
+
+    const put = await t.request({
+      method: "PUT",
+      url: `/api/v1/class-meetings/${fresh.id}/roll-call`,
+      headers: { ...p.l1Primary.headers, "if-match": '"1"' },
+      payload: { marks: [mark(people.bola, false)] },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(await t.app.get(AttendanceService).recompute(fresh.id)).toBe(1);
+    const row = (
+      await q<{ status: string; computed_status: string }>(
+        "SELECT status, computed_status FROM attendance_records WHERE class_meeting_id = $1 AND student_id = $2",
+        [fresh.id, people.bola],
+      )
+    ).rows[0];
+    expect(row).toEqual({ status: "EXCUSED", computed_status: "ABSENT" });
+  });
+
+  it("clears an override back to the computed status", async () => {
+    const res = await t.request({
+      method: "DELETE",
+      url: `/api/v1/class-meetings/${fresh.id}/attendance/${people.bola}/override`,
+      headers: p.l1Primary.headers,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toMatchObject({ status: "ABSENT", overrideStatus: null });
+    const audit = await q<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_logs WHERE action = 'attendance.record.override-cleared' AND resource_id = $1",
+      [fresh.id],
+    );
+    expect(Number(audit.rows[0]?.n)).toBe(1);
+  });
+
+  it("refuses a student with no record, and Assistants and Guest Lecturers", async () => {
+    const none = await override("l1Primary", fresh.id, people.dropped, {
+      status: "EXCUSED",
+      reason: "Not here",
+    });
+    expect(none.statusCode).toBe(404);
+    const payload = { status: "EXCUSED", reason: "Should not work" };
+    expect([403, 404]).toContain(
+      (await override("l3Assistant", fresh.id, people.bola, payload)).statusCode,
+    );
+    // A Guest Lecturer on the course.
+    const guest = await createUser(t, { email: "guest@attendance.glim.test" });
+    const { lecturer } = unwrap(
+      await t.app.get(LecturersService).create(
+        {
+          email: guest.email,
+          title: null,
+          givenName: "Guest",
+          familyName: "Speaker",
+          kind: "GUEST",
+          staffCode: null,
+        },
+        SYSTEM_ACTOR,
+      ),
+    );
+    unwrap(
+      await t.app
+        .get(AssignmentsService)
+        .assign(p.world.offerings.O1, lecturer.id, "GUEST_LECTURER", SYSTEM_ACTOR),
+    );
+    const res = await t.request({
+      method: "POST",
+      url: `/api/v1/class-meetings/${fresh.id}/attendance/${people.bola}/override`,
+      headers: await sessionFor(t, guest.id),
+      payload,
+    });
+    expect([403, 404]).toContain(res.statusCode);
+  });
+
+  it("reports student × meeting with the mode per cell and the policy version", async () => {
+    const json = await t.request({
+      url: `/api/v1/reports/attendance?offeringId=${p.world.offerings.O1}`,
+      headers: p.l3Assistant.headers,
+    });
+    expect(json.statusCode, json.body).toBe(200);
+    const report = json.json<AttendanceReport>();
+    expect(report.meetings.map((x) => [x.title, x.policyVersion])).toEqual([
+      ["Attendance class", 0],
+      ["Override class", 0],
+    ]);
+    const ada = report.students.find((x) => x.studentId === people.ada);
+    expect(ada?.cells[0]).toEqual({
+      status: "EXCUSED",
+      mode: "NONE",
+      late: false,
+      overridden: true,
+    });
+
+    const csv = await t.request({
+      url: `/api/v1/reports/attendance?offeringId=${p.world.offerings.O1}&format=csv`,
+      headers: p.registrar.headers,
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.headers["content-type"]).toContain("text/csv");
+    const [header, ...rows] = csv.body.trim().split("\r\n");
+    expect(header).toBe(
+      "Matric Number,Student,2026-11-03 Attendance class (policy v0),2026-11-10 Override class (policy v0)",
+    );
+    expect(rows.find((r) => r.includes("Ada Student"))).toContain("EXCUSED *");
+    expect(rows.find((r) => r.includes("sEnrolled"))).toContain("PRESENT ONLINE LATE");
+
+    for (const who of ["sOther", "l4Other", "sEnrolled"] as const) {
+      const denied = await t.request({
+        url: `/api/v1/reports/attendance?offeringId=${p.world.offerings.O1}`,
         headers: p[who].headers,
       });
       expect([403, 404], who).toContain(denied.statusCode);

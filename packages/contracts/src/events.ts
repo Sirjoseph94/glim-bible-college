@@ -34,6 +34,7 @@ export const DOMAIN_EVENTS = [
   // Attendance
   "attendance.roll-call.updated",
   "attendance.finalized",
+  "attendance.record.overridden",
   // Recordings and video
   "recording.discovered",
   "video.added",

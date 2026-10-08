@@ -61,6 +61,9 @@ export const ENDPOINTS = [
   attendance.putRollCall,
   attendance.getMeetingAttendance,
   attendance.getMyAttendance,
+  attendance.overrideAttendance,
+  attendance.clearAttendanceOverride,
+  attendance.getAttendanceReport,
   meetings.getMySchedule,
   auth.login,
   auth.logout,
@@ -163,7 +166,13 @@ export {
   type ApplicationSummary,
   type ReviewedApplication,
 } from "./applications";
-export type { MeetingAttendance, MyAttendance, RollCall, RollCallMark } from "./attendance";
+export type {
+  AttendanceReport,
+  MeetingAttendance,
+  MyAttendance,
+  RollCall,
+  RollCallMark,
+} from "./attendance";
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
 export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";

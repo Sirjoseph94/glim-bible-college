@@ -142,3 +142,87 @@ export const getMyAttendance = endpoint({
   auth: "session",
   response: myAttendanceSchema,
 });
+
+const recordParams = z.object({ id: z.uuid(), studentId: z.uuid() });
+
+export const overrideAttendance = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/attendance/:studentId/override",
+  summary: "Override a student's attendance (e.g. Excused), with a reason; survives recalculation",
+  tag: "Attendance",
+  auth: "session",
+  permission: "attendance:record:override",
+  resource: { type: "class-meeting", param: "id" },
+  params: recordParams,
+  body: z
+    .object({
+      status: z.enum(ENUMS["attendance_records.override_status"]),
+      reason: z.string().trim().min(5).max(500),
+    })
+    .strict(),
+  response: meetingAttendanceSchema.shape.records.element,
+  successStatus: 200,
+});
+
+export const clearAttendanceOverride = endpoint({
+  method: "DELETE",
+  path: "/class-meetings/:id/attendance/:studentId/override",
+  summary: "Clear an attendance override, going back to the computed status",
+  tag: "Attendance",
+  auth: "session",
+  permission: "attendance:record:override",
+  resource: { type: "class-meeting", param: "id" },
+  params: recordParams,
+  response: meetingAttendanceSchema.shape.records.element,
+  successStatus: 200,
+});
+
+export const attendanceReportSchema = z.object({
+  offering: z.object({ id: z.uuid(), courseCode: z.string(), courseTitle: z.string() }),
+  meetings: z.array(
+    z.object({
+      meetingId: z.uuid(),
+      title: z.string(),
+      scheduledStart: z.iso.datetime(),
+      attendanceState: z.enum(ENUMS["class_meetings.attendance_state"]),
+      /** The ATTENDANCE policy version the records were computed under. */
+      policyVersion: z.number().int().nullable(),
+    }),
+  ),
+  students: z.array(
+    z.object({
+      studentId: z.uuid(),
+      name: z.string(),
+      matricNumber: z.string(),
+      /** One per meeting, in the same order; null where there's no record. */
+      cells: z.array(
+        z
+          .object({
+            status: attendanceStatus,
+            mode: z.enum(ENUMS["attendance_records.attendance_mode"]),
+            late: z.boolean(),
+            overridden: z.boolean(),
+          })
+          .nullable(),
+      ),
+    }),
+  ),
+});
+
+export type AttendanceReport = z.infer<typeof attendanceReportSchema>;
+
+export const getAttendanceReport = endpoint({
+  method: "GET",
+  path: "/reports/attendance",
+  summary:
+    "An offering's attendance: student × Class Meeting, with the mode per cell (JSON or CSV)",
+  tag: "Attendance",
+  auth: "session",
+  permission: "attendance:report:read",
+  resource: { type: "course-offering", param: "offeringId", in: "query" },
+  query: z.object({
+    offeringId: z.uuid(),
+    format: z.enum(["json", "csv"]).default("json"),
+  }),
+  response: attendanceReportSchema,
+});

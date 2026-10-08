@@ -77,11 +77,13 @@ export class AuthGuard implements CanActivate {
     const resourceId =
       spec.resource === undefined
         ? undefined
-        : (req.params as Record<string, string>)[spec.resource.param];
+        : ((spec.resource.in === "query" ? req.query : req.params) as Record<string, unknown>)[
+            spec.resource.param
+          ];
     const decision = await this.authorization.authorize(
       req.principal,
       spec.permission,
-      spec.resource === undefined || resourceId === undefined
+      spec.resource === undefined || typeof resourceId !== "string"
         ? undefined
         : { type: spec.resource.type, id: resourceId },
     );

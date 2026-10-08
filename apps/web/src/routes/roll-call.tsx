@@ -1,10 +1,10 @@
-import type { attendance, RollCall, RollCallMark } from "@glim/contracts";
+import type { attendance, MeetingAttendance, RollCall, RollCallMark } from "@glim/contracts";
 import { Time } from "../components/time";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import { Alert } from "../components/form";
+import { Alert, formText } from "../components/form";
 
 type Mark = Omit<RollCallMark, "studentId">;
 type Status = "idle" | "saving" | "saved" | "retry" | "error";
@@ -264,6 +264,129 @@ const RECORD_LABEL: Record<string, string> = {
   EXCUSED: "Excused",
 };
 
+type AttendanceRecord = MeetingAttendance["records"][number];
+
+/** Override a record with a reason, or clear an override (TRD §12.7). */
+function OverrideControl({ meetingId, record }: { meetingId: string; record: AttendanceRecord }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const done = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["attendance", meetingId] });
+    setOpen(false);
+  };
+  const call = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await done();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "We couldn't reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!open)
+    return (
+      <span className="flex gap-3">
+        <button
+          type="button"
+          className="text-brand underline"
+          onClick={() => {
+            setOpen(true);
+          }}
+        >
+          Change
+        </button>
+        {record.overrideStatus === null ? null : (
+          <button
+            type="button"
+            disabled={busy}
+            className="text-red-700 underline"
+            onClick={() =>
+              void call(() =>
+                api<typeof attendance.clearAttendanceOverride>(
+                  "DELETE",
+                  "/class-meetings/:id/attendance/:studentId/override",
+                  { params: { id: meetingId, studentId: record.studentId } },
+                ),
+              )
+            }
+          >
+            Undo change
+          </button>
+        )}
+      </span>
+    );
+  return (
+    <form
+      className="mt-2 w-full space-y-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        void call(() =>
+          api<typeof attendance.overrideAttendance>(
+            "POST",
+            "/class-meetings/:id/attendance/:studentId/override",
+            {
+              params: { id: meetingId, studentId: record.studentId },
+              body: {
+                status: formText(form, "status") as AttendanceRecord["status"],
+                reason: formText(form, "reason"),
+              },
+            },
+          ),
+        );
+      }}
+    >
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <label className="block text-sm">
+        <span className="font-medium">Status</span>
+        <select
+          name="status"
+          defaultValue="EXCUSED"
+          className="block w-full rounded border border-slate-300 bg-white px-2 py-2"
+        >
+          {Object.entries(RECORD_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-sm">
+        <span className="font-medium">Reason (at least 5 characters)</span>
+        <input
+          name="reason"
+          required
+          minLength={5}
+          className="block w-full rounded border border-slate-300 px-2 py-2"
+        />
+      </label>
+      <div className="flex gap-3">
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded bg-brand px-3 py-1.5 text-sm text-white"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="text-sm underline"
+          onClick={() => {
+            setOpen(false);
+          }}
+        >
+          Back
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /** A Class Meeting's attendance records, for its Lecturers (TRD §12.5). */
 export function MeetingAttendancePage() {
   const { meetingId } = useParams({ from: "/teach/meetings/$meetingId/attendance" });
@@ -319,6 +442,7 @@ export function MeetingAttendancePage() {
                 {r.late ? ", late" : ""}
                 {r.overrideStatus === null ? "" : " (changed by staff)"}
               </span>
+              <OverrideControl meetingId={meetingId} record={r} />
             </li>
           ))}
         </ul>
