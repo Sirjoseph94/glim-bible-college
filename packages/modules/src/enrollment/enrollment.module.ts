@@ -51,7 +51,12 @@ class EnrollmentHooks implements OnModuleInit {
   }
 }
 
-const services = [StudentsService, RegistrationService, CourseEnrollmentsService, ProgressionService];
+const services = [
+  StudentsService,
+  RegistrationService,
+  CourseEnrollmentsService,
+  ProgressionService,
+];
 
 /** Students, programme enrollments and (later) course enrollments (TRD §9.3). */
 @Module({

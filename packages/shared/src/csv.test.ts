@@ -44,7 +44,11 @@ describe("parseCsv", () => {
   });
 
   it("reads back what toCsv writes", () => {
-    const rows = [["x", "y"], ["1,2", 'q"q'], ["", "line\nbreak"]];
+    const rows = [
+      ["x", "y"],
+      ["1,2", 'q"q'],
+      ["", "line\nbreak"],
+    ];
     const [headers = [], ...body] = rows;
     expect(parseCsv(toCsv(headers, body))).toEqual(rows);
   });

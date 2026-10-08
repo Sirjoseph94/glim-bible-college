@@ -181,10 +181,7 @@ beforeAll(async () => {
       ),
     );
     offerings[key] = offering;
-    await q("UPDATE course_offerings SET status = $2 WHERE id = $1", [
-      offering,
-      key.toUpperCase(),
-    ]);
+    await q("UPDATE course_offerings SET status = $2 WHERE id = $1", [offering, key.toUpperCase()]);
   }
   unwrap(await calendar.openRegistration(semesterId, SYSTEM_ACTOR));
   unwrap(await calendar.activateSemester(semesterId, SYSTEM_ACTOR));

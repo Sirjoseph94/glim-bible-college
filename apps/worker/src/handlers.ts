@@ -44,8 +44,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
         userId: null,
         type: "JOB",
       }),
-    "academic.progression": (job) =>
-      progression.run((job.data as { sessionId: string }).sessionId),
+    "academic.progression": (job) => progression.run((job.data as { sessionId: string }).sessionId),
     "semester.open-registration": (job) =>
       registration.openRegistration((job.data as { semesterId: string }).semesterId),
     "notify.send": (job) =>
