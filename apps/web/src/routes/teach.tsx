@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import { meQuery } from "../api/session";
 import { Alert, Field, SubmitButton, formText } from "../components/form";
-import { myScheduleQuery, UpcomingMeetings } from "../components/meetings";
+import { myScheduleQuery, UpcomingMeetings, type ScheduleItem } from "../components/meetings";
 import { Time } from "../components/time";
 
 const myOfferingsQuery = queryOptions({
@@ -32,6 +32,51 @@ interface Problem {
   conflicts: { meetingId: string; title: string; scheduledStart: string }[];
 }
 
+const WEEKDAYS = [
+  ["MO", "Mon"],
+  ["TU", "Tue"],
+  ["WE", "Wed"],
+  ["TH", "Thu"],
+  ["FR", "Fri"],
+  ["SA", "Sat"],
+  ["SU", "Sun"],
+] as const;
+
+/** What went wrong, for the form: the API's message, field errors and the meetings in the way. */
+function problemOf(error: unknown): Problem {
+  if (error instanceof ApiError)
+    return {
+      message: error.message,
+      fieldErrors: error.fieldErrors,
+      conflicts: error.envelope?.error.conflicts ?? [],
+    };
+  if (error instanceof RangeError)
+    return { message: "Enter a date and times.", fieldErrors: {}, conflicts: [] };
+  return {
+    message: "We couldn't reach the server. Check your connection and try again.",
+    fieldErrors: {},
+    conflicts: [],
+  };
+}
+
+function ProblemAlert({ problem }: { problem: Problem | null }) {
+  if (problem === null) return null;
+  return (
+    <Alert tone="error">
+      {problem.message}
+      {problem.conflicts.length > 0 ? (
+        <ul className="mt-1 list-disc pl-5">
+          {problem.conflicts.map((c) => (
+            <li key={c.meetingId}>
+              {c.title}, <Time value={c.scheduledStart} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Alert>
+  );
+}
+
 /**
  * Schedules one Class Meeting (TRD §11, v1 spec). Times are typed in the institution's timezone;
  * the Room is optional (online only) and so is the Google Meet link.
@@ -44,6 +89,7 @@ function ScheduleMeetingForm({ offering, onDone }: { offering: Offering; onDone:
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [warnings, setWarnings] = useState<ScheduleWarning[]>([]);
+  const [repeat, setRepeat] = useState(false);
 
   async function submit(element: HTMLFormElement) {
     const form = new FormData(element);
@@ -54,39 +100,50 @@ function ScheduleMeetingForm({ offering, onDone }: { offering: Offering; onDone:
     try {
       const roomId = formText(form, "roomId");
       const link = formText(form, "onlineLink");
-      const created = await api<typeof meetings.createClassMeeting>(
-        "POST",
-        "/course-offerings/:id/class-meetings",
-        {
-          params: { id: offering.id },
-          headers: { "idempotency-key": crypto.randomUUID() },
-          body: {
-            title: formText(form, "title"),
-            scheduledStart: zonedToInstant(date, formText(form, "start"), zone),
-            scheduledEnd: zonedToInstant(date, formText(form, "end"), zone),
-            roomId: roomId === "" ? null : roomId,
-            onlineLink: link === "" ? null : link,
-          },
-        },
-      );
+      const start = zonedToInstant(date, formText(form, "start"), zone);
+      const end = zonedToInstant(date, formText(form, "end"), zone);
+      const common = {
+        roomId: roomId === "" ? null : roomId,
+        onlineLink: link === "" ? null : link,
+      };
+      const headers = { "idempotency-key": crypto.randomUUID() };
+      const created = repeat
+        ? await api<typeof meetings.createClassMeetingSeries>(
+            "POST",
+            "/course-offerings/:id/class-meeting-series",
+            {
+              params: { id: offering.id },
+              headers,
+              body: {
+                ...common,
+                titleTemplate: formText(form, "title"),
+                weekdays: form.getAll("weekday") as (typeof WEEKDAYS)[number][0][],
+                startsOn: date,
+                untilOn: formText(form, "untilOn") || null,
+                startTime: formText(form, "start"),
+                durationMinutes: Math.round((Date.parse(end) - Date.parse(start)) / 60_000),
+              },
+            },
+          )
+        : await api<typeof meetings.createClassMeeting>(
+            "POST",
+            "/course-offerings/:id/class-meetings",
+            {
+              params: { id: offering.id },
+              headers,
+              body: {
+                ...common,
+                title: formText(form, "title"),
+                scheduledStart: start,
+                scheduledEnd: end,
+              },
+            },
+          );
       await queryClient.invalidateQueries({ queryKey: myScheduleQuery.queryKey });
       if (created.warnings.length > 0) setWarnings(created.warnings);
       else onDone();
     } catch (error) {
-      if (error instanceof ApiError)
-        setProblem({
-          message: error.message,
-          fieldErrors: error.fieldErrors,
-          conflicts: error.envelope?.error.conflicts ?? [],
-        });
-      else if (error instanceof RangeError)
-        setProblem({ message: "Enter a date and times.", fieldErrors: {}, conflicts: [] });
-      else
-        setProblem({
-          message: "We couldn't reach the server. Check your connection and try again.",
-          fieldErrors: {},
-          conflicts: [],
-        });
+      setProblem(problemOf(error));
     } finally {
       setBusy(false);
     }
@@ -116,24 +173,11 @@ function ScheduleMeetingForm({ offering, onDone }: { offering: Offering; onDone:
       }}
       className="space-y-3"
     >
-      {problem ? (
-        <Alert tone="error">
-          {problem.message}
-          {problem.conflicts.length > 0 ? (
-            <ul className="mt-1 list-disc pl-5">
-              {problem.conflicts.map((c) => (
-                <li key={c.meetingId}>
-                  {c.title}, <Time value={c.scheduledStart} />
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </Alert>
-      ) : null}
+      <ProblemAlert problem={problem} />
       <Field
         id={`title-${offering.id}`}
         name="title"
-        label="Title"
+        label={repeat ? "Title (use {n} for the number, e.g. Week {n})" : "Title"}
         required
         maxLength={200}
         error={problem?.fieldErrors.title}
@@ -188,7 +232,163 @@ function ScheduleMeetingForm({ offering, onDone }: { offering: Offering; onDone:
         placeholder="https://meet.google.com/abc-defg-hij"
         error={problem?.fieldErrors.onlineLink}
       />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={repeat}
+          onChange={(e) => {
+            setRepeat(e.currentTarget.checked);
+          }}
+        />
+        Repeat weekly
+      </label>
+      {repeat ? (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-slate-700">On</legend>
+          <div className="flex flex-wrap gap-3">
+            {WEEKDAYS.map(([code, label]) => (
+              <label key={code} className="flex items-center gap-1 text-sm">
+                <input type="checkbox" name="weekday" value={code} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <Field
+            id={`until-${offering.id}`}
+            name="untilOn"
+            type="date"
+            label="Until (optional)"
+            error={problem?.fieldErrors.untilOn}
+          />
+        </fieldset>
+      ) : null}
       <SubmitButton busy={busy}>Schedule</SubmitButton>
+    </form>
+  );
+}
+
+/** Reschedule or cancel one of my Class Meetings (or, for a series, it and the later ones). */
+function MeetingActions({ meeting }: { meeting: ScheduleItem }) {
+  const queryClient = useQueryClient();
+  const me = useQuery(meQuery);
+  const zone = me.data?.institution.timezone ?? "Africa/Lagos";
+  const [mode, setMode] = useState<"idle" | "move" | "cancel">("idle");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const done = async () => {
+    await queryClient.invalidateQueries({ queryKey: myScheduleQuery.queryKey });
+    setMode("idle");
+  };
+
+  async function send(element: HTMLFormElement) {
+    const form = new FormData(element);
+    const scope =
+      meeting.seriesId === null
+        ? undefined
+        : (formText(form, "scope") as "THIS_ONLY" | "ALL_FUTURE");
+    setBusy(true);
+    setProblem(null);
+    try {
+      if (mode === "cancel") {
+        await api<typeof meetings.cancelClassMeeting>("POST", "/class-meetings/:id/cancel", {
+          params: { id: meeting.id },
+          body: { reason: formText(form, "reason"), ...(scope ? { scope } : {}) },
+        });
+      } else {
+        const date = formText(form, "date");
+        await api<typeof meetings.updateClassMeeting>("PATCH", "/class-meetings/:id", {
+          params: { id: meeting.id },
+          headers: { "if-match": `"${String(meeting.version)}"` },
+          body: {
+            scheduledStart: zonedToInstant(date, formText(form, "start"), zone),
+            scheduledEnd: zonedToInstant(date, formText(form, "end"), zone),
+            ...(scope ? { scope } : {}),
+          },
+        });
+      }
+      await done();
+    } catch (error) {
+      setProblem(problemOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (mode === "idle")
+    return (
+      <div className="flex gap-4 text-sm">
+        <button
+          type="button"
+          className="text-brand underline"
+          onClick={() => {
+            setMode("move");
+          }}
+        >
+          Reschedule
+        </button>
+        <button
+          type="button"
+          className="text-red-700 underline"
+          onClick={() => {
+            setMode("cancel");
+          }}
+        >
+          Cancel class
+        </button>
+      </div>
+    );
+  return (
+    <form
+      className="space-y-2 border-t border-slate-100 pt-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void send(event.currentTarget);
+      }}
+    >
+      <ProblemAlert problem={problem} />
+      {mode === "move" ? (
+        <>
+          <Field id={`mv-date-${meeting.id}`} name="date" type="date" label="New date" required />
+          <div className="grid grid-cols-2 gap-3">
+            <Field id={`mv-start-${meeting.id}`} name="start" type="time" label="Starts" required />
+            <Field id={`mv-end-${meeting.id}`} name="end" type="time" label="Ends" required />
+          </div>
+        </>
+      ) : (
+        <Field
+          id={`cx-reason-${meeting.id}`}
+          name="reason"
+          label="Reason (students will see it)"
+          required
+          minLength={3}
+        />
+      )}
+      {meeting.seriesId === null ? null : (
+        <label className="block space-y-1 text-sm">
+          <span className="font-medium text-slate-700">Which Class Meetings?</span>
+          <select
+            name="scope"
+            defaultValue="THIS_ONLY"
+            className="block w-full rounded border border-slate-300 bg-white px-2 py-2"
+          >
+            <option value="THIS_ONLY">Just this one</option>
+            <option value="ALL_FUTURE">This one and the later ones in the series</option>
+          </select>
+        </label>
+      )}
+      <div className="flex items-center gap-4">
+        <SubmitButton busy={busy}>{mode === "move" ? "Move class" : "Cancel class"}</SubmitButton>
+        <button
+          type="button"
+          className="text-sm underline"
+          onClick={() => {
+            setMode("idle");
+            setProblem(null);
+          }}
+        >
+          Back
+        </button>
+      </div>
     </form>
   );
 }
@@ -245,6 +445,7 @@ export function TeachPage() {
         title="My teaching schedule"
         as="LECTURER"
         empty="No Class Meetings in the next two weeks."
+        actions={(meeting) => <MeetingActions meeting={meeting} />}
       />
       <section className="space-y-2">
         <h2 className="text-xl font-semibold">My offerings</h2>

@@ -2,7 +2,7 @@ import type { ScheduleConflict, ScheduleWarning } from "@glim/contracts";
 import { Db, PG, pgError, schema, withSavepoint, type Database } from "@glim/db";
 import { CLOCK, domainError, type Clock, type DomainError } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, ne, sql } from "drizzle-orm";
 
 /** A Class Meeting's place in time, for booking and conflict checks. */
 export interface MeetingTime {
@@ -11,6 +11,12 @@ export interface MeetingTime {
   start: Date;
   end: Date;
 }
+
+export type SeriesRow = typeof schema.classMeetingSeries.$inferSelect;
+export type NewSeries = Omit<
+  typeof schema.classMeetingSeries.$inferInsert,
+  "id" | "createdAt" | "updatedAt" | "version"
+>;
 
 const SAMPLE_SIZE = 5;
 
@@ -208,6 +214,68 @@ export class SchedulingService {
           )})`,
       ),
     );
+  }
+
+  /**
+   * Moves a meeting's Lecturer slots with it (a reschedule); the constraint re-checks them. An
+   * Academic Admin's override marks them so the constraint ignores them.
+   */
+  async moveSlots(
+    db: Database,
+    meetingId: string,
+    start: Date,
+    end: Date,
+    override: { reason: string } | null,
+  ): Promise<void> {
+    const s = schema.meetingLecturerSlots;
+    await db
+      .update(s)
+      .set({
+        during: range(start, end),
+        ...(override === null ? {} : { override: true, overrideReason: override.reason }),
+      })
+      .where(eq(s.classMeetingId, meetingId));
+  }
+
+  /**
+   * Frees the Lecturers of cancelled meetings. `no_lecturer_overlap` doesn't look at meeting
+   * state, so a cancelled meeting must not keep its slots.
+   */
+  async freeSlots(db: Database, meetingIds: string[]): Promise<void> {
+    if (meetingIds.length === 0) return;
+    const s = schema.meetingLecturerSlots;
+    await db.delete(s).where(inArray(s.classMeetingId, meetingIds));
+  }
+
+  // ---- series (owner: scheduling) ----
+
+  async insertSeries(db: Database, values: NewSeries): Promise<SeriesRow> {
+    const now = this.clock.now();
+    const [row] = await db
+      .insert(schema.classMeetingSeries)
+      .values({ ...values, createdAt: now, updatedAt: now })
+      .returning();
+    if (row === undefined) throw new Error("series insert returned nothing");
+    return row;
+  }
+
+  async updateSeries(db: Database, id: string, change: Partial<NewSeries>): Promise<void> {
+    const ms = schema.classMeetingSeries;
+    await db
+      .update(ms)
+      .set({ ...change, updatedAt: this.clock.now(), version: sql`${ms.version} + 1` })
+      .where(eq(ms.id, id));
+  }
+
+  async series(id: string, db: Database = this.db.read): Promise<SeriesRow | null> {
+    const ms = schema.classMeetingSeries;
+    const [row] = await db.select().from(ms).where(eq(ms.id, id));
+    return row ?? null;
+  }
+
+  async activeSeries(): Promise<SeriesRow[]> {
+    const ms = schema.classMeetingSeries;
+    return this.db.read.select().from(ms).where(eq(ms.status, "ACTIVE"));
   }
 
   private async slotConflicts(

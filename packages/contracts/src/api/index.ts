@@ -50,6 +50,8 @@ export const ENDPOINTS = [
   meetings.listClassMeetings,
   meetings.getClassMeeting,
   meetings.updateClassMeeting,
+  meetings.cancelClassMeeting,
+  meetings.createClassMeetingSeries,
   meetings.getMySchedule,
   auth.login,
   auth.logout,
@@ -158,7 +160,12 @@ export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";
 export { IMPORT_KINDS, type ImportJob, type ImportKind } from "./imports";
 export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollment";
 export type { Me } from "./me";
-export { MEET_LINK_PATTERN, type ClassMeeting, type ScheduleWarning } from "./meetings";
+export {
+  MEET_LINK_PATTERN,
+  type ClassMeeting,
+  type ClassMeetingSeries,
+  type ScheduleWarning,
+} from "./meetings";
 export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";

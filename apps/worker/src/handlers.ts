@@ -1,6 +1,7 @@
 import type { DomainEvent, QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService, UserAdminService } from "@glim/modules/identity";
+import { SeriesService } from "@glim/modules/class-meeting";
 import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
@@ -29,6 +30,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const registration = deps.context.get(RegistrationService);
   const progression = deps.context.get(ProgressionService);
   const imports = deps.context.get(ImportsService);
+  const series = deps.context.get(SeriesService);
   const userAdmin = deps.context.get(UserAdminService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
@@ -37,6 +39,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "admissions.intake-status": () => intakes.syncStatuses({ userId: null, type: "JOB" }),
     "admissions.offer-sweep": () => offers.sweep(),
     "admissions.purge": () => purge.run(),
+    "class-meeting.series-extend": () => series.extend(),
     "import.run": (job) => imports.run((job.data as { importJobId: string }).importJobId),
     // An invite for someone who has since accepted one is simply skipped.
     "identity.invite": (job) =>

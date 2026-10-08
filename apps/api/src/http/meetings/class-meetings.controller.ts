@@ -1,6 +1,6 @@
 import { meetings, type BodyOf, type ParamsOf, type QueryOf } from "@glim/contracts";
 import type { AuditActor } from "@glim/modules/audit";
-import { ClassMeetingsService } from "@glim/modules/class-meeting";
+import { ClassMeetingsService, SeriesService } from "@glim/modules/class-meeting";
 import type { ActiveSession } from "@glim/modules/identity";
 import { AppError, unwrap } from "@glim/shared";
 import { Controller, Inject } from "@nestjs/common";
@@ -8,10 +8,13 @@ import { Actor, CurrentSession } from "../../common/auth.guard";
 import { Body, Endpoint, IfMatch, Params, Query } from "../../common/endpoint";
 import type { Reply } from "../../common/response.interceptor";
 
-/** Class Meetings (TRD §11, v1 spec): schedule, read, change, and my schedule. */
+/** Class Meetings (TRD §11, v1 spec): schedule, series, read, change, cancel, and my schedule. */
 @Controller()
 export class ClassMeetingsController {
-  constructor(@Inject(ClassMeetingsService) private readonly meetings: ClassMeetingsService) {}
+  constructor(
+    @Inject(ClassMeetingsService) private readonly meetings: ClassMeetingsService,
+    @Inject(SeriesService) private readonly series: SeriesService,
+  ) {}
 
   @Endpoint(meetings.createClassMeeting)
   async create(
@@ -54,6 +57,30 @@ export class ClassMeetingsController {
     return unwrap(
       await this.meetings.update(params.id, version, body, { ...actor, userId: session.userId }),
     );
+  }
+
+  @Endpoint(meetings.cancelClassMeeting)
+  async cancel(
+    @Params(meetings.cancelClassMeeting) params: ParamsOf<typeof meetings.cancelClassMeeting>,
+    @Body(meetings.cancelClassMeeting) body: BodyOf<typeof meetings.cancelClassMeeting>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof meetings.cancelClassMeeting>> {
+    return unwrap(
+      await this.meetings.cancel(params.id, body, { ...actor, userId: session.userId }),
+    );
+  }
+
+  @Endpoint(meetings.createClassMeetingSeries)
+  async createSeries(
+    @Params(meetings.createClassMeetingSeries)
+    params: ParamsOf<typeof meetings.createClassMeetingSeries>,
+    @Body(meetings.createClassMeetingSeries)
+    body: BodyOf<typeof meetings.createClassMeetingSeries>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof meetings.createClassMeetingSeries>> {
+    return unwrap(await this.series.create(params.id, body, { ...actor, userId: session.userId }));
   }
 
   @Endpoint(meetings.getMySchedule)

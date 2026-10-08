@@ -1,10 +1,13 @@
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
+import { NotificationsModule } from "@glim/modules/notifications";
 import { SchedulingModule } from "@glim/modules/scheduling";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
+import { MeetingWriter } from "./meeting-writer";
+import { SeriesService } from "./series.service";
 
 /** Class Meetings tell authorization which offering each belongs to (§7.2). */
 @Injectable()
@@ -25,8 +28,14 @@ class ClassMeetingResources implements OnModuleInit {
 
 /** Hybrid Class Meetings: a Room and an online link (TRD §11, v1 spec). */
 @Module({
-  imports: [AuditModule, AuthorizationModule, IdentityModule, SchedulingModule],
-  providers: [ClassMeetingsService, ClassMeetingResources],
-  exports: [ClassMeetingsService],
+  imports: [
+    AuditModule,
+    AuthorizationModule,
+    IdentityModule,
+    NotificationsModule,
+    SchedulingModule,
+  ],
+  providers: [MeetingWriter, ClassMeetingsService, SeriesService, ClassMeetingResources],
+  exports: [ClassMeetingsService, SeriesService],
 })
 export class ClassMeetingModule {}

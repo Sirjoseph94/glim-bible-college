@@ -98,10 +98,14 @@ export const getClassMeeting = endpoint({
   response: classMeetingSchema,
 });
 
+/** Which occurrences of a series a change applies to (§11.9). */
+const scope = z.enum(["THIS_ONLY", "ALL_FUTURE"]);
+
 export const updateClassMeeting = endpoint({
   method: "PATCH",
   path: "/class-meetings/:id",
-  summary: "Change a Class Meeting's title, description, online link or recording mode",
+  summary:
+    "Change or reschedule a Class Meeting (or it and the series' later ones); enrolled students are told of a new time or Room",
   tag: "Class Meetings",
   auth: "session",
   permission: "meeting:class-meeting:manage",
@@ -112,11 +116,95 @@ export const updateClassMeeting = endpoint({
     .object({
       title: z.string().trim().min(1).max(200).optional(),
       description: z.string().trim().max(2000).nullable().optional(),
+      scheduledStart: z.iso.datetime({ offset: true }).optional(),
+      scheduledEnd: z.iso.datetime({ offset: true }).optional(),
+      roomId: z.uuid().nullable().optional(),
       onlineLink: onlineLink.optional(),
       recordingMode: z.enum(ENUMS["class_meetings.recording_mode"]).optional(),
+      /** For a series occurrence; THIS_ONLY when omitted. */
+      scope: scope.optional(),
+      overrideConflicts: z.boolean().optional(),
+      reason: z.string().trim().min(3).max(500).optional(),
     })
     .strict(),
-  response: classMeetingSchema,
+  response: z.object({
+    meeting: classMeetingSchema,
+    warnings: z.array(scheduleWarningSchema),
+    /** How many Class Meetings changed (more than one for ALL_FUTURE). */
+    changed: z.number().int(),
+  }),
+});
+
+export const cancelClassMeeting = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/cancel",
+  summary:
+    "Cancel a Class Meeting (or it and the series' later ones), with a reason; enrolled students are told",
+  tag: "Class Meetings",
+  auth: "session",
+  permission: "meeting:class-meeting:manage",
+  resource: { type: "class-meeting", param: "id" },
+  params: idParams,
+  body: z.object({ reason: z.string().trim().min(3).max(500), scope: scope.optional() }).strict(),
+  response: z.object({ meeting: classMeetingSchema, cancelled: z.number().int() }),
+  successStatus: 200,
+});
+
+export const seriesSchema = z.object({
+  id: z.uuid(),
+  courseOfferingId: z.uuid(),
+  titleTemplate: z.string(),
+  rrule: z.string(),
+  timezone: z.string(),
+  startsOn: z.iso.date(),
+  untilOn: z.iso.date().nullable(),
+  startTime: z.string(),
+  durationMinutes: z.number().int(),
+  roomId: z.uuid().nullable(),
+  generatedThrough: z.iso.date().nullable(),
+  status: z.enum(ENUMS["class_meeting_series.status"]),
+});
+
+export type ClassMeetingSeries = z.infer<typeof seriesSchema>;
+
+export const createClassMeetingSeries = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/class-meeting-series",
+  summary:
+    "Schedule a weekly series of Class Meetings; any clash rejects the whole series and lists the dates",
+  tag: "Class Meetings",
+  auth: "session",
+  permission: "meeting:class-meeting:manage",
+  resource: { type: "course-offering", param: "id" },
+  idempotent: true,
+  params: idParams,
+  body: z
+    .object({
+      /** `{n}` becomes the occurrence number, e.g. "Week {n}". */
+      titleTemplate: z.string().trim().min(1).max(200),
+      weekdays: z
+        .array(z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]))
+        .min(1)
+        .max(7),
+      interval: z.number().int().min(1).max(4).optional(),
+      startsOn: z.iso.date(),
+      untilOn: z.iso.date().nullable().optional(),
+      /** Wall-clock time in the institution's timezone. */
+      startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      durationMinutes: z.number().int().min(5).max(600),
+      roomId: z.uuid().nullable().optional(),
+      /** Copied to every occurrence. */
+      onlineLink: onlineLink.optional(),
+      overrideConflicts: z.boolean().optional(),
+      reason: z.string().trim().min(3).max(500).optional(),
+    })
+    .strict(),
+  response: z.object({
+    series: seriesSchema,
+    meetings: z.array(classMeetingSchema),
+    warnings: z.array(scheduleWarningSchema),
+  }),
+  successStatus: 201,
 });
 
 export const getMySchedule = endpoint({

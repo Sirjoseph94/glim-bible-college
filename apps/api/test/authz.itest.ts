@@ -425,6 +425,45 @@ const SAMPLES: Record<string, Sample> = {
     headers: { "if-match": '"999"' },
     offering: "O1",
   }),
+  // A fresh meeting each time, so every allowed caller really cancels one.
+  "POST /class-meetings/:id/cancel": async (t) => {
+    n++;
+    const start = new Date(Date.UTC(2080, 11, 1) + n * 2 * 3_600_000);
+    const created = unwrap(
+      await t.app.get(ClassMeetingsService).create(
+        personas.world.offerings.O1,
+        {
+          title: "To cancel",
+          scheduledStart: start.toISOString(),
+          scheduledEnd: new Date(start.getTime() + 3_600_000).toISOString(),
+        },
+        { ...SYSTEM_ACTOR, userId: personas.acadAdmin.userId },
+      ),
+    );
+    return {
+      url: `/api/v1/class-meetings/${created.meeting.id}/cancel`,
+      payload: { reason: "Authz test" },
+      offering: "O1",
+    };
+  },
+  // Beyond the eight-week horizon, so the series generates no meetings yet.
+  "POST /course-offerings/:id/class-meeting-series": () => {
+    n++;
+    const startsOn = new Date(Date.UTC(2081, 0, 1) + n * 7 * 86_400_000).toISOString().slice(0, 10);
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/class-meeting-series`,
+      payload: {
+        titleTemplate: "Authz {n}",
+        weekdays: ["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
+        startsOn,
+        untilOn: startsOn,
+        startTime: "09:00",
+        durationMinutes: 60,
+      },
+      headers: { "idempotency-key": `authz-series-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,

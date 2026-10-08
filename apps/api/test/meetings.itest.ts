@@ -411,7 +411,7 @@ describe("changing a Class Meeting", () => {
       });
     const ok = await patch({ onlineLink: "https://meet.google.com/xyz-abcd-efg" }, meeting.version);
     expect(ok.statusCode, ok.body).toBe(200);
-    expect(ok.json<ClassMeeting>()).toMatchObject({
+    expect(ok.json<{ meeting: ClassMeeting }>().meeting).toMatchObject({
       onlineLink: "https://meet.google.com/xyz-abcd-efg",
       version: meeting.version + 1,
     });
@@ -419,7 +419,9 @@ describe("changing a Class Meeting", () => {
     const bad = await patch({ onlineLink: "https://example.com" }, meeting.version + 1);
     expect(bad.json<ErrorBody>().error.code).toBe("ONLINE_LINK_INVALID");
     const cleared = await patch({ onlineLink: "" }, meeting.version + 1);
-    expect(cleared.json<ClassMeeting>()).toMatchObject({ hasOnlineLink: false });
+    expect(cleared.json<{ meeting: ClassMeeting }>().meeting).toMatchObject({
+      hasOnlineLink: false,
+    });
   });
 });
 

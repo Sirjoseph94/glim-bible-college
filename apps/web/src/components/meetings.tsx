@@ -1,5 +1,6 @@
 import type { ClassMeeting, meetings } from "@glim/contracts";
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { api } from "../api/client";
 import { Time } from "./time";
 
@@ -20,7 +21,14 @@ const STATE_LABELS: Partial<Record<ClassMeeting["state"], string>> = {
 };
 
 /** One Class Meeting: course, when (viewer's zone, Lagos alongside), where, and how to join. */
-export function MeetingCard({ meeting }: { meeting: ClassMeeting }) {
+export function MeetingCard({
+  meeting,
+  children,
+}: {
+  meeting: ClassMeeting;
+  /** Actions for people who manage the meeting. */
+  children?: ReactNode;
+}) {
   const cancelled = meeting.state === "CANCELLED";
   const state = STATE_LABELS[meeting.state];
   return (
@@ -60,6 +68,7 @@ export function MeetingCard({ meeting }: { meeting: ClassMeeting }) {
           " · no online link yet"
         )}
       </div>
+      {meeting.state === "CANCELLED" ? null : children}
     </li>
   );
 }
@@ -69,10 +78,12 @@ export function UpcomingMeetings({
   title,
   as,
   empty,
+  actions,
 }: {
   title: string;
   as?: ScheduleItem["as"];
   empty?: string;
+  actions?: (meeting: ScheduleItem) => ReactNode;
 }) {
   const schedule = useQuery(myScheduleQuery);
   if (schedule.isPending) return <div className="h-24 animate-pulse rounded bg-slate-200" />;
@@ -85,7 +96,9 @@ export function UpcomingMeetings({
       {items.length === 0 ? <p className="text-sm text-slate-600">{empty}</p> : null}
       <ul className="space-y-2">
         {items.map((m) => (
-          <MeetingCard key={`${m.as}-${m.id}`} meeting={m} />
+          <MeetingCard key={`${m.as}-${m.id}`} meeting={m}>
+            {actions?.(m)}
+          </MeetingCard>
         ))}
       </ul>
     </section>

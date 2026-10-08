@@ -89,6 +89,13 @@ export const QUEUES = {
   "import.run": { role: "general", retryLimit: 2, expireInSeconds: HOUR, slice: "v1" },
   /** One invite email; imports spread these out with `startAfter` (rate cap). */
   "identity.invite": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN, slice: "v1" },
+  /** Daily: generates each active series' Class Meetings up to the 8-week horizon (§11.9). */
+  "class-meeting.series-extend": {
+    role: "general",
+    retryLimit: 3,
+    expireInSeconds: 10 * MIN,
+    slice: "v1",
+  },
   "semester.open-registration": {
     role: "general",
     retryLimit: 3,
@@ -176,6 +183,11 @@ export const CRON_SCHEDULES = {
     tz: "Africa/Lagos",
   },
   "admissions.purge": { queue: "admissions.purge", cron: "0 3 * * *", tz: "UTC" },
+  "class-meeting.series-extend": {
+    queue: "class-meeting.series-extend",
+    cron: "15 0 * * *",
+    tz: "Africa/Lagos",
+  },
   "video.purge-deleted": { queue: "video.purge-deleted", cron: "30 3 * * *", tz: "UTC" },
   "video.availability-check": { queue: "video.availability-check", cron: "0 4 * * *", tz: "UTC" },
   "notify.digest": { queue: "notify.digest", cron: "0 6 * * *", tz: "Africa/Lagos" },

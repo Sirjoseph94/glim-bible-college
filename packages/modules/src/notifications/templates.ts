@@ -41,6 +41,13 @@ function email(input: {
   return { subject: input.subject, category: input.category, text, html };
 }
 
+/** A Class Meeting's time in the recipient's zone, with Lagos time alongside when it differs. */
+function meetingTime(data: Record<string, unknown>): string {
+  const viewerZone = str(data.timeZone) || "Africa/Lagos";
+  const institutionZone = str(data.institutionZone) || "Africa/Lagos";
+  return formatDualTime(str(data.scheduledStart), { viewerZone, institutionZone, withDate: true });
+}
+
 /** Email templates by notification kind. Kinds without one are in-app only. */
 export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
   "admissions.application.receipt": ({ data, appOrigin }) =>
@@ -135,4 +142,38 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       ],
       link: { label: "View your application", url: `${appOrigin}/application` },
     }),
+  "meeting.rescheduled": ({ data, appOrigin }) => {
+    const when = meetingTime(data);
+    const room = str(data.roomName);
+    const more =
+      Number(data.count) > 1
+        ? ` This applies to it and the ${String(Number(data.count) - 1)} later Class Meetings in the series.`
+        : "";
+    return email({
+      subject: `${str(data.courseCode)} class moved: ${str(data.title)}`,
+      category: "meeting-rescheduled",
+      paragraphs: [
+        `${str(data.courseCode)}: "${str(data.title)}" has moved to ${when}.${more}`,
+        room === "" ? "It is online only." : `It is in ${room}, and online.`,
+      ],
+      link: { label: "See your schedule", url: `${appOrigin}/` },
+    });
+  },
+
+  "meeting.cancelled": ({ data, appOrigin }) => {
+    const when = meetingTime(data);
+    const more =
+      Number(data.count) > 1
+        ? ` The ${String(Number(data.count) - 1)} later Class Meetings in the series are cancelled too.`
+        : "";
+    return email({
+      subject: `${str(data.courseCode)} class cancelled: ${str(data.title)}`,
+      category: "meeting-cancelled",
+      paragraphs: [
+        `${str(data.courseCode)}: "${str(data.title)}" on ${when} is cancelled.${more}`,
+        ...(str(data.reason) === "" ? [] : [`Reason: ${str(data.reason)}`]),
+      ],
+      link: { label: "See your schedule", url: `${appOrigin}/` },
+    });
+  },
 };
