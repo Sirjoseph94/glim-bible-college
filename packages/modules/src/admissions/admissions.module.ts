@@ -5,14 +5,19 @@ import { IdentityModule } from "@glim/modules/identity";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { eq } from "drizzle-orm";
+import { ApplicationsService } from "./applications.service";
 import { IntakesService } from "./intakes.service";
 
-/** Admissions owns intakes, so it tells authorization whether one exists (§7.2). */
+/**
+ * Admissions owns intakes and applications, so it tells authorization whether one exists and,
+ * for an application, whose it is (§7.2 applicant path).
+ */
 @Injectable()
 class AdmissionsResources implements OnModuleInit {
   constructor(
     @Inject(Db) private readonly db: Db,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(ApplicationsService) private readonly applications: ApplicationsService,
   ) {}
 
   onModuleInit(): void {
@@ -24,10 +29,15 @@ class AdmissionsResources implements OnModuleInit {
         .where(eq(schema.intakes.id, id));
       return row === undefined ? null : {};
     });
+    this.authorization.registerLoader("application", async (id) => {
+      if (!isUuid(id)) return null;
+      const owner = await this.applications.ownerOf(id);
+      return owner === null ? null : { ownerUserId: owner, applicationId: id };
+    });
   }
 }
 
-const services = [IntakesService];
+const services = [IntakesService, ApplicationsService];
 
 @Module({
   imports: [AuditModule, AuthorizationModule, IdentityModule],

@@ -9,7 +9,7 @@ import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
-import { CalendarService } from "@glim/modules/academic";
+import { CalendarService, ProgrammesService } from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { StaffAccountsService } from "@glim/modules/identity";
 import { systemClock } from "@glim/shared";
@@ -68,7 +68,17 @@ for (const [email, displayName, role] of E2E_STAFF) {
     .get(StaffAccountsService)
     .inviteStaff({ email, displayName, roles: [role] }, SYSTEM_ACTOR);
 }
-// A planned Academic Session for the admissions spec's intake.
+// A programme applicants can choose, and a planned Academic Session for the admissions spec's intake.
+await app.get(ProgrammesService).create(
+  {
+    code: "DMIN",
+    name: "Diploma in Ministry",
+    awardType: "DIPLOMA",
+    durationSemesters: 4,
+    levels: 2,
+  },
+  SYSTEM_ACTOR,
+);
 await app
   .get(CalendarService)
   .createSession(

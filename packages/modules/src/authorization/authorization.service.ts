@@ -76,9 +76,8 @@ export function assignmentHasCapability(
 }
 
 /**
- * The single authorization decision point (§7.2, INV-1). Deny by default. Staff and lecturer
- * paths are complete; the student and applicant paths arrive with enrollments (ticket 19) and
- * applications (ticket 12).
+ * The single authorization decision point (§7.2, INV-1). Deny by default. The staff, lecturer
+ * and applicant paths are complete; the student path arrives with enrollments (ticket 19).
  */
 @Injectable()
 export class AuthorizationService {
@@ -134,7 +133,15 @@ export class AuthorizationService {
     }
 
     // Student path (step 4): lands with course enrollments (ticket 19).
-    // Applicant path (step 5): lands with applications (ticket 12).
+
+    // Applicant path (step 5): their own application only.
+    if (
+      MATRIX.permissions[permission].applicant === true &&
+      context?.applicationId !== undefined &&
+      context.ownerUserId === principal.userId
+    )
+      return "ALLOW";
+
     return resource === undefined ? "DENY" : "NOT_FOUND";
   }
 
@@ -145,8 +152,22 @@ export class AuthorizationService {
   }
 
   /** Roles derived from data rather than assignments (§7.1), for navigation (`GET /me`). */
-  async derivedRoles(userId: string): Promise<{ isLecturer: boolean }> {
-    return { isLecturer: await this.isActiveLecturer(userId) };
+  async derivedRoles(userId: string): Promise<{ isLecturer: boolean; isApplicant: boolean }> {
+    const [isLecturer, isApplicant] = await Promise.all([
+      this.isActiveLecturer(userId),
+      this.ownsAnApplication(userId),
+    ]);
+    return { isLecturer, isApplicant };
+  }
+
+  private async ownsAnApplication(userId: string): Promise<boolean> {
+    const a = schema.applications;
+    const [row] = await this.db.read
+      .select({ id: a.id })
+      .from(a)
+      .where(eq(a.applicantUserId, userId))
+      .limit(1);
+    return row !== undefined;
   }
 
   private async isActiveLecturer(userId: string): Promise<boolean> {

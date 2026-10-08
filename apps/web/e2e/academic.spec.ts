@@ -32,7 +32,10 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
     await expect(page.getByText(`${code} ${title}`)).toBeVisible();
   }
 
-  await page.getByRole("button", { name: "New curriculum version" }).click();
+  await page
+    .getByRole("region", { name: "Certificate in Theology" })
+    .getByRole("button", { name: "New curriculum version" })
+    .click();
   await expect(page.getByRole("heading", { name: /Curriculum v1/ })).toBeVisible();
   await page.getByRole("button", { name: "Add a course" }).click();
   await page.getByRole("button", { name: "Add a course" }).click();

@@ -1,5 +1,6 @@
 import * as academic from "./academic";
 import * as admissions from "./admissions";
+import * as applications from "./applications";
 import * as audit from "./audit";
 import * as auth from "./auth";
 import * as calendar from "./calendar";
@@ -9,7 +10,19 @@ import * as platform from "./platform";
 import * as settings from "./settings";
 import * as users from "./users";
 
-export { academic, admissions, audit, auth, calendar, me, offerings, platform, settings, users };
+export {
+  academic,
+  admissions,
+  applications,
+  audit,
+  auth,
+  calendar,
+  me,
+  offerings,
+  platform,
+  settings,
+  users,
+};
 
 /** Every endpoint, for the OpenAPI document and the route-coverage test. */
 export const ENDPOINTS = [
@@ -82,9 +95,20 @@ export const ENDPOINTS = [
   admissions.openIntake,
   admissions.closeIntake,
   admissions.getCurrentIntake,
+  applications.startApplication,
+  applications.myApplications,
+  applications.getApplication,
+  applications.saveApplicationDraft,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
+export {
+  APPLICATION_SECTIONS,
+  type Application,
+  type ApplicationDraft,
+  type ApplicationSection,
+  type ApplicationSummary,
+} from "./applications";
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
 export type { Me } from "./me";

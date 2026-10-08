@@ -19,6 +19,7 @@ const SECRET_KEYS = [
   "clientSecret",
   "apiKey",
   // INV-15: sensitive applicant answers never reach logs.
+  "spiritual",
   "spiritualBackground",
   "spiritual_background",
 ];

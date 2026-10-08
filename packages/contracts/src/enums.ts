@@ -131,6 +131,22 @@ export const ENUMS = {
     "SEPARATED",
     "DIVORCED",
   ],
+  /** `heard_via` is a text[] whose items are these (§10.2 section 6). */
+  "applications.heard_via": [
+    "FACEBOOK",
+    "INSTAGRAM",
+    "EMAIL",
+    "SMS",
+    "BILLBOARD",
+    "FLYER",
+    "FRIEND",
+    "STUDENT",
+    "ALUMNI",
+    "STAFF",
+    "BABIC_CONFERENCE",
+    "NCGC_MEMBER",
+    "OTHER",
+  ],
 } as const;
 
 export type EnumKey = keyof typeof ENUMS;

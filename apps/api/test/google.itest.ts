@@ -1,6 +1,7 @@
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { cookieValue, viaGoogle as viaFakeGoogle } from "./google-flow";
 import { createTestApp, type TestApp } from "./harness";
 import { createUser, sessionFor } from "./personas";
 
@@ -28,36 +29,8 @@ beforeEach(async () => {
   await t.db.pool.query("UPDATE settings SET staff_email_domains = '{}'");
 });
 
-function cookieValue(res: { headers: Record<string, unknown> }, name: string): string | undefined {
-  const raw = res.headers["set-cookie"];
-  const all = (Array.isArray(raw) ? raw : [raw]).filter((c): c is string => typeof c === "string");
-  return all.find((c) => c.startsWith(`${name}=`))?.split(";")[0];
-}
-
-/** Drives the whole redirect dance: app → Google → app callback. Returns the callback response. */
-async function viaGoogle(
-  user: FakeGoogleUser,
-  options: { intent?: "signin" | "link"; headers?: Record<string, string>; returnTo?: string } = {},
-) {
-  issuer.nextSignIn(user);
-  const query = new URLSearchParams({
-    intent: options.intent ?? "signin",
-    ...(options.returnTo ? { returnTo: options.returnTo } : {}),
-  });
-  const start = await t.request({
-    url: `/api/v1/auth/google/start?${query.toString()}`,
-    headers: options.headers ?? {},
-  });
-  expect(start.statusCode).toBe(302);
-  const flowCookie = cookieValue(start, "__Host-glim_oidc");
-  const atGoogle = await fetch(String(start.headers.location), { redirect: "manual" });
-  const callback = new URL(atGoogle.headers.get("location") ?? "");
-  const cookies = [flowCookie, options.headers?.cookie].filter((c) => c !== undefined).join("; ");
-  return t.request({
-    url: `${callback.pathname}${callback.search}`,
-    headers: { ...options.headers, cookie: cookies },
-  });
-}
+const viaGoogle = (user: FakeGoogleUser, options?: Parameters<typeof viaFakeGoogle>[3]) =>
+  viaFakeGoogle(t, issuer, user, options);
 
 async function meWith(sessionCookie: string | undefined) {
   return t.request({ url: "/api/v1/me", headers: { cookie: sessionCookie ?? "" } });

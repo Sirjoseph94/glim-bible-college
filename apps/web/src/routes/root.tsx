@@ -39,6 +39,11 @@ export function RootLayout() {
                 Admissions
               </Link>
             ) : null}
+            {me.data.roles.isApplicant ? (
+              <Link to="/application/edit" className="underline">
+                My application
+              </Link>
+            ) : null}
             {me.data.roles.isLecturer ? (
               <Link to="/teach" className="underline">
                 My offerings

@@ -38,7 +38,12 @@ export class MeService {
         timezoneSet: user.timezone !== null,
       },
       institution,
-      roles: { staff, isLecturer: derived.isLecturer, isStudent: false, isApplicant: false },
+      roles: {
+        staff,
+        isLecturer: derived.isLecturer,
+        isStudent: false,
+        isApplicant: derived.isApplicant,
+      },
       csrfToken: session.csrfToken,
       featureFlags: {},
     };

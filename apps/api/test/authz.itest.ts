@@ -34,6 +34,8 @@ interface SampleRequest {
   headers?: Record<string, string>;
   /** The persona-world offering the request is about, so the lecturer path can be predicted. */
   offering?: OfferingKey;
+  /** The persona who owns the resource (an applicant's application), for the applicant path. */
+  owner?: PersonaName;
 }
 
 type Sample = (t: TestApp) => Promise<SampleRequest>;
@@ -312,6 +314,16 @@ const SAMPLES: Record<string, Sample> = {
   "POST /intakes/:id/close": async (t) => ({
     url: `/api/v1/intakes/${(await intakeFixture(t)).intakeId}/close`,
   }),
+  "GET /applications/:id": async (t) => ({
+    url: `/api/v1/applications/${await applicationFixture(t)}`,
+    owner: "applicant",
+  }),
+  "PATCH /applications/:id": async (t) => ({
+    url: `/api/v1/applications/${await applicationFixture(t)}`,
+    payload: { personal: { firstName: "Changed" } },
+    headers: { "if-match": '"999"' },
+    owner: "applicant",
+  }),
   "POST /curricula/:id/clone": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/clone`,
     payload: { effectiveFrom: "2027-09-01" },
@@ -355,6 +367,19 @@ async function lecturerFixture(t: TestApp) {
   );
   lecturerShared = { lecturerId: lecturer.id };
   return lecturerShared;
+}
+
+let applicationShared: string | undefined;
+/** The applicant persona's draft application, in the fixture intake. */
+async function applicationFixture(t: TestApp): Promise<string> {
+  if (applicationShared !== undefined) return applicationShared;
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO applications (intake_id, programme_id, applicant_user_id, study_mode)
+     VALUES ($1, $2, $3, 'ONLINE') RETURNING id`,
+    [(await intakeFixture(t)).intakeId, (await fixtures(t)).programmeId, personas.applicant.userId],
+  );
+  applicationShared = rows[0]?.id ?? "";
+  return applicationShared;
 }
 
 let intakeShared: { sessionId: string; intakeId: string } | undefined;
@@ -450,14 +475,16 @@ let personas: Personas;
 
 /**
  * What matrix.json says should happen (the oracle): staff path by role, lecturer path by the
- * persona's assignment on the request's offering (§7.4).
+ * persona's assignment on the request's offering (§7.4), applicant path by ownership.
  */
 function expectedAllowed(
   persona: Persona,
   permission: NonNullable<EndpointSpec["permission"]>,
-  offering?: OfferingKey,
+  sample: SampleRequest,
 ): boolean {
+  const { offering, owner } = sample;
   if (AuthorizationService.staffGrants(persona.roles, permission)) return true;
+  if (MATRIX.permissions[permission].applicant === true && owner === persona.name) return true;
   const capability = MATRIX.permissions[permission].lecturer;
   if (capability === undefined) return false;
   if (capability === "*") return Object.keys(persona.teaches).length > 0;
@@ -505,7 +532,7 @@ describe.each(protectedEndpoints.map((e) => [key(e), e] as const))("%s", (_name,
         payload: sample.payload,
         headers: { ...persona.headers, ...sample.headers },
       });
-      const granted = expectedAllowed(persona, endpoint.permission, sample.offering);
+      const granted = expectedAllowed(persona, endpoint.permission, sample);
       if (granted) {
         expect([401, 403, 404], `${name} should be allowed: ${res.body}`).not.toContain(
           res.statusCode,

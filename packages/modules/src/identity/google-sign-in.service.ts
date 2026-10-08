@@ -17,8 +17,23 @@ import { SessionService, type ClientMeta } from "./session.service";
 import { SettingsService } from "./settings.service";
 import { signValue, verifySignedValue } from "./tokens";
 
-/** Why a Google sign-in started: to sign in, or to link Google to the signed-in account (§8.1). */
-export type GoogleIntent = "signin" | "link";
+/**
+ * Why a Google sign-in started (§8.1): to sign in, to link Google to the signed-in account, or to
+ * apply, which is the only way an unknown Google account gets a user (C-36).
+ */
+export type GoogleIntent = "signin" | "link" | "apply";
+
+/** Where each intent lands by default, and where its failures are shown. */
+const DEFAULT_RETURN: Record<GoogleIntent, string> = {
+  signin: "/",
+  link: "/profile",
+  apply: "/application/edit",
+};
+const FAILURE_PAGE: Record<GoogleIntent, string> = {
+  signin: "/login",
+  link: "/profile",
+  apply: "/apply",
+};
 
 /** Shown to the user after the redirect back; never more specific than they need. */
 export type GoogleFailure =
@@ -96,7 +111,7 @@ export class GoogleSignInService {
         state: request.state,
         nonce: request.nonce,
         codeVerifier: request.codeVerifier,
-        returnTo: safeReturnTo(options.returnTo, intent === "link" ? "/profile" : "/"),
+        returnTo: safeReturnTo(options.returnTo, DEFAULT_RETURN[intent]),
         userId: options.userId,
         expiresAt: this.clock.now().getTime() + GOOGLE_FLOW_LIFETIME_MS,
       };
@@ -135,7 +150,7 @@ export class GoogleSignInService {
       kind: "failed",
       intent: flow.intent,
       failure,
-      returnTo: flow.intent === "link" ? flow.returnTo : "/login",
+      returnTo: flow.intent === "link" ? flow.returnTo : FAILURE_PAGE[flow.intent],
     });
 
     let profile: OidcProfile;
@@ -157,7 +172,7 @@ export class GoogleSignInService {
       return linked ? { kind: "linked", returnTo: flow.returnTo } : fail("GOOGLE_ALREADY_LINKED");
     }
 
-    const result = await this.signIn(profile, context);
+    const result = await this.signIn(profile, flow.intent, context);
     return "failure" in result
       ? fail(result.failure)
       : { kind: "signed-in", signedIn: result, returnTo: flow.returnTo };
@@ -182,10 +197,12 @@ export class GoogleSignInService {
 
   /**
    * Matches by Google id, then by verified email (linking the identity on first use). Invited
-   * staff become active: Google has verified they own the address the invite went to.
+   * staff become active: Google has verified they own the address the invite went to. Only the
+   * apply intent creates a user for an unknown Google account: active, with no roles (§8.1).
    */
   private async signIn(
     profile: OidcProfile,
+    intent: "signin" | "apply",
     context: ClientMeta & { previousSessionId: string | null; actor: AuditActor },
   ): Promise<SignedIn | { failure: GoogleFailure }> {
     const u = schema.users;
@@ -198,12 +215,15 @@ export class GoogleSignInService {
     const [byEmail] = byIdentity
       ? []
       : await this.db.read.select().from(u).where(eq(u.email, profile.email));
-    const user = byIdentity?.user ?? byEmail;
+    const known = byIdentity?.user ?? byEmail;
+    if (known === undefined && intent === "apply") return this.signUpApplicant(profile, context);
+    const user = known;
     if (user === undefined || (user.status !== "ACTIVE" && user.status !== "INVITED")) {
       return { failure: "ACCOUNT_NOT_FOUND" };
     }
 
-    if ((await this.roles.activeRoles(user.id)).length > 0) {
+    const isStaff = (await this.roles.activeRoles(user.id)).length > 0;
+    if (isStaff) {
       const domains = await this.settings.getStaffEmailDomains();
       const hd = profile.hostedDomain?.toLowerCase() ?? null;
       if (domains.length > 0 && (hd === null || !domains.includes(hd)))
@@ -226,7 +246,44 @@ export class GoogleSignInService {
         .where(eq(u.id, user.id));
       if (context.previousSessionId !== null)
         await this.sessions.revoke(db, context.previousSessionId);
-      return this.sessions.create(db, user.id, context);
+      return this.sessions.create(db, user.id, {
+        ...context,
+        applicant: intent === "apply" && !isStaff,
+      });
+    });
+  }
+
+  /** Self-registration from /apply (C-36): a role-less user who becomes an Applicant on starting. */
+  private signUpApplicant(
+    profile: OidcProfile,
+    context: ClientMeta & { previousSessionId: string | null; actor: AuditActor },
+  ): Promise<SignedIn> {
+    return this.db.withTx(async ({ db }) => {
+      const now = this.clock.now();
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: profile.email,
+          displayName: profile.name?.trim() || profile.email.split("@")[0] || profile.email,
+          status: "ACTIVE",
+          lastLoginAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: schema.users.id });
+      if (user === undefined) throw new Error("user insert returned nothing");
+      const actor = { ...context.actor, userId: user.id };
+      await this.audit.record(db, actor, {
+        action: "identity.user.self-registered",
+        resourceType: "user",
+        resourceId: user.id,
+        metadata: { via: "apply" },
+      });
+      if (!(await this.insertIdentity(db, user.id, profile, actor)))
+        throw new Error("Google identity changed mid sign-up");
+      if (context.previousSessionId !== null)
+        await this.sessions.revoke(db, context.previousSessionId);
+      return this.sessions.create(db, user.id, { ...context, applicant: true });
     });
   }
 

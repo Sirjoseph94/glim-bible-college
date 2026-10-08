@@ -1,7 +1,10 @@
 import type { admissions } from "@glim/contracts";
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import { Link, useSearch } from "@tanstack/react-router";
 import { api } from "../api/client";
+import { meQuery } from "../api/session";
 import { Alert } from "../components/form";
+import { GOOGLE_ERRORS, GoogleButton } from "../components/google";
 import { CalendarDate } from "../components/time";
 
 export const currentIntakeQuery = queryOptions({
@@ -19,6 +22,8 @@ const LENGTH: Record<string, string> = {
 /** The public landing page for applicants (TRD §10.2, spec stories 1, 3, 19). */
 export function ApplyPage() {
   const current = useQuery(currentIntakeQuery);
+  const me = useQuery(meQuery);
+  const { error } = useSearch({ from: "/apply" });
   if (current.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
   if (current.isError)
     return (
@@ -28,6 +33,9 @@ export function ApplyPage() {
 
   return (
     <div className="space-y-6">
+      {error ? (
+        <Alert tone="error">{GOOGLE_ERRORS[error] ?? GOOGLE_ERRORS.GOOGLE_SIGN_IN_FAILED}</Alert>
+      ) : null}
       <section className="space-y-2">
         <h2 className="text-2xl font-semibold">Apply to study with us</h2>
         <p className="text-slate-700">
@@ -74,6 +82,21 @@ export function ApplyPage() {
             application now.
           </Alert>
         )}
+        {intake?.status === "OPEN" ? (
+          me.data ? (
+            <Link
+              to="/application/edit"
+              className="block w-full rounded bg-brand px-4 py-2 text-center font-medium text-white"
+            >
+              {me.data.roles.isApplicant ? "Continue your application" : "Start your application"}
+            </Link>
+          ) : (
+            <GoogleButton
+              href="/api/v1/auth/google/start?intent=apply&returnTo=%2Fapplication%2Fedit"
+              label="Apply with Google"
+            />
+          )
+        ) : null}
         <p className="text-sm text-slate-600">
           You apply with your Google account. No Google account?{" "}
           <a

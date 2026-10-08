@@ -18,8 +18,9 @@ interface PersonaSpec {
 }
 
 /**
- * Test personas (TRD §7.5). Staff and Lecturers exist now; students and applicants join as their
- * tickets land. `noRole` is an active user with no role and no profile.
+ * Test personas (TRD §7.5). Staff, Lecturers and an applicant exist now; students join with
+ * enrollments. `noRole` is an active user with no role and no profile. `applicant` starts the same
+ * way; tests that need their application create it (an intake would disturb other tests).
  */
 export const PERSONA_SPECS = {
   sysAdmin: { roles: ["SYSTEM_ADMIN"] },
@@ -31,6 +32,7 @@ export const PERSONA_SPECS = {
   l3Assistant: { roles: [], teaches: { O1: "ASSISTANT" } },
   l4Other: { roles: [], teaches: { O2: "PRIMARY" } },
   noRole: { roles: [] },
+  applicant: { roles: [] },
 } as const satisfies Record<string, PersonaSpec>;
 
 export type PersonaName = keyof typeof PERSONA_SPECS;

@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { linkToken } from "./mailbox";
+import { linkToken, nextGoogleSignIn } from "./mailbox";
 
 const EMAIL = "e2e-admissions@glim.test";
 const PASSWORD = "admissions passphrase 2026";
 
-test("an Admissions Officer plans, opens and closes the intake, and applicants see each state on /apply", async ({
+test("an Admissions Officer opens the intake, an applicant starts applying, and the intake closes", async ({
   browser,
   page,
 }) => {
@@ -37,9 +37,44 @@ test("an Admissions Officer plans, opens and closes the intake, and applicants s
   await expect(applicant.getByText("Sun, 30 Jun 2030")).toBeVisible();
   await expect(applicant.getByRole("link", { name: "Create one free" })).toBeVisible();
 
+  // The applicant signs up with Google from /apply and starts their application.
+  await nextGoogleSignIn({
+    sub: "e2e-applicant-sub",
+    email: "chioma.applicant@gmail.com",
+    name: "Chioma Eze",
+  });
+  await applicant.getByRole("link", { name: "Apply with Google" }).click();
+  await expect(applicant.getByRole("heading", { name: "Start your application" })).toBeVisible();
+  await applicant.getByLabel("Diploma in Ministry").check();
+  await applicant.getByLabel("Online").check();
+  await applicant.getByRole("button", { name: "Start my application" }).click();
+  await expect(applicant.getByRole("heading", { name: "1. Personal information" })).toBeVisible();
+
+  // Autosave: too young is refused with a reason; a corrected answer saves.
+  const saved = applicant.getByText("Saved", { exact: true });
+  await applicant.getByLabel("First name").fill("Chioma");
+  await applicant.getByLabel("Last name").fill("Eze");
+  await applicant.getByLabel("Date of birth").fill("2015-01-01");
+  await expect(applicant.getByText("Not saved — check the answers marked below")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(applicant.getByText(/You must be at least 18/).last()).toBeVisible();
+  await applicant.getByLabel("Date of birth").fill("1995-05-20");
+  await expect(saved).toBeVisible({ timeout: 15_000 });
+
+  // The email is filled in from Google and can be changed.
+  await applicant.getByRole("button", { name: "Next" }).click();
+  await expect(applicant.getByLabel("Email")).toHaveValue("chioma.applicant@gmail.com");
+
+  // Leaving and coming back resumes at the first unfinished section, with the answers kept.
+  await applicant.reload();
+  await expect(applicant.getByRole("heading", { name: "1. Personal information" })).toBeVisible();
+  await expect(applicant.getByLabel("First name")).toHaveValue("Chioma");
+  await expect(applicant.getByRole("link", { name: "My application" })).toBeVisible();
+
   await page.getByRole("button", { name: "Close now" }).click();
   await expect(page.getByText("closed", { exact: true })).toBeVisible();
-  await applicant.reload();
+  await applicant.goto("/apply");
   await expect(
     applicant.getByText("Applications for the 2030/2031 Session are closed."),
   ).toBeVisible();

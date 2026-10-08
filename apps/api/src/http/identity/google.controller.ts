@@ -37,7 +37,7 @@ export class GoogleController {
       returnTo: query.returnTo,
     });
     if ("failure" in begun) {
-      const back = query.intent === "link" ? "/profile" : "/login";
+      const back = { signin: "/login", link: "/profile", apply: "/apply" }[query.intent];
       return void reply.redirect(withParam(back, "error", begun.failure), 302);
     }
     void reply.setCookie(GOOGLE_FLOW_COOKIE, begun.flowCookie, {

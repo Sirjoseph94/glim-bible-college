@@ -47,8 +47,9 @@ function Programmes() {
       {programmes.data?.items.map((programme) => {
         const versions = curricula.data?.items.filter((c) => c.programmeId === programme.id) ?? [];
         return (
-          <div
+          <section
             key={programme.id}
+            aria-label={programme.name}
             className="space-y-2 rounded border border-slate-200 bg-white p-3"
           >
             <div className="flex flex-wrap justify-between gap-2">
@@ -100,7 +101,7 @@ function Programmes() {
             >
               New curriculum version
             </button>
-          </div>
+          </section>
         );
       })}
       <details className="rounded border border-slate-200 bg-white p-3">

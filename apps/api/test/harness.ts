@@ -18,6 +18,8 @@ export interface TestApp {
   db: Db;
   clock: TestClock;
   mailer: MemoryMailer;
+  /** Every log line the app wrote, when created with `captureLogs`. */
+  logs: string[];
   request(options: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     url: string;
@@ -37,7 +39,7 @@ function nextAddress(): string {
 
 /** Boots the real API against a fresh Postgres 18 database (spec: Seam 1). */
 export async function createTestApp(
-  options: { staticDir?: string; identityProvider?: IdentityProvider } = {},
+  options: { staticDir?: string; identityProvider?: IdentityProvider; captureLogs?: boolean } = {},
 ): Promise<TestApp> {
   const database: TestDatabase = await createTestDatabase(inject("glim").postgresAdminUrl);
   const config = loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" });
@@ -46,6 +48,10 @@ export async function createTestApp(
   const db = new Db(createPool(database.appUrl, 4), boss);
   const clock = new TestClock("2026-11-02T09:00:00Z");
   const mailer = new MemoryMailer();
+  const logs: string[] = [];
+  const logger = options.captureLogs
+    ? createLogger({ service: "api-test", level: "trace" }, { write: (line) => logs.push(line) })
+    : createLogger({ service: "api-test", level: "silent" });
   const app = await buildApp({
     config,
     db,
@@ -59,7 +65,7 @@ export async function createTestApp(
       accessKeyId: inject("glim").s3.accessKey,
       secretAccessKey: inject("glim").s3.secretKey,
     }),
-    logger: createLogger({ service: "api-test", level: "silent" }),
+    logger,
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });
   const fastify: FastifyInstance = app.getHttpAdapter().getInstance();
@@ -68,6 +74,7 @@ export async function createTestApp(
     db,
     clock,
     mailer,
+    logs,
     request: ({ method = "GET", url, headers, payload, remoteAddress }) =>
       fastify.inject({
         method,

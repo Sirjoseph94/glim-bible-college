@@ -79,12 +79,13 @@ export const GOOGLE_FAILURES = [
 export const googleStart = endpoint({
   method: "GET",
   path: "/auth/google/start",
-  summary: "Redirect to Google to sign in (or, signed in, to link a Google account)",
+  summary:
+    "Redirect to Google to sign in, to start applying (from /apply), or, signed in, to link a Google account",
   tag: "Auth",
   auth: "public",
   rateLimit: "auth",
   query: z.object({
-    intent: z.enum(["signin", "link"]).default("signin"),
+    intent: z.enum(["signin", "link", "apply"]).default("signin"),
     returnTo: z.string().max(512).optional(),
   }),
   response: z.object({}),
