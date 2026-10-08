@@ -1,6 +1,10 @@
 import { meetings, type BodyOf, type ParamsOf, type QueryOf } from "@glim/contracts";
 import type { AuditActor } from "@glim/modules/audit";
-import { ClassMeetingsService, SeriesService } from "@glim/modules/class-meeting";
+import {
+  ClassMeetingsService,
+  MeetingLifecycleService,
+  SeriesService,
+} from "@glim/modules/class-meeting";
 import type { ActiveSession } from "@glim/modules/identity";
 import { AppError, unwrap } from "@glim/shared";
 import { Controller, Inject } from "@nestjs/common";
@@ -14,6 +18,7 @@ export class ClassMeetingsController {
   constructor(
     @Inject(ClassMeetingsService) private readonly meetings: ClassMeetingsService,
     @Inject(SeriesService) private readonly series: SeriesService,
+    @Inject(MeetingLifecycleService) private readonly lifecycle: MeetingLifecycleService,
   ) {}
 
   @Endpoint(meetings.createClassMeeting)
@@ -81,6 +86,32 @@ export class ClassMeetingsController {
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof meetings.createClassMeetingSeries>> {
     return unwrap(await this.series.create(params.id, body, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(meetings.joinClassMeeting)
+  async join(
+    @Params(meetings.joinClassMeeting) params: ParamsOf<typeof meetings.joinClassMeeting>,
+    @CurrentSession() session: ActiveSession,
+  ): Promise<Reply<typeof meetings.joinClassMeeting>> {
+    return unwrap(await this.lifecycle.join(params.id, session.userId));
+  }
+
+  @Endpoint(meetings.startClassMeeting)
+  async start(
+    @Params(meetings.startClassMeeting) params: ParamsOf<typeof meetings.startClassMeeting>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof meetings.startClassMeeting>> {
+    return unwrap(await this.lifecycle.start(params.id, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(meetings.endClassMeeting)
+  async end(
+    @Params(meetings.endClassMeeting) params: ParamsOf<typeof meetings.endClassMeeting>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof meetings.endClassMeeting>> {
+    return unwrap(await this.lifecycle.end(params.id, { ...actor, userId: session.userId }));
   }
 
   @Endpoint(meetings.getMySchedule)

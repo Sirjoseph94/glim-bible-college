@@ -36,7 +36,7 @@ test("a Lecturer schedules a Class Meeting in a Room and sees it on their schedu
   await page.getByLabel("Ends").fill("11:00");
   await page.getByLabel("Room").selectOption({ label: "Chapel (CHAPEL)" });
   await page.getByLabel("Google Meet link (optional)").fill("https://meet.google.com/abc-defg-hij");
-  await page.getByRole("button", { name: "Schedule" }).click();
+  await page.getByRole("button", { name: "Schedule", exact: true }).click();
 
   const card = page.getByRole("listitem").filter({ hasText: "Week 1: Caring for the flock" });
   await expect(card).toBeVisible();
@@ -81,7 +81,51 @@ test("a Lecturer schedules a weekly series", async ({ page }) => {
   await page.getByLabel("Repeat weekly").check();
   await page.getByLabel(lagosWeekday(3), { exact: true }).check();
   await page.getByLabel("Until (optional)").fill(lagosDate(10));
-  await page.getByRole("button", { name: "Schedule" }).click();
+  await page.getByRole("button", { name: "Schedule", exact: true }).click();
   await expect(page.getByText("PAS101 · Seminar 1")).toBeVisible();
   await expect(page.getByText("PAS101 · Seminar 2")).toBeVisible();
+});
+
+/** The Lagos date and HH:mm of an instant some minutes from now. */
+function lagosClock(minutesAhead: number): { date: string; time: string } {
+  const at = Date.now() + minutesAhead * 60_000;
+  return {
+    date: new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos" }).format(at),
+    time: new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Lagos",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(at),
+  };
+}
+
+test("a Lecturer starts a class with the room instructions, then ends it", async ({ page }) => {
+  const start = lagosClock(20);
+  const end = lagosClock(50);
+  test.skip(start.date !== end.date, "the class would cross midnight in Lagos");
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(EMAIL);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "My offerings" }).click();
+  await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
+  await page.getByLabel("Title").fill("Starting soon");
+  await page.getByLabel(/^Date/).fill(start.date);
+  await page.getByLabel("Starts").fill(start.time);
+  await page.getByLabel("Ends").fill(end.time);
+  await page.getByLabel("Google Meet link (optional)").fill("https://meet.google.com/xyz-abcd-efg");
+  await page.getByRole("button", { name: "Schedule", exact: true }).click();
+
+  const card = page.getByRole("listitem").filter({ hasText: "Starting soon" });
+  await card.getByRole("button", { name: "Start class" }).click();
+  await expect(card.getByText("The class has started.")).toBeVisible();
+  await expect(card.getByText(/Open this on the room computer, signed in as you/)).toBeVisible();
+  await expect(card.getByText(/Class Meetings are recorded/)).toBeVisible();
+  await expect(card.getByRole("link", { name: "Open Google Meet" })).toHaveAttribute(
+    "href",
+    "https://meet.google.com/xyz-abcd-efg",
+  );
+  await card.getByRole("button", { name: "End class" }).click();
+  await expect(card).toContainText("Ended");
 });

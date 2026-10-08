@@ -464,6 +464,20 @@ const SAMPLES: Record<string, Sample> = {
       offering: "O1",
     });
   },
+  // The fixture is in 2080: allowed callers are outside the window (422) and nothing changes.
+  "POST /class-meetings/:id/join": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/join`,
+    offering: "O1",
+  }),
+  "POST /class-meetings/:id/start": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/start`,
+    offering: "O1",
+  }),
+  // Not started, so allowed callers get 409.
+  "POST /class-meetings/:id/end": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/end`,
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,

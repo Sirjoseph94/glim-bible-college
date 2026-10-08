@@ -207,6 +207,59 @@ export const createClassMeetingSeries = endpoint({
   successStatus: 201,
 });
 
+export const joinClassMeeting = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/join",
+  summary: "The online link, inside the join window (database only; every attempt is logged)",
+  tag: "Class Meetings",
+  auth: "session",
+  permission: "meeting:class-meeting:join",
+  resource: { type: "class-meeting", param: "id" },
+  rateLimit: "join",
+  params: idParams,
+  response: z.object({
+    meetingId: z.uuid(),
+    state: z.enum(ENUMS["class_meetings.state"]),
+    onlineLink: z.string(),
+    role: z.enum(["STUDENT", "STAFF"]),
+    window: z.object({ opensAt: z.iso.datetime(), closesAt: z.iso.datetime() }),
+    room: z.object({ code: z.string(), name: z.string() }).nullable(),
+  }),
+  successStatus: 200,
+});
+
+/** What the Lecturer sees when starting a class (TRD §11.5): what to do in the room. */
+export const startClassMeeting = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/start",
+  summary: "Start the class (Lecturers and staff, inside the staff window)",
+  tag: "Class Meetings",
+  auth: "session",
+  permission: "meeting:class-meeting:start",
+  resource: { type: "class-meeting", param: "id" },
+  params: idParams,
+  response: z.object({
+    meeting: classMeetingSchema,
+    onlineLink: z.string().nullable(),
+    /** The recording notice from the RECORDING policy, to read out or display. */
+    recordingNotice: z.string(),
+  }),
+  successStatus: 200,
+});
+
+export const endClassMeeting = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/end",
+  summary: "End the class",
+  tag: "Class Meetings",
+  auth: "session",
+  permission: "meeting:class-meeting:end",
+  resource: { type: "class-meeting", param: "id" },
+  params: idParams,
+  response: classMeetingSchema,
+  successStatus: 200,
+});
+
 export const getMySchedule = endpoint({
   method: "GET",
   path: "/me/schedule",

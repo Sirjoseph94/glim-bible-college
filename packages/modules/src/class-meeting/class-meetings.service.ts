@@ -17,6 +17,7 @@ import {
   type MeetingSlot,
   type RecordingMode,
 } from "./meeting-writer";
+import { transition } from "./state-machine";
 
 export interface NewClassMeeting {
   title: string;
@@ -369,17 +370,13 @@ export class ClassMeetingsService {
       const m = schema.classMeetings;
       const [current] = await db.select().from(m).where(eq(m.id, id)).for("update");
       if (current === undefined) return notFound();
-      if (current.state === "LIVE")
-        return err(
-          domainError("MEETING_IN_PROGRESS", "This Class Meeting is live; end it instead."),
-        );
-      if (!UPCOMING.includes(current.state))
-        return err(
-          domainError(
-            "MEETING_STATE_INVALID",
-            `This Class Meeting is ${current.state.toLowerCase().replace("_", " ")}; it can't be cancelled.`,
-          ),
-        );
+      const allowed = transition(current.state as ClassMeeting["state"], "CANCEL", {
+        everStarted: current.firstConferenceStartedAt !== null,
+        hasRollCall: false,
+        withinOverrun: false,
+        finalized: current.finalizedAt !== null,
+      });
+      if (!allowed.ok) return err(domainError(allowed.code, allowed.message));
       if (scope === "ALL_FUTURE" && current.seriesId === null)
         return err(invalid("scope", "This Class Meeting isn't part of a series."));
       const now = this.writer.now();

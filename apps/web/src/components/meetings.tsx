@@ -1,7 +1,7 @@
 import type { ClassMeeting, meetings } from "@glim/contracts";
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { api } from "../api/client";
+import { useState, type ReactNode } from "react";
+import { api, ApiError } from "../api/client";
 import { Time } from "./time";
 
 export type ScheduleItem = ClassMeeting & { as: "STUDENT" | "LECTURER" };
@@ -73,6 +73,49 @@ export function MeetingCard({
   );
 }
 
+/**
+ * Joins online: asks the server for the link (it's only given inside the join window, and every
+ * attempt is logged), then opens it.
+ */
+export function JoinButton({ meeting }: { meeting: ClassMeeting }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  if (!meeting.hasOnlineLink || meeting.state === "ENDED" || meeting.state === "NO_SHOW")
+    return null;
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        disabled={busy}
+        className="rounded bg-brand px-3 py-1.5 text-sm font-medium text-white"
+        onClick={() => {
+          setBusy(true);
+          setMessage(null);
+          api<typeof meetings.joinClassMeeting>("POST", "/class-meetings/:id/join", {
+            params: { id: meeting.id },
+          })
+            .then((joined) => {
+              window.location.assign(joined.onlineLink);
+            })
+            .catch((error: unknown) => {
+              setMessage(
+                error instanceof ApiError
+                  ? error.message
+                  : "We couldn't reach the server. Check your connection and try again.",
+              );
+            })
+            .finally(() => {
+              setBusy(false);
+            });
+        }}
+      >
+        Join online
+      </button>
+      {message ? <p className="text-sm text-slate-700">{message}</p> : null}
+    </div>
+  );
+}
+
 /** Upcoming Class Meetings from my schedule, optionally only those I teach or attend. */
 export function UpcomingMeetings({
   title,
@@ -97,7 +140,7 @@ export function UpcomingMeetings({
       <ul className="space-y-2">
         {items.map((m) => (
           <MeetingCard key={`${m.as}-${m.id}`} meeting={m}>
-            {actions?.(m)}
+            {actions ? actions(m) : m.as === "STUDENT" ? <JoinButton meeting={m} /> : null}
           </MeetingCard>
         ))}
       </ul>

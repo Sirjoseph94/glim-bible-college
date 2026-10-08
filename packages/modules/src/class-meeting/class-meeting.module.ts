@@ -6,6 +6,7 @@ import { SchedulingModule } from "@glim/modules/scheduling";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
+import { MeetingLifecycleService } from "./lifecycle.service";
 import { MeetingWriter } from "./meeting-writer";
 import { SeriesService } from "./series.service";
 
@@ -35,7 +36,13 @@ class ClassMeetingResources implements OnModuleInit {
     NotificationsModule,
     SchedulingModule,
   ],
-  providers: [MeetingWriter, ClassMeetingsService, SeriesService, ClassMeetingResources],
-  exports: [ClassMeetingsService, SeriesService],
+  providers: [
+    MeetingWriter,
+    ClassMeetingsService,
+    SeriesService,
+    MeetingLifecycleService,
+    ClassMeetingResources,
+  ],
+  exports: [ClassMeetingsService, SeriesService, MeetingLifecycleService],
 })
 export class ClassMeetingModule {}

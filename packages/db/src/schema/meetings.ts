@@ -150,3 +150,25 @@ export const meetingLecturerSlots = pgTable(
     ),
   ],
 );
+
+/** Owner: class-meeting. Every join attempt, allowed or not (TRD §11.6, INV-8). */
+export const meetingJoinLog = pgTable(
+  "meeting_join_log",
+  {
+    ...stdRo(),
+    classMeetingId: uuid("class_meeting_id")
+      .notNull()
+      .references(() => classMeetings.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    outcome: text().notNull(),
+    denyReason: text("deny_reason"),
+    device: text(),
+    authorizedAt: tstz("authorized_at").notNull().defaultNow(),
+  },
+  (t) => [
+    enumCheck("meeting_join_log.outcome", t.outcome),
+    index("meeting_join_log_meeting").on(t.classMeetingId, t.authorizedAt),
+  ],
+);

@@ -273,6 +273,10 @@ function MeetingActions({ meeting }: { meeting: ScheduleItem }) {
   const me = useQuery(meQuery);
   const zone = me.data?.institution.timezone ?? "Africa/Lagos";
   const [mode, setMode] = useState<"idle" | "move" | "cancel">("idle");
+  const [started, setStarted] = useState<{
+    onlineLink: string | null;
+    recordingNotice: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const done = async () => {
@@ -314,9 +318,78 @@ function MeetingActions({ meeting }: { meeting: ScheduleItem }) {
     }
   }
 
+  async function lifecycle(action: "start" | "end") {
+    setBusy(true);
+    setProblem(null);
+    try {
+      if (action === "start") {
+        const result = await api<typeof meetings.startClassMeeting>(
+          "POST",
+          "/class-meetings/:id/start",
+          { params: { id: meeting.id } },
+        );
+        setStarted({ onlineLink: result.onlineLink, recordingNotice: result.recordingNotice });
+      } else {
+        await api<typeof meetings.endClassMeeting>("POST", "/class-meetings/:id/end", {
+          params: { id: meeting.id },
+        });
+        setStarted(null);
+      }
+      await queryClient.invalidateQueries({ queryKey: myScheduleQuery.queryKey });
+    } catch (error) {
+      setProblem(problemOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The Start screen (TRD §11.5): what to do in the room, the recording notice, the link.
+  if (started !== null || meeting.state === "LIVE")
+    return (
+      <div className="space-y-2 border-t border-slate-100 pt-2 text-sm">
+        <ProblemAlert problem={problem} />
+        <p className="font-medium">The class has started.</p>
+        <p>
+          Open this on the room computer, signed in as you, so online students can see and hear the
+          room. Recording starts when you join.
+        </p>
+        {started?.recordingNotice ? (
+          <p className="rounded bg-amber-50 p-2 text-amber-900">{started.recordingNotice}</p>
+        ) : null}
+        {(started?.onlineLink ?? meeting.onlineLink) ? (
+          <a
+            href={started?.onlineLink ?? meeting.onlineLink ?? ""}
+            className="inline-block rounded bg-brand px-3 py-1.5 font-medium text-white"
+            rel="noreferrer"
+          >
+            Open Google Meet
+          </a>
+        ) : null}
+        <button
+          type="button"
+          disabled={busy}
+          className="ml-4 text-red-700 underline"
+          onClick={() => void lifecycle("end")}
+        >
+          End class
+        </button>
+      </div>
+    );
+
   if (mode === "idle")
     return (
-      <div className="flex gap-4 text-sm">
+      <div className="flex flex-wrap gap-4 text-sm">
+        <ProblemAlert problem={problem} />
+        {meeting.state === "SCHEDULED" || meeting.state === "OPEN" ? (
+          <button
+            type="button"
+            disabled={busy}
+            className="font-medium text-brand underline"
+            onClick={() => void lifecycle("start")}
+          >
+            Start class
+          </button>
+        ) : null}
         <button
           type="button"
           className="text-brand underline"
