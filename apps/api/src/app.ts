@@ -32,6 +32,7 @@ import { GoogleController } from "./http/identity/google.controller";
 import { AcademicController } from "./http/academic/academic.controller";
 import { ApplicationsController } from "./http/admissions/applications.controller";
 import { FilesController } from "./http/content/files.controller";
+import { CourseEnrollmentsController } from "./http/enrollment/course-enrollments.controller";
 import { RegistrationController } from "./http/enrollment/registration.controller";
 import { IntakesController } from "./http/admissions/intakes.controller";
 import { AdmissionsReportsController } from "./http/admissions/reports.controller";
@@ -90,6 +91,7 @@ export class AppModule {
         ReviewController,
         FilesController,
         RegistrationController,
+        CourseEnrollmentsController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

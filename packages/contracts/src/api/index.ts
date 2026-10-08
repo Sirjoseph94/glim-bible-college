@@ -36,6 +36,12 @@ export const ENDPOINTS = [
   me.getMe,
   me.updateMe,
   enrollment.getMyRegistration,
+  enrollment.getSemesterRegistration,
+  enrollment.addElective,
+  enrollment.dropElective,
+  enrollment.getRoster,
+  enrollment.registerManually,
+  enrollment.withdrawCourseEnrollment,
   auth.login,
   auth.logout,
   auth.forgotPassword,
@@ -136,7 +142,7 @@ export {
 export type { AuditLogItem } from "./audit";
 export type { AcademicSession, Room, Semester } from "./calendar";
 export { UPLOAD_PURPOSES, type FileView, type UploadPurpose } from "./files";
-export type { MyRegistration } from "./enrollment";
+export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollment";
 export type { Me } from "./me";
 export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";

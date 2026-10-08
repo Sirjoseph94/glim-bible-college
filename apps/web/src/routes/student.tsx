@@ -1,7 +1,8 @@
-import type { enrollment, offerings } from "@glim/contracts";
-import { useQuery } from "@tanstack/react-query";
+import type { enrollment, offerings, SemesterRegistration } from "@glim/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
+import { useSubmit } from "../components/use-submit";
 import { CalendarDate } from "../components/time";
 
 const SELECTION: Record<string, string> = {
@@ -47,6 +48,7 @@ export function RegistrationPage() {
                 <CalendarDate value={s.semester.startsOn} /> –{" "}
                 <CalendarDate value={s.semester.endsOn} /> · Level {s.levelNo}
               </p>
+              <Electives semesterEnrollmentId={s.semesterEnrollmentId} />
               {s.courses.length === 0 ? (
                 <p className="text-sm text-slate-600">No courses registered yet.</p>
               ) : (
@@ -103,6 +105,110 @@ export function CoursesPage() {
                 {o.lecturers.map((l) => l.lecturerName).join(", ")}
               </div>
             ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Electives for the semester: add or drop until the add/drop deadline (spec story 45). */
+function Electives({ semesterEnrollmentId }: { semesterEnrollmentId: string }) {
+  const queryClient = useQueryClient();
+  const { busy, error, run } = useSubmit();
+  const key = ["registration", semesterEnrollmentId];
+  const registration = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      api<typeof enrollment.getSemesterRegistration>(
+        "GET",
+        "/semester-enrollments/:id/registration",
+        {
+          params: { id: semesterEnrollmentId },
+          signal,
+        },
+      ),
+  });
+  const r = registration.data;
+  if (r === undefined || r.electives.length === 0) return null;
+  const update = async (next: SemesterRegistration) => {
+    queryClient.setQueryData(key, next);
+    await queryClient.invalidateQueries({ queryKey: ["me", "registration"] });
+  };
+
+  return (
+    <div className="mb-3 space-y-2 rounded bg-slate-50 p-2">
+      <p className="text-sm">
+        <strong>Electives</strong>{" "}
+        {r.windowOpen ? (
+          r.semester.addDropDeadlineOn === null ? (
+            "can be added or dropped while registration is open."
+          ) : (
+            <>
+              can be added or dropped until <CalendarDate value={r.semester.addDropDeadlineOn} />.
+            </>
+          )
+        ) : (
+          "can no longer be changed; ask the Academic Admin."
+        )}
+      </p>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <ul className="space-y-1 text-sm">
+        {r.electives.map((e) => (
+          <li key={e.offeringId} className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              <strong>{e.courseCode}</strong> {e.title} · {e.credits} credits
+              {e.capacity === null
+                ? null
+                : ` · ${String(Math.max(0, e.capacity - e.enrolled))} places left`}
+            </span>
+            {!r.windowOpen ? null : e.courseEnrollmentId !== null ? (
+              <button
+                type="button"
+                disabled={busy}
+                className="underline"
+                onClick={() =>
+                  void run(async () => {
+                    await update(
+                      await api<typeof enrollment.dropElective>(
+                        "DELETE",
+                        "/semester-enrollments/:id/electives/:courseEnrollmentId",
+                        {
+                          params: {
+                            id: semesterEnrollmentId,
+                            courseEnrollmentId: e.courseEnrollmentId ?? "",
+                          },
+                        },
+                      ),
+                    );
+                  })
+                }
+              >
+                Drop {e.courseCode}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy || e.full}
+                className="rounded bg-brand px-2 py-1 text-white disabled:opacity-50"
+                onClick={() =>
+                  void run(async () => {
+                    await update(
+                      await api<typeof enrollment.addElective>(
+                        "POST",
+                        "/semester-enrollments/:id/electives",
+                        {
+                          params: { id: semesterEnrollmentId },
+                          body: { offeringId: e.offeringId },
+                        },
+                      ),
+                    );
+                  })
+                }
+              >
+                {e.full ? "Full" : `Add ${e.courseCode}`}
+              </button>
+            )}
           </li>
         ))}
       </ul>

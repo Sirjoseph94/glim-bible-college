@@ -350,6 +350,36 @@ const SAMPLES: Record<string, Sample> = {
   "GET /reports/referrals": () => Promise.resolve({ url: "/api/v1/reports/referrals" }),
   "GET /admissions/applications/export": () =>
     Promise.resolve({ url: "/api/v1/admissions/applications/export" }),
+  "GET /semester-enrollments/:id/registration": async (t) => ({
+    url: `/api/v1/semester-enrollments/${await semesterEnrollmentOf(t, "sEnrolled")}/registration`,
+    owner: "sEnrolled",
+  }),
+  // The persona semester is PLANNED, so the owner's window is closed (422) and nothing changes.
+  "POST /semester-enrollments/:id/electives": async (t) => ({
+    url: `/api/v1/semester-enrollments/${await semesterEnrollmentOf(t, "sEnrolled")}/electives`,
+    payload: { offeringId: personas.world.offerings.O2 },
+    owner: "sEnrolled",
+  }),
+  // O1 is compulsory for the owner, so dropping it is refused (422).
+  "DELETE /semester-enrollments/:id/electives/:courseEnrollmentId": async (t) => ({
+    url: `/api/v1/semester-enrollments/${await semesterEnrollmentOf(t, "sEnrolled")}/electives/${await courseEnrollmentOf(t, "sEnrolled")}`,
+    owner: "sEnrolled",
+  }),
+  "GET /course-offerings/:id/enrollments": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/enrollments`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/enrollments": async (t) => ({
+    url: `/api/v1/course-offerings/${await freshOffering(t)}/enrollments`,
+    payload: { matricNumber: await matricOf(t, "sOther"), reason: "Retake" },
+  }),
+  // A COMPLETED enrollment can't be withdrawn (409), so allowed callers change nothing.
+  "POST /course-enrollments/:id/withdraw": async (t) => ({
+    url: `/api/v1/course-enrollments/${await courseEnrollmentOf(t, "sCompleted")}/withdraw`,
+    payload: { reason: "Left the college" },
+    offering: "O1",
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -417,6 +447,33 @@ async function lecturerFixture(t: TestApp) {
   );
   lecturerShared = { lecturerId: lecturer.id };
   return lecturerShared;
+}
+
+/** A persona student's semester enrollment, course enrollment and Matric Number. */
+async function semesterEnrollmentOf(t: TestApp, name: PersonaName): Promise<string> {
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `SELECT se.id FROM semester_enrollments se
+       JOIN programme_enrollments pe ON pe.id = se.programme_enrollment_id
+       JOIN students s ON s.id = pe.student_id WHERE s.user_id = $1`,
+    [personas[name].userId],
+  );
+  return rows[0]?.id ?? "";
+}
+async function courseEnrollmentOf(t: TestApp, name: PersonaName): Promise<string> {
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `SELECT ce.id FROM course_enrollments ce JOIN students s ON s.id = ce.student_id
+      WHERE s.user_id = $1 AND ce.course_offering_id = $2`,
+    [personas[name].userId, personas.world.offerings.O1],
+  );
+  return rows[0]?.id ?? "";
+}
+async function matricOf(t: TestApp, name: PersonaName): Promise<string> {
+  const { rows } = await t.db.pool.query<{ matric_number: string }>(
+    `SELECT pe.matric_number FROM programme_enrollments pe JOIN students s ON s.id = pe.student_id
+      WHERE s.user_id = $1`,
+    [personas[name].userId],
+  );
+  return rows[0]?.matric_number ?? "";
 }
 
 let applicationShared: string | undefined;

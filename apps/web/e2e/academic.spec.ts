@@ -90,6 +90,7 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await expect(page.getByText("Rev Tunde Bello · Primary")).toBeVisible();
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText(/· published/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Students (0 enrolled)" })).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();

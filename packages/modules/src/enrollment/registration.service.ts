@@ -262,6 +262,7 @@ export class RegistrationService {
         semesters: semesterRows
           .filter((r) => r.se.programmeEnrollmentId === p.enrollment.id)
           .map((r) => ({
+            semesterEnrollmentId: r.se.id,
             semester: {
               id: r.semester.id,
               name: r.semester.name,

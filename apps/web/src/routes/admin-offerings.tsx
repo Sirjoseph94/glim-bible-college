@@ -1,4 +1,4 @@
-import type { academic, calendar, Offering, offerings } from "@glim/contracts";
+import type { academic, calendar, enrollment, Offering, offerings } from "@glim/contracts";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
@@ -333,7 +333,99 @@ export function AdminOfferingPage() {
           </button>
         ) : null}
       </div>
+      <Roster offeringId={o.id} open={open} />
     </div>
+  );
+}
+
+/** Who's registered, manual registration (e.g. retakes) and withdrawal, with reasons (§9.3). */
+function Roster({ offeringId, open }: { offeringId: string; open: boolean }) {
+  const queryClient = useQueryClient();
+  const { busy, error, run } = useSubmit();
+  const key = ["offerings", offeringId, "roster"];
+  const roster = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      api<typeof enrollment.getRoster>("GET", "/course-offerings/:id/enrollments", {
+        params: { id: offeringId },
+        signal,
+      }),
+  });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: key });
+  const enrolled = roster.data?.items.filter((r) => r.status === "ENROLLED").length ?? 0;
+
+  return (
+    <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
+      <h3 className="font-semibold">Students ({enrolled} enrolled)</h3>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <ul className="divide-y divide-slate-100 text-sm">
+        {roster.data?.items.map((r) => (
+          <li
+            key={r.courseEnrollmentId}
+            className="flex flex-wrap items-center justify-between gap-2 py-1"
+          >
+            <span>
+              {r.studentName} · {r.matricNumber} · Level {r.levelNo}
+            </span>
+            <span className="flex items-center gap-3 text-slate-600">
+              {r.selection.toLowerCase()} · {r.status.toLowerCase()}
+              {r.status === "ENROLLED" ? (
+                <button
+                  type="button"
+                  className="text-red-700 underline"
+                  disabled={busy}
+                  onClick={() => {
+                    const reason = window.prompt(`Why withdraw ${r.studentName}?`);
+                    if (reason === null || reason.trim().length < 3) return;
+                    void run(async () => {
+                      await api<typeof enrollment.withdrawCourseEnrollment>(
+                        "POST",
+                        "/course-enrollments/:id/withdraw",
+                        { params: { id: r.courseEnrollmentId }, body: { reason } },
+                      );
+                      await refresh();
+                    });
+                  }}
+                >
+                  Withdraw
+                </button>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {open ? (
+        <form
+          className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const data = new FormData(form);
+            void run(async () => {
+              await api<typeof enrollment.registerManually>(
+                "POST",
+                "/course-offerings/:id/enrollments",
+                {
+                  params: { id: offeringId },
+                  body: {
+                    matricNumber: formText(data, "matricNumber"),
+                    reason: formText(data, "reason"),
+                  },
+                },
+              );
+              form.reset();
+              await refresh();
+            });
+          }}
+        >
+          <Field id="matricNumber" name="matricNumber" label="Matric Number" required />
+          <Field id="reason" name="reason" label="Reason (e.g. retake)" required minLength={3} />
+          <div className="self-end">
+            <SubmitButton busy={busy}>Register student</SubmitButton>
+          </div>
+        </form>
+      ) : null}
+    </section>
   );
 }
 
