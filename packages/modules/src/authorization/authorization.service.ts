@@ -30,6 +30,9 @@ interface PrincipalLookups {
   staffRoles: () => Promise<StaffRole[]>;
   isLecturer: () => Promise<boolean>;
   assignmentOn: (offeringId: string) => Promise<OfferingAssignment | null>;
+  isStudent: () => Promise<boolean>;
+  /** The student's course enrollment status on an offering (ENROLLED or COMPLETED), if any. */
+  studentAccessOn: (offeringId: string) => Promise<string | null>;
 }
 
 /** The caller, with what's been looked up about them memoized for this request only (§7.2). */
@@ -37,6 +40,8 @@ export class Principal {
   private staffRoles: Promise<StaffRole[]> | undefined;
   private lecturer: Promise<boolean> | undefined;
   private readonly assignments = new Map<string, Promise<OfferingAssignment | null>>();
+  private student: Promise<boolean> | undefined;
+  private readonly studentAccess = new Map<string, Promise<string | null>>();
 
   constructor(
     readonly userId: string,
@@ -51,6 +56,20 @@ export class Principal {
   isLecturer(): Promise<boolean> {
     this.lecturer ??= this.lookups.isLecturer();
     return this.lecturer;
+  }
+
+  isStudent(): Promise<boolean> {
+    this.student ??= this.lookups.isStudent();
+    return this.student;
+  }
+
+  studentAccessOn(offeringId: string): Promise<string | null> {
+    let found = this.studentAccess.get(offeringId);
+    if (found === undefined) {
+      found = this.lookups.studentAccessOn(offeringId);
+      this.studentAccess.set(offeringId, found);
+    }
+    return found;
   }
 
   assignmentOn(offeringId: string): Promise<OfferingAssignment | null> {
@@ -76,8 +95,8 @@ export function assignmentHasCapability(
 }
 
 /**
- * The single authorization decision point (§7.2, INV-1). Deny by default. The staff, lecturer
- * and applicant paths are complete; the student path arrives with enrollments (ticket 19).
+ * The single authorization decision point (§7.2, INV-1). Deny by default: staff role, then
+ * lecturer assignment capability, then student entitlement, then applicant ownership.
  */
 @Injectable()
 export class AuthorizationService {
@@ -101,6 +120,8 @@ export class AuthorizationService {
       staffRoles: () => this.roles.activeRoles(userId),
       isLecturer: () => this.isActiveLecturer(userId),
       assignmentOn: (offeringId) => this.assignmentOn(userId, offeringId),
+      isStudent: () => this.isActiveStudent(userId),
+      studentAccessOn: (offeringId) => this.studentAccessOn(userId, offeringId),
     });
   }
 
@@ -132,7 +153,22 @@ export class AuthorizationService {
       if (assignment !== null && assignmentHasCapability(assignment, capability)) return "ALLOW";
     }
 
-    // Student path (step 4): lands with course enrollments (ticket 19).
+    // Student path (step 4): any active student, or entitlement on the resource's offering
+    // through v_offering_access (E = ENROLLED; E/C = ENROLLED or COMPLETED), plus ownership.
+    const rule = MATRIX.permissions[permission].student;
+    if (rule !== undefined && (await principal.isStudent())) {
+      if (rule.any === true) return "ALLOW";
+      const owns = rule.own !== true || context?.ownerUserId === principal.userId;
+      if (rule.status !== undefined) {
+        if (context?.offeringId !== undefined && owns) {
+          const access = await principal.studentAccessOn(context.offeringId);
+          const allowed = rule.status === "E" ? ["ENROLLED"] : ["ENROLLED", "COMPLETED"];
+          if (access !== null && allowed.includes(access)) return "ALLOW";
+        }
+      } else if (rule.own === true && context?.ownerUserId !== undefined && owns) {
+        return "ALLOW";
+      }
+    }
 
     // Applicant path (step 5): their own application only.
     if (
@@ -189,6 +225,16 @@ export class AuthorizationService {
       .from(l)
       .where(and(eq(l.userId, userId), eq(l.status, "ACTIVE")));
     return row !== undefined;
+  }
+
+  private async studentAccessOn(userId: string, offeringId: string): Promise<string | null> {
+    const { rows } = await this.db.read.execute<{ source_status: string }>(
+      sql`SELECT source_status FROM v_offering_access
+          WHERE user_id = ${userId} AND course_offering_id = ${offeringId} AND access_kind = 'STUDENT'
+          ORDER BY source_status = 'ENROLLED' DESC
+          LIMIT 1`,
+    );
+    return rows[0]?.source_status ?? null;
   }
 
   private async assignmentOn(

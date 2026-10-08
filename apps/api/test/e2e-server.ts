@@ -22,7 +22,7 @@ import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import Fastify from "fastify";
 import { createHandlers } from "../../worker/src/handlers";
-import { subscribers } from "../../worker/src/subscribers";
+import { createSubscribers } from "../../worker/src/subscribers";
 import { startWorker } from "../../worker/src/worker";
 import { createWorkerContext } from "../../worker/src/worker.module";
 import { buildApp } from "../src/app";
@@ -147,7 +147,10 @@ const workerContext = await createWorkerContext({
 const worker = await startWorker({
   boss: workerBoss,
   role: "general",
-  handlers: createHandlers({ context: workerContext, subscribers }),
+  handlers: createHandlers({
+    context: workerContext,
+    subscribers: createSubscribers(workerContext),
+  }),
   logger,
   pollingIntervalSeconds: 0.5,
 });

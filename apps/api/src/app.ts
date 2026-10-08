@@ -10,6 +10,7 @@ import { AdmissionsModule } from "@glim/modules/admissions";
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { ContentModule } from "@glim/modules/content";
+import { EnrollmentModule } from "@glim/modules/enrollment";
 import { IdentityModule, SESSION_COOKIE, SessionService } from "@glim/modules/identity";
 import { LecturingModule } from "@glim/modules/lecturing";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -31,6 +32,7 @@ import { GoogleController } from "./http/identity/google.controller";
 import { AcademicController } from "./http/academic/academic.controller";
 import { ApplicationsController } from "./http/admissions/applications.controller";
 import { FilesController } from "./http/content/files.controller";
+import { RegistrationController } from "./http/enrollment/registration.controller";
 import { IntakesController } from "./http/admissions/intakes.controller";
 import { AdmissionsReportsController } from "./http/admissions/reports.controller";
 import { ReviewController } from "./http/admissions/review.controller";
@@ -65,6 +67,7 @@ export class AppModule {
         AcademicModule,
         LecturingModule,
         ContentModule,
+        EnrollmentModule,
         AdmissionsModule,
       ],
       controllers: [
@@ -86,6 +89,7 @@ export class AppModule {
         AdmissionsReportsController,
         ReviewController,
         FilesController,
+        RegistrationController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

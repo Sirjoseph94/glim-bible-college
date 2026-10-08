@@ -5,6 +5,7 @@ import { TestClock } from "@glim/shared";
 import { createLogger } from "@glim/telemetry";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createHandlers } from "../src/handlers";
+import { createSubscribers } from "../src/subscribers";
 import { startWorker, type RunningWorker } from "../src/worker";
 import { createWorkerContext } from "../src/worker.module";
 
@@ -68,6 +69,26 @@ describe("worker", () => {
       { timeout: 10_000, interval: 100 },
     );
     expect(received[0]?.payload).toEqual({ sessionId: "2027/2028" });
+  });
+
+  it("hands a semester's opened registration to the semester.open-registration queue", async () => {
+    await db.withTx(({ boss }) =>
+      boss.publish(
+        "academic.semester.registration-opened",
+        { semesterId: "00000000-0000-7000-8000-000000000001", sessionId: "x" },
+        { occurredAt: new Date() },
+      ),
+    );
+    const seen: unknown[] = [];
+    const dispatch = createHandlers({ context, subscribers: createSubscribers(context) })[
+      "domain-event"
+    ];
+    if (dispatch === undefined) throw new Error("no domain-event handler");
+    await drainQueues(sendBoss, {
+      "domain-event": dispatch,
+      "semester.open-registration": (job) => Promise.resolve(void seen.push(job.data)),
+    });
+    expect(seen).toEqual([{ semesterId: "00000000-0000-7000-8000-000000000001" }]);
   });
 
   it("redelivers a job to another worker when the first dies mid-job", async () => {

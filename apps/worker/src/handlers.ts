@@ -1,6 +1,7 @@
 import type { DomainEvent, QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService } from "@glim/modules/identity";
+import { RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService } from "@glim/modules/ops";
 import type { INestApplicationContext } from "@nestjs/common";
@@ -24,6 +25,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const notifications = deps.context.get(NotificationsService);
   const offers = deps.context.get(OffersService);
   const purge = deps.context.get(PurgeService);
+  const registration = deps.context.get(RegistrationService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
     "auth.session-cleanup": () => sessions.deleteEnded(),
@@ -31,6 +33,8 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "admissions.intake-status": () => intakes.syncStatuses({ userId: null, type: "JOB" }),
     "admissions.offer-sweep": () => offers.sweep(),
     "admissions.purge": () => purge.run(),
+    "semester.open-registration": (job) =>
+      registration.openRegistration((job.data as { semesterId: string }).semesterId),
     "notify.send": (job) =>
       notifications.deliver((job.data as { notificationId: string }).notificationId),
   };

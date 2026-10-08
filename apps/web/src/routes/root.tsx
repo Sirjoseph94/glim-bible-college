@@ -44,6 +44,16 @@ export function RootLayout() {
                 My application
               </Link>
             ) : null}
+            {me.data.roles.isStudent ? (
+              <>
+                <Link to="/courses" className="underline">
+                  My courses
+                </Link>
+                <Link to="/registration" className="underline">
+                  Registration
+                </Link>
+              </>
+            ) : null}
             {me.data.roles.isLecturer ? (
               <Link to="/teach" className="underline">
                 My offerings

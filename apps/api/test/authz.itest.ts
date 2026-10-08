@@ -546,7 +546,8 @@ let personas: Personas;
 
 /**
  * What matrix.json says should happen (the oracle): staff path by role, lecturer path by the
- * persona's assignment on the request's offering (§7.4), applicant path by ownership.
+ * persona's assignment on the request's offering (§7.4), student path by enrollment status on
+ * that offering (E or E/C) or any active student, applicant path by ownership.
  */
 function expectedAllowed(
   persona: Persona,
@@ -556,6 +557,18 @@ function expectedAllowed(
   const { offering, owner } = sample;
   if (AuthorizationService.staffGrants(persona.roles, permission)) return true;
   if (MATRIX.permissions[permission].applicant === true && owner === persona.name) return true;
+  const studentRule = MATRIX.permissions[permission].student;
+  if (studentRule !== undefined && persona.activeStudent) {
+    if (studentRule.any === true) return true;
+    const owns = studentRule.own !== true || owner === persona.name;
+    if (studentRule.status !== undefined && offering !== undefined && owns) {
+      const status = persona.studies[offering];
+      const allowed = studentRule.status === "E" ? ["ENROLLED"] : ["ENROLLED", "COMPLETED"];
+      if (status !== undefined && allowed.includes(status)) return true;
+    }
+    if (studentRule.status === undefined && studentRule.own === true && owner === persona.name)
+      return true;
+  }
   const capability = MATRIX.permissions[permission].lecturer;
   if (capability === undefined) return false;
   if (capability === "*") return Object.keys(persona.teaches).length > 0;

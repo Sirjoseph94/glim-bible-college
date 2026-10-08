@@ -1,7 +1,10 @@
 import { schema } from "@glim/db";
 import { AcademicModule, CurriculaService } from "@glim/modules/academic";
+import { AuthorizationModule } from "@glim/modules/authorization";
+import { NotificationsModule } from "@glim/modules/notifications";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { eq } from "drizzle-orm";
+import { RegistrationService } from "./registration.service";
 import { StudentsService } from "./students.service";
 
 /** Enrollment tells academic which curricula are in use, so they can't be edited (§9.1). */
@@ -22,11 +25,11 @@ class EnrollmentHooks implements OnModuleInit {
   }
 }
 
-const services = [StudentsService];
+const services = [StudentsService, RegistrationService];
 
 /** Students, programme enrollments and (later) course enrollments (TRD §9.3). */
 @Module({
-  imports: [AcademicModule],
+  imports: [AcademicModule, AuthorizationModule, NotificationsModule],
   providers: [...services, EnrollmentHooks],
   exports: services,
 })

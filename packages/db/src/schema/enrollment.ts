@@ -1,18 +1,20 @@
 import { sql } from "drizzle-orm";
 import {
   date,
+  index,
   integer,
   pgTable,
   primaryKey,
   smallint,
   text,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { academicSessions, curricula, programmes } from "./academic";
+import { academicSessions, courseOfferings, curricula, programmes, semesters } from "./academic";
 import { applications, intakes } from "./admissions";
 import { cohorts } from "./cohorts";
-import { enumCheck, std } from "./columns";
+import { enumCheck, std, stdRo, tstz } from "./columns";
 import { files } from "./content";
 import { users } from "./identity";
 
@@ -104,4 +106,79 @@ export const programmeEnrollments = pgTable(
       .on(t.studentId, t.programmeId)
       .where(sql`${t.status} = 'ACTIVE'`),
   ],
+);
+
+/** Owner: enrollment. A programme enrollment's registration for one semester (§9.3). */
+export const semesterEnrollments = pgTable(
+  "semester_enrollments",
+  {
+    ...std(),
+    programmeEnrollmentId: uuid("programme_enrollment_id")
+      .notNull()
+      .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
+    semesterId: uuid("semester_id")
+      .notNull()
+      .references(() => semesters.id, { onDelete: "restrict" }),
+    levelNo: smallint("level_no").notNull(),
+    status: text().notNull().default("REGISTERED"),
+  },
+  (t) => [
+    unique("semester_enrollments_once").on(t.programmeEnrollmentId, t.semesterId),
+    enumCheck("semester_enrollments.status", t.status),
+  ],
+);
+
+/**
+ * Owner: enrollment. THE entitlement source for students (§6.3, INV-1). `student_id` and
+ * `programme_enrollment_id` are denormalised; a trigger keeps them consistent with the
+ * semester enrollment.
+ */
+export const courseEnrollments = pgTable(
+  "course_enrollments",
+  {
+    ...std(),
+    semesterEnrollmentId: uuid("semester_enrollment_id")
+      .notNull()
+      .references(() => semesterEnrollments.id, { onDelete: "restrict" }),
+    programmeEnrollmentId: uuid("programme_enrollment_id")
+      .notNull()
+      .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
+    courseOfferingId: uuid("course_offering_id")
+      .notNull()
+      .references(() => courseOfferings.id, { onDelete: "restrict" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "restrict" }),
+    selection: text().notNull(),
+    enrollmentType: text("enrollment_type").notNull().default("CREDIT"),
+    status: text().notNull().default("ENROLLED"),
+    enrolledAt: tstz("enrolled_at").notNull().defaultNow(),
+    droppedAt: tstz("dropped_at"),
+  },
+  (t) => [
+    enumCheck("course_enrollments.selection", t.selection),
+    enumCheck("course_enrollments.enrollment_type", t.enrollmentType),
+    enumCheck("course_enrollments.status", t.status),
+    uniqueIndex("one_live_course_enrollment")
+      .on(t.studentId, t.courseOfferingId)
+      .where(sql`${t.status} IN ('ENROLLED', 'COMPLETED')`),
+    index("course_enrollments_offering_status_idx").on(t.courseOfferingId, t.status),
+    index("course_enrollments_student_status_idx").on(t.studentId, t.status),
+  ],
+);
+
+/** Owner: enrollment. Course enrollment status history. */
+export const courseEnrollmentEvents = pgTable(
+  "course_enrollment_events",
+  {
+    ...stdRo(),
+    courseEnrollmentId: uuid("course_enrollment_id")
+      .notNull()
+      .references(() => courseEnrollments.id, { onDelete: "restrict" }),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    reason: text(),
+  },
+  (t) => [index("course_enrollment_events_enrollment_idx").on(t.courseEnrollmentId, t.createdAt)],
 );

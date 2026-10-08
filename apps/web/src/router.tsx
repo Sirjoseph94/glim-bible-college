@@ -153,6 +153,26 @@ const adminLecturersRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-offerings"), "AdminLecturersPage"),
 });
 
+const requireStudent = async ({ context }: { context: RouterContext }) => {
+  const me = await context.queryClient.query(meQuery);
+  if (me === null) throw redirect({ to: "/login" });
+  if (!me.roles.isStudent) throw redirect({ to: "/" });
+};
+
+const registrationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/registration",
+  beforeLoad: requireStudent,
+  component: lazyRouteComponent(() => import("./routes/student"), "RegistrationPage"),
+});
+
+const coursesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses",
+  beforeLoad: requireStudent,
+  component: lazyRouteComponent(() => import("./routes/student"), "CoursesPage"),
+});
+
 const teachRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/teach",
@@ -246,6 +266,8 @@ const routeTree = rootRoute.addChildren([
   adminOfferingRoute,
   adminLecturersRoute,
   teachRoute,
+  registrationRoute,
+  coursesRoute,
   applyRoute,
   applicationRoute,
   applicationEditRoute,

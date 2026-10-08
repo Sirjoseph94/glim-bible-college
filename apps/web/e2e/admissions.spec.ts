@@ -187,6 +187,12 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
       timeout: 15_000,
     })
     .toBe("Welcome to GLIM Online Bible College: your Matric Number is GLIM/DMIN/2030/0001");
+  // As a student, their registration page waits for the semester to open.
+  await applicant.getByRole("link", { name: "Registration" }).click();
+  await expect(
+    applicant.getByText("Registration hasn't opened yet.", { exact: false }),
+  ).toBeVisible();
+
   // As a student they have a personal referral code to share.
   await applicant.getByRole("link", { name: "Profile" }).click();
   await expect(applicant.getByText(/^[A-HJ-NP-Z2-9]{7}$/)).toBeVisible();

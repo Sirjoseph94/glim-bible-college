@@ -134,6 +134,20 @@
       "when": 1791445877839,
       "tag": "0018_wp_enrollment_students",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791447550124,
+      "tag": "0019_wp03_course_enrollments",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791447550848,
+      "tag": "0020_wp03_enrollment_trigger_and_access_view",
+      "breakpoints": true
     }
   ]
 }

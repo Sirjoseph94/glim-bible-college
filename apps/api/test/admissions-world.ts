@@ -4,6 +4,8 @@ import type { TestApp } from "./harness";
 import type { Personas } from "./personas";
 
 export interface AdmissionsWorld {
+  /** BIB101 (both programmes, Level 1 semester 1); THE101 is in the Diploma only. */
+  courses: { bible: Course; doctrine: Course };
   certificate: Programme;
   diploma: Programme;
   session: AcademicSession;
@@ -28,7 +30,18 @@ export async function admissionsWorld(t: TestApp, p: Personas): Promise<Admissio
     title: "Introduction to the Bible",
     credits: "3",
   });
-  const programme = async (code: string, awardType: string, levels: number) => {
+  // The Diploma also has a compulsory course that nobody offers (for registration tests).
+  const doctrine = await send<Course>("POST", "/api/v1/courses", {
+    code: "THE101",
+    title: "Christian Doctrine",
+    credits: "3",
+  });
+  const programme = async (
+    code: string,
+    awardType: string,
+    levels: number,
+    extraCourses: Course[] = [],
+  ) => {
     const created = await send<Programme>("POST", "/api/v1/programmes", {
       code,
       name: awardType === "DIPLOMA" ? "Diploma in Theology" : "Certificate in Theology",
@@ -44,7 +57,12 @@ export async function admissionsWorld(t: TestApp, p: Personas): Promise<Admissio
       "PUT",
       `/api/v1/curricula/${draft.id}/courses`,
       {
-        placements: [{ courseId: course.id, levelNo: 1, semesterNo: 1, courseType: "COMPULSORY" }],
+        placements: [course, ...extraCourses].map((c) => ({
+          courseId: c.id,
+          levelNo: 1,
+          semesterNo: 1,
+          courseType: "COMPULSORY",
+        })),
       },
       { "if-match": `"${String(draft.version)}"` },
     );
@@ -52,7 +70,7 @@ export async function admissionsWorld(t: TestApp, p: Personas): Promise<Admissio
     return created;
   };
   const certificate = await programme("CERT", "CERTIFICATE", 1);
-  const diploma = await programme("DIP", "DIPLOMA", 2);
+  const diploma = await programme("DIP", "DIPLOMA", 2, [doctrine]);
   const session = await send<AcademicSession>("POST", "/api/v1/academic-sessions", {
     code: "2027/2028",
     name: "2027/2028 Session",
@@ -74,5 +92,5 @@ export async function admissionsWorld(t: TestApp, p: Personas): Promise<Admissio
     })
   ).json<Intake>();
   await t.request({ method: "POST", url: `/api/v1/intakes/${intake.id}/open`, headers: officer });
-  return { certificate, diploma, session, intake };
+  return { courses: { bible: course, doctrine }, certificate, diploma, session, intake };
 }

@@ -3,12 +3,16 @@ import { Db, schema } from "@glim/db";
 import { CohortsService, CurriculaService } from "@glim/modules/academic";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { RoleService } from "@glim/modules/authorization";
-import { StudentsService, type StudentProfile } from "@glim/modules/enrollment";
+import {
+  RegistrationService,
+  StudentsService,
+  type StudentProfile,
+} from "@glim/modules/enrollment";
 import { UserService } from "@glim/modules/identity";
 import { NotificationsService } from "@glim/modules/notifications";
 import { CLOCK, domainError, err, type Clock, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { selectApplications } from "./application-query";
 import { ApplicationsService } from "./applications.service";
 import { recordTransition } from "./transitions";
@@ -68,6 +72,7 @@ export class AcceptanceService {
     @Inject(CurriculaService) private readonly curricula: CurriculaService,
     @Inject(CohortsService) private readonly cohorts: CohortsService,
     @Inject(StudentsService) private readonly students: StudentsService,
+    @Inject(RegistrationService) private readonly registration: RegistrationService,
     @Inject(UserService) private readonly users: UserService,
     @Inject(RoleService) private readonly roles: RoleService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
@@ -133,7 +138,24 @@ export class AcceptanceService {
         studyMode: current.studyMode as StudyMode,
       });
       if (!admitted.ok) return admitted;
-      const { matricNumber } = admitted.value;
+      const { matricNumber, enrollmentId } = admitted.value;
+      // §10.4 step 5: if the entry session's first semester is already open, register now.
+      const [firstSemester] = await db
+        .select({ id: schema.semesters.id, status: schema.semesters.status })
+        .from(schema.semesters)
+        .where(
+          and(
+            eq(schema.semesters.academicSessionId, intake.sessionId),
+            eq(schema.semesters.sequence, 1),
+          ),
+        );
+      if (firstSemester !== undefined && ["REGISTRATION", "ACTIVE"].includes(firstSemester.status))
+        await this.registration.registerEnrollment(
+          tx,
+          firstSemester.id,
+          enrollmentId,
+          actor.userId,
+        );
       const referralCode = await this.users.ensureReferralCode(db, current.applicantUserId);
 
       await db

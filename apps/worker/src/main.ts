@@ -4,7 +4,7 @@ import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
 import { createHandlers } from "./handlers";
-import { subscribers } from "./subscribers";
+import { createSubscribers } from "./subscribers";
 import { runsScheduler, startWorker } from "./worker";
 import { createWorkerContext } from "./worker.module";
 
@@ -31,7 +31,7 @@ const context = await createWorkerContext({
 const worker = await startWorker({
   boss,
   role: config.workerRole,
-  handlers: createHandlers({ context, subscribers }),
+  handlers: createHandlers({ context, subscribers: createSubscribers(context) }),
   logger,
   concurrency: config.queueConcurrency,
 });
