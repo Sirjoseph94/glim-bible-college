@@ -7,3 +7,11 @@ export {
 } from "./assignments.service";
 export { GradesService, toGrade, type GradeInput } from "./grades.service";
 export { SubmissionsService, type DraftInput } from "./submissions.service";
+export { QUIZ_GRACE_MS } from "./domain/quiz";
+export { QuizAttemptsService, type ResponsesInput } from "./quiz-attempts.service";
+export {
+  QuizzesService,
+  type QuestionInput,
+  type QuizChange,
+  type QuizInput,
+} from "./quizzes.service";

@@ -10,6 +10,7 @@ import { zonedToInstant } from "@glim/shared/time";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { CourseAssignments } from "../components/assignments";
+import { CourseQuizzes } from "../components/quizzes";
 import { CourseAnnouncements, CourseMaterials } from "../components/course-content";
 import { useState } from "react";
 import { api, ApiError } from "../api/client";
@@ -696,6 +697,7 @@ function OfferingItem({ offering }: { offering: Offering }) {
   const [showRecordings, setShowRecordings] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const [showAssignments, setShowAssignments] = useState(false);
+  const [showQuizzes, setShowQuizzes] = useState(false);
   return (
     <li className="space-y-2 rounded border border-slate-200 bg-white p-3">
       <div className="font-medium">
@@ -749,6 +751,16 @@ function OfferingItem({ offering }: { offering: Offering }) {
         {showAssignments ? "Hide assignments" : "Assignments"}
       </button>
       {showAssignments ? <CourseAssignments offeringId={offering.id} manage /> : null}
+      <button
+        type="button"
+        className="block text-sm text-brand underline"
+        onClick={() => {
+          setShowQuizzes((v) => !v);
+        }}
+      >
+        {showQuizzes ? "Hide quizzes" : "Quizzes"}
+      </button>
+      {showQuizzes ? <CourseQuizzes offeringId={offering.id} manage /> : null}
       {showContent ? (
         <div className="space-y-4">
           <h4 className="font-medium">Announcements</h4>

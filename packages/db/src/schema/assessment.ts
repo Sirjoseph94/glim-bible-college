@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -12,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { courseOfferings } from "./academic";
+import { courseOfferings, courses } from "./academic";
 import { enumCheck, std, stdRo, tstz } from "./columns";
 import { files } from "./content";
 import { students } from "./enrollment";
@@ -189,3 +190,164 @@ export const gradeChanges = pgTable("grade_changes", {
     .references(() => users.id, { onDelete: "restrict" }),
   reason: text(),
 });
+
+/** An option of a choice question, or an accepted answer of a short-text one. */
+export interface QuestionOption {
+  id: string;
+  text: string;
+  correct: boolean;
+}
+
+/**
+ * Owner: assessment. The question bank of a course (TRD §6.6), shared by its offerings. MCQ and
+ * true/false questions keep their options with the correct ones marked; short-text questions keep
+ * their accepted answers (all `correct`); essays are marked by hand.
+ */
+export const questions = pgTable(
+  "questions",
+  {
+    ...std(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "restrict" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    qtype: text().notNull(),
+    promptMd: text("prompt_md").notNull(),
+    options: jsonb().$type<QuestionOption[]>().notNull().default([]),
+    defaultPoints: numeric("default_points", { precision: 6, scale: 2 }).notNull().default("1"),
+    explanationMd: text("explanation_md"),
+    status: text().notNull().default("ACTIVE"),
+  },
+  (t) => [
+    enumCheck("questions.qtype", t.qtype),
+    enumCheck("questions.status", t.status),
+    check("questions_default_points_check", sql`${t.defaultPoints} > 0`),
+    index("questions_course").on(t.courseId, t.status),
+  ],
+);
+
+/** Owner: assessment. Backs one QUIZ or EXAM assessment (online exams, C-34). */
+export const quizzes = pgTable(
+  "quizzes",
+  {
+    ...std(),
+    courseOfferingId: uuid("course_offering_id")
+      .notNull()
+      .references(() => courseOfferings.id, { onDelete: "restrict" }),
+    assessmentId: uuid("assessment_id")
+      .notNull()
+      .unique()
+      .references(() => assessments.id, { onDelete: "restrict" }),
+    title: text().notNull(),
+    instructionsMd: text("instructions_md"),
+    timeLimitMinutes: integer("time_limit_minutes"),
+    maxAttempts: integer("max_attempts").notNull().default(1),
+    attemptScoring: text("attempt_scoring").notNull().default("HIGHEST"),
+    opensAt: tstz("opens_at"),
+    closesAt: tstz("closes_at"),
+    shuffleQuestions: boolean("shuffle_questions").notNull().default(false),
+    showAnswers: text("show_answers").notNull().default("AFTER_CLOSE"),
+    eligibleStudyMode: text("eligible_study_mode").notNull().default("ALL"),
+    status: text().notNull().default("DRAFT"),
+  },
+  (t) => [
+    enumCheck("quizzes.attempt_scoring", t.attemptScoring),
+    enumCheck("quizzes.show_answers", t.showAnswers),
+    enumCheck("quizzes.eligible_study_mode", t.eligibleStudyMode),
+    enumCheck("quizzes.status", t.status),
+    check("quizzes_max_attempts_check", sql`${t.maxAttempts} BETWEEN 1 AND 10`),
+    check(
+      "quizzes_time_limit_check",
+      sql`${t.timeLimitMinutes} IS NULL OR ${t.timeLimitMinutes} BETWEEN 1 AND 600`,
+    ),
+    check(
+      "quizzes_window_check",
+      sql`${t.opensAt} IS NULL OR ${t.closesAt} IS NULL OR ${t.closesAt} > ${t.opensAt}`,
+    ),
+    index("quizzes_offering").on(t.courseOfferingId),
+  ],
+);
+
+/** Owner: assessment. The questions of a quiz, in order, with their points. */
+export const quizQuestions = pgTable(
+  "quiz_questions",
+  {
+    ...stdRo(),
+    quizId: uuid("quiz_id")
+      .notNull()
+      .references(() => quizzes.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "restrict" }),
+    position: integer().notNull(),
+    points: numeric({ precision: 6, scale: 2 }).notNull(),
+  },
+  (t) => [
+    unique("quiz_questions_once").on(t.quizId, t.questionId),
+    check("quiz_questions_points_check", sql`${t.points} > 0`),
+  ],
+);
+
+/** A question as it was when an attempt started: later edits to the bank never change it. */
+export interface SnapshotQuestion {
+  questionId: string;
+  qtype: string;
+  promptMd: string;
+  options: QuestionOption[];
+  /** In hundredths. */
+  pointsX100: number;
+  explanationMd: string | null;
+}
+
+/** Owner: assessment. One attempt; `question_snapshot` FREEZES the content at start. */
+export const quizAttempts = pgTable(
+  "quiz_attempts",
+  {
+    ...std(),
+    quizId: uuid("quiz_id")
+      .notNull()
+      .references(() => quizzes.id, { onDelete: "restrict" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "restrict" }),
+    attemptNo: integer("attempt_no").notNull(),
+    startedAt: tstz("started_at").notNull(),
+    deadlineAt: tstz("deadline_at"),
+    submittedAt: tstz("submitted_at"),
+    status: text().notNull().default("IN_PROGRESS"),
+    questionSnapshot: jsonb("question_snapshot").$type<SnapshotQuestion[]>().notNull(),
+    autoScore: numeric("auto_score", { precision: 7, scale: 2 }),
+    manualScore: numeric("manual_score", { precision: 7, scale: 2 }),
+    score: numeric({ precision: 7, scale: 2 }),
+    lastSeq: bigint("last_seq", { mode: "number" }).notNull().default(0),
+  },
+  (t) => [
+    enumCheck("quiz_attempts.status", t.status),
+    unique("quiz_attempts_attempt").on(t.quizId, t.studentId, t.attemptNo),
+    uniqueIndex("quiz_attempts_one_in_progress")
+      .on(t.quizId, t.studentId)
+      .where(sql`status = 'IN_PROGRESS'`),
+  ],
+);
+
+/** Owner: assessment. A response to one question of an attempt, and how it was marked. */
+export const quizResponses = pgTable(
+  "quiz_responses",
+  {
+    ...std(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => quizAttempts.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id").notNull(),
+    response: jsonb().$type<QuizResponseValue>(),
+    isCorrect: boolean("is_correct"),
+    pointsAwarded: numeric("points_awarded", { precision: 6, scale: 2 }),
+    graderComment: text("grader_comment"),
+  },
+  (t) => [unique("quiz_responses_once").on(t.attemptId, t.questionId)],
+);
+
+/** Chosen option ids (MCQ, true/false) or written text (short text, essay). */
+export type QuizResponseValue = { optionIds: string[] } | { text: string };

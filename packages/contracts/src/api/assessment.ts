@@ -303,3 +303,365 @@ export const putGrade = endpoint({
     .strict(),
   response: gradeSchema,
 });
+
+// ---- question bank and quizzes (§14.2) ----
+
+const qtype = z.enum(ENUMS["questions.qtype"]);
+const points = decimalText(10_000, 1);
+
+export const questionOptionSchema = z.object({
+  id: z.string().min(1).max(40),
+  text: z.string().trim().min(1).max(1000),
+  correct: z.boolean(),
+});
+
+export const questionSchema = z.object({
+  id: z.uuid(),
+  qtype,
+  promptMd: z.string(),
+  promptHtml: z.string(),
+  /** With the right answers marked: for the course's staff only. */
+  options: z.array(questionOptionSchema),
+  defaultPoints: z.string(),
+  explanationMd: z.string().nullable(),
+  status: z.enum(ENUMS["questions.status"]),
+});
+
+export type Question = z.infer<typeof questionSchema>;
+
+export const listQuestions = endpoint({
+  method: "GET",
+  path: "/course-offerings/:id/questions",
+  summary: "The question bank of the offering's course (shared by its offerings)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "course-offering", param: "id" },
+  params: idParams,
+  response: z.object({ items: z.array(questionSchema) }),
+});
+
+export const createQuestion = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/questions",
+  summary: "Add a question to the course's bank",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "course-offering", param: "id" },
+  idempotent: true,
+  params: idParams,
+  body: z
+    .object({
+      qtype,
+      promptMd: z.string().trim().min(1).max(10_000),
+      /** Choices (MCQ, true/false) or accepted answers (short text); none for an essay. */
+      options: z.array(questionOptionSchema).max(20).optional(),
+      defaultPoints: points.optional(),
+      explanationMd: z.string().trim().max(10_000).nullable().optional(),
+    })
+    .strict(),
+  response: questionSchema,
+  successStatus: 201,
+});
+
+const quizQuestionInput = z.object({ questionId: z.uuid(), points: points.optional() }).strict();
+
+export const quizSchema = z.object({
+  id: z.uuid(),
+  assessmentId: z.uuid(),
+  courseOfferingId: z.uuid(),
+  kind: z.enum(["QUIZ", "EXAM"]),
+  title: z.string(),
+  instructionsMd: z.string().nullable(),
+  instructionsHtml: z.string().nullable(),
+  timeLimitMinutes: z.number().int().nullable(),
+  maxAttempts: z.number().int(),
+  attemptScoring: z.enum(ENUMS["quizzes.attempt_scoring"]),
+  opensAt: z.iso.datetime().nullable(),
+  closesAt: z.iso.datetime().nullable(),
+  shuffleQuestions: z.boolean(),
+  showAnswers: z.enum(ENUMS["quizzes.show_answers"]),
+  eligibleStudyMode: z.enum(ENUMS["quizzes.eligible_study_mode"]),
+  status: z.enum(ENUMS["quizzes.status"]),
+  /** The total of the questions' points: the gradebook column's maximum. */
+  maxScore: z.string(),
+  weight: z.string(),
+  questionCount: z.number().int(),
+  /** The questions and points, for the course's staff (empty for students). */
+  questions: z.array(
+    z.object({ questionId: z.uuid(), points: z.string(), qtype, promptMd: z.string() }),
+  ),
+  version: z.number().int(),
+});
+
+export type Quiz = z.infer<typeof quizSchema>;
+
+export const listQuizzes = endpoint({
+  method: "GET",
+  path: "/course-offerings/:id/quizzes",
+  summary: "A course's quizzes and online exams: published ones for students; all for its staff",
+  tag: "Assessment",
+  auth: "session",
+  permission: "content:material:read",
+  resource: { type: "course-offering", param: "id" },
+  params: idParams,
+  response: z.object({ items: z.array(quizSchema) }),
+});
+
+const quizSettings = {
+  title: z.string().trim().min(1).max(200),
+  instructionsMd: z.string().trim().max(10_000).nullable(),
+  timeLimitMinutes: z.number().int().min(1).max(600).nullable(),
+  maxAttempts: z.number().int().min(1).max(10),
+  attemptScoring: z.enum(ENUMS["quizzes.attempt_scoring"]),
+  opensAt: z.iso.datetime({ offset: true }).nullable(),
+  closesAt: z.iso.datetime({ offset: true }).nullable(),
+  shuffleQuestions: z.boolean(),
+  showAnswers: z.enum(ENUMS["quizzes.show_answers"]),
+  weight: decimalText(10_000),
+  questions: z.array(quizQuestionInput).min(1).max(200),
+};
+
+export const createQuiz = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/quizzes",
+  summary: "Create a quiz (a draft) from bank questions, with its gradebook column",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "course-offering", param: "id" },
+  idempotent: true,
+  params: idParams,
+  body: z
+    .object({
+      title: quizSettings.title,
+      weight: quizSettings.weight,
+      questions: quizSettings.questions,
+      instructionsMd: quizSettings.instructionsMd.optional(),
+      timeLimitMinutes: quizSettings.timeLimitMinutes.optional(),
+      maxAttempts: quizSettings.maxAttempts.optional(),
+      attemptScoring: quizSettings.attemptScoring.optional(),
+      opensAt: quizSettings.opensAt.optional(),
+      closesAt: quizSettings.closesAt.optional(),
+      shuffleQuestions: quizSettings.shuffleQuestions.optional(),
+      showAnswers: quizSettings.showAnswers.optional(),
+    })
+    .strict(),
+  response: quizSchema,
+  successStatus: 201,
+});
+
+export const getQuiz = endpoint({
+  method: "GET",
+  path: "/quizzes/:id",
+  summary: "A quiz",
+  tag: "Assessment",
+  auth: "session",
+  permission: "content:material:read",
+  resource: { type: "quiz", param: "id" },
+  params: idParams,
+  response: quizSchema,
+});
+
+export const updateQuiz = endpoint({
+  method: "PATCH",
+  path: "/quizzes/:id",
+  summary: "Change a quiz's settings (its questions only while it's a draft)",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "quiz", param: "id" },
+  ifMatch: true,
+  params: idParams,
+  body: z.object(quizSettings).partial().strict(),
+  response: quizSchema,
+});
+
+export const publishQuiz = endpoint({
+  method: "POST",
+  path: "/quizzes/:id/publish",
+  summary: "Publish a quiz to the course's students",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:manage",
+  resource: { type: "quiz", param: "id" },
+  idempotent: true,
+  params: idParams,
+  response: quizSchema,
+  successStatus: 200,
+});
+
+/** A response as sent and stored: chosen option ids, or written text. */
+export const quizResponseValue = z.union([
+  z.object({ optionIds: z.array(z.string().min(1).max(40)).max(20) }).strict(),
+  z.object({ text: z.string().max(50_000) }).strict(),
+]);
+
+export const attemptQuestionSchema = z.object({
+  questionId: z.uuid(),
+  qtype,
+  promptHtml: z.string(),
+  /** Choices for MCQ and true/false (without the answers while attempting); empty otherwise. */
+  options: z.array(z.object({ id: z.string(), text: z.string() })),
+  points: z.string(),
+  response: quizResponseValue.nullable(),
+  /** Shown once answers may be seen (the quiz's `showAnswers`), and always to staff. */
+  correctOptionIds: z.array(z.string()).nullable(),
+  acceptedAnswers: z.array(z.string()).nullable(),
+  explanationHtml: z.string().nullable(),
+  isCorrect: z.boolean().nullable(),
+  pointsAwarded: z.string().nullable(),
+  graderComment: z.string().nullable(),
+});
+
+export const quizAttemptSchema = z.object({
+  id: z.uuid(),
+  quizId: z.uuid(),
+  attemptNo: z.number().int(),
+  status: z.enum(ENUMS["quiz_attempts.status"]),
+  startedAt: z.iso.datetime(),
+  /** When the attempt ends, enforced by the server; null if untimed. */
+  deadlineAt: z.iso.datetime().nullable(),
+  /** The server's clock, so the page can count down correctly on a phone with the wrong time. */
+  serverNow: z.iso.datetime(),
+  submittedAt: z.iso.datetime().nullable(),
+  /** The highest `seq` stored; a page resumes numbering after it. */
+  lastSeq: z.number().int(),
+  /** Shown once marked (essays by hand). */
+  score: z.string().nullable(),
+  maxScore: z.string(),
+  questions: z.array(attemptQuestionSchema),
+});
+
+export type QuizAttempt = z.infer<typeof quizAttemptSchema>;
+
+export const startAttempt = endpoint({
+  method: "POST",
+  path: "/quizzes/:id/attempts",
+  summary: "Start an attempt (or carry on with the one in progress); its questions are frozen",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:attempt",
+  resource: { type: "quiz", param: "id", ownPart: true },
+  params: idParams,
+  response: quizAttemptSchema,
+  successStatus: 200,
+});
+
+export const myQuizAttemptsSchema = z.object({
+  attempts: z.array(
+    z.object({
+      id: z.uuid(),
+      attemptNo: z.number().int(),
+      status: z.enum(ENUMS["quiz_attempts.status"]),
+      submittedAt: z.iso.datetime().nullable(),
+      score: z.string().nullable(),
+    }),
+  ),
+  attemptsLeft: z.number().int(),
+  /** Whether an attempt can be started (or resumed) now. */
+  open: z.boolean(),
+});
+
+export type MyQuizAttempts = z.infer<typeof myQuizAttemptsSchema>;
+
+export const getMyQuizAttempts = endpoint({
+  method: "GET",
+  path: "/quizzes/:id/my-attempts",
+  summary: "The caller's attempts at a quiz",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:submission:read",
+  resource: { type: "quiz", param: "id", ownPart: true },
+  params: idParams,
+  response: myQuizAttemptsSchema,
+});
+
+export const getQuizAttempt = endpoint({
+  method: "GET",
+  path: "/quiz-attempts/:id",
+  summary: "An attempt: the student's own, or any on the course for its graders",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:submission:read",
+  resource: { type: "quiz-attempt", param: "id" },
+  params: idParams,
+  response: quizAttemptSchema,
+});
+
+export const saveQuizResponses = endpoint({
+  method: "PATCH",
+  path: "/quiz-attempts/:id",
+  summary: "Autosave responses; a `seq` not above the last one stored is ignored",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:attempt",
+  resource: { type: "quiz-attempt", param: "id" },
+  params: idParams,
+  body: z
+    .object({
+      seq: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+      responses: z
+        .array(z.object({ questionId: z.uuid(), response: quizResponseValue.nullable() }).strict())
+        .max(200),
+    })
+    .strict(),
+  response: z.object({ lastSeq: z.number().int(), saved: z.boolean() }),
+});
+
+export const submitQuizAttempt = endpoint({
+  method: "POST",
+  path: "/quiz-attempts/:id/submit",
+  summary: "Submit the attempt (submitting again changes nothing); objective questions are marked",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:quiz:attempt",
+  resource: { type: "quiz-attempt", param: "id" },
+  idempotent: true,
+  params: idParams,
+  response: quizAttemptSchema,
+  successStatus: 200,
+});
+
+export const quizAttemptForGradingSchema = z.object({
+  attemptId: z.uuid(),
+  studentId: z.uuid(),
+  studentName: z.string(),
+  attemptNo: z.number().int(),
+  status: z.enum(ENUMS["quiz_attempts.status"]),
+  submittedAt: z.iso.datetime().nullable(),
+  score: z.string().nullable(),
+  /** Essay answers not marked yet. */
+  essaysToMark: z.number().int(),
+});
+
+export const listQuizAttempts = endpoint({
+  method: "GET",
+  path: "/quizzes/:id/attempts",
+  summary: "Every finished attempt, those with essays to mark first",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:update",
+  resource: { type: "quiz", param: "id" },
+  params: idParams,
+  response: z.object({ items: z.array(quizAttemptForGradingSchema) }),
+});
+
+export const markQuizResponse = endpoint({
+  method: "PUT",
+  path: "/quiz-attempts/:id/responses/:questionId",
+  summary: "Mark an essay answer; once all are marked the attempt's score goes to the gradebook",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:update",
+  resource: { type: "quiz-attempt", param: "id" },
+  params: z.object({ id: z.uuid(), questionId: z.uuid() }),
+  body: z
+    .object({
+      points: decimalText(10_000),
+      comment: z.string().trim().max(5000).nullable().optional(),
+    })
+    .strict(),
+  response: quizAttemptSchema,
+});

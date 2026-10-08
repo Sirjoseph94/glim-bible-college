@@ -248,6 +248,26 @@ const gradeAssignmentRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/assignment"), "GradeAssignmentPage"),
 });
 
+const quizRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/quizzes/$quizId",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/quiz"), "QuizPage"),
+});
+
+const quizGradingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/teach/quizzes/$quizId/grade",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/quiz"), "QuizGradingPage"),
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
@@ -319,6 +339,8 @@ const routeTree = rootRoute.addChildren([
   recordingRoute,
   assignmentRoute,
   gradeAssignmentRoute,
+  quizRoute,
+  quizGradingRoute,
   adminVideosRoute,
   loginRoute,
   forgotRoute,

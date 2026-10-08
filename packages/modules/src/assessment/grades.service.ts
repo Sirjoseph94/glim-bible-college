@@ -1,5 +1,5 @@
 import type { Grade } from "@glim/contracts";
-import { Db, schema } from "@glim/db";
+import { Db, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import {
   CLOCK,
@@ -160,6 +160,84 @@ export class GradesService {
         },
       });
       return ok(toGrade(row));
+    });
+  }
+
+  /**
+   * Writes a score the system worked out (a quiz's marked attempts), inside the caller's
+   * transaction, with history and audit. `changedBy` is the person whose action produced it (the
+   * student submitting, or the Lecturer marking an essay). Nothing changes if the score is the same.
+   */
+  async recordComputed(
+    db: Database,
+    input: {
+      assessmentId: string;
+      courseOfferingId: string;
+      studentId: string;
+      scoreX100: number;
+      source: "QUIZ";
+      changedBy: string;
+      actor: AuditActor;
+    },
+  ): Promise<void> {
+    const g = schema.grades;
+    const score = fromHundredths(input.scoreX100);
+    const [current] = await db
+      .select()
+      .from(g)
+      .where(and(eq(g.assessmentId, input.assessmentId), eq(g.studentId, input.studentId)))
+      .for("update");
+    if (current?.score === score && current.source === input.source) return;
+    const now = this.clock.now();
+    const [row] =
+      current === undefined
+        ? await db
+            .insert(g)
+            .values({
+              courseOfferingId: input.courseOfferingId,
+              assessmentId: input.assessmentId,
+              studentId: input.studentId,
+              score,
+              source: input.source,
+              gradedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .returning()
+        : await db
+            .update(g)
+            .set({
+              score,
+              source: input.source,
+              gradedAt: now,
+              updatedAt: now,
+              version: sql`${g.version} + 1`,
+            })
+            .where(eq(g.id, current.id))
+            .returning();
+    if (row === undefined) throw new Error("grade write returned nothing");
+    await db.insert(schema.gradeChanges).values({
+      gradeId: row.id,
+      oldScore: current?.score ?? null,
+      newScore: score,
+      oldStatus: current?.status ?? null,
+      newStatus: row.status,
+      oldSource: current?.source ?? null,
+      newSource: input.source,
+      changedBy: input.changedBy,
+      createdAt: now,
+    });
+    await this.audit.record(db, input.actor, {
+      action: "assessment.grade.computed",
+      resourceType: "grade",
+      resourceId: row.id,
+      metadata: {
+        assessmentId: input.assessmentId,
+        studentId: input.studentId,
+        oldScore: current?.score ?? null,
+        newScore: score,
+        source: input.source,
+      },
     });
   }
 }

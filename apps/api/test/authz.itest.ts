@@ -12,6 +12,8 @@ import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { VideosService } from "@glim/modules/video";
 import {
   AssignmentsService as CourseworkAssignments,
+  QuizAttemptsService,
+  QuizzesService,
   SubmissionsService,
 } from "@glim/modules/assessment";
 import { FilesService, MaterialsService } from "@glim/modules/content";
@@ -683,6 +685,100 @@ const SAMPLES: Record<string, Sample> = {
       offering: "O1",
     };
   },
+  "GET /course-offerings/:id/questions": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/questions`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/questions": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/questions`,
+      payload: { qtype: "ESSAY", promptMd: "Discuss." },
+      headers: { "idempotency-key": `authz-question-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  "GET /course-offerings/:id/quizzes": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/quizzes`,
+      offering: "O1",
+    }),
+  "POST /course-offerings/:id/quizzes": async (t) => {
+    n++;
+    const f = await quizFixture(t);
+    return {
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/quizzes`,
+      payload: { title: "Quiz", weight: "5", questions: [{ questionId: f.essayId }] },
+      headers: { "idempotency-key": `authz-quiz-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  "GET /quizzes/:id": async (t) => ({
+    url: `/api/v1/quizzes/${(await quizFixture(t)).quizId}`,
+    offering: "O1",
+  }),
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "PATCH /quizzes/:id": async (t) => ({
+    url: `/api/v1/quizzes/${(await quizFixture(t)).quizId}`,
+    payload: { title: "Renamed" },
+    headers: { "if-match": '"999"' },
+    offering: "O1",
+  }),
+  // Already published: allowed callers change nothing.
+  "POST /quizzes/:id/publish": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/quizzes/${(await quizFixture(t)).quizId}/publish`,
+      headers: { "idempotency-key": `authz-publish-q-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    };
+  },
+  // sEnrolled already has an attempt in progress, so this carries on with it.
+  "POST /quizzes/:id/attempts": async (t) => ({
+    url: `/api/v1/quizzes/${(await quizFixture(t)).quizId}/attempts`,
+    offering: "O1",
+    ownPart: true,
+  }),
+  "GET /quizzes/:id/my-attempts": async (t) => ({
+    url: `/api/v1/quizzes/${(await quizFixture(t)).quizId}/my-attempts`,
+    offering: "O1",
+    ownPart: true,
+  }),
+  "GET /quiz-attempts/:id": async (t) => ({
+    url: `/api/v1/quiz-attempts/${(await quizFixture(t)).attemptId}`,
+    offering: "O1",
+    owner: "sEnrolled",
+  }),
+  // Saved, or (after the submit sample) refused as ended; either way the caller got through.
+  "PATCH /quiz-attempts/:id": async (t) => ({
+    url: `/api/v1/quiz-attempts/${(await quizFixture(t)).attemptId}`,
+    payload: { seq: ++n, responses: [] },
+    offering: "O1",
+    owner: "sEnrolled",
+  }),
+  "POST /quiz-attempts/:id/submit": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/quiz-attempts/${(await quizFixture(t)).attemptId}/submit`,
+      headers: { "idempotency-key": `authz-quiz-submit-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+      owner: "sEnrolled",
+    };
+  },
+  "GET /quizzes/:id/attempts": async (t) => ({
+    url: `/api/v1/quizzes/${(await quizFixture(t)).quizId}/attempts`,
+    offering: "O1",
+  }),
+  // Before the submit sample this is a 409 (not submitted yet); after, the essay is marked.
+  "PUT /quiz-attempts/:id/responses/:questionId": async (t) => {
+    const f = await quizFixture(t);
+    return {
+      url: `/api/v1/quiz-attempts/${f.attemptId}/responses/${f.essayId}`,
+      payload: { points: "1" },
+      offering: "O1",
+    };
+  },
   "GET /course-offerings/:id/materials": () =>
     Promise.resolve({
       url: `/api/v1/course-offerings/${personas.world.offerings.O1}/materials`,
@@ -928,6 +1024,36 @@ async function assignmentFixture(t: TestApp) {
     studentId: student.rows[0]?.id ?? "",
   };
   return assignmentShared;
+}
+
+let quizShared: { quizId: string; attemptId: string; essayId: string } | undefined;
+/** A published, untimed quiz on O1 with one essay question, and sEnrolled's attempt at it. */
+async function quizFixture(t: TestApp) {
+  if (quizShared !== undefined) return quizShared;
+  const quizzes = t.app.get(QuizzesService);
+  const essay = unwrap(
+    await quizzes.createQuestion(
+      personas.world.offerings.O1,
+      { qtype: "ESSAY", promptMd: "Discuss.", defaultPoints: "5" },
+      personas.l1Primary.userId,
+    ),
+  );
+  const created = unwrap(
+    await quizzes.create(personas.world.offerings.O1, {
+      title: "Fixture quiz",
+      weight: "5",
+      maxAttempts: 10,
+      questions: [{ questionId: essay.id }],
+    }),
+  );
+  unwrap(await quizzes.publish(created.id));
+  const attempt = unwrap(
+    await t.app
+      .get(QuizAttemptsService)
+      .start(created.id, { ...SYSTEM_ACTOR, type: "USER", userId: personas.sEnrolled.userId }),
+  );
+  quizShared = { quizId: created.id, attemptId: attempt.id, essayId: essay.id };
+  return quizShared;
 }
 
 let fileMaterialShared: string | undefined;

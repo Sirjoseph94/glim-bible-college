@@ -232,6 +232,13 @@
       "when": 1791486938285,
       "tag": "0032_wp_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791488047080,
+      "tag": "0033_wp_quizzes",
+      "breakpoints": true
     }
   ]
 }

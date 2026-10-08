@@ -8,6 +8,7 @@ import { ProgressionService, RegistrationService } from "@glim/modules/enrollmen
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService } from "@glim/modules/ops";
 import { AvailabilityService, VideoAdminService } from "@glim/modules/video";
+import { QuizAttemptsService } from "@glim/modules/assessment";
 import type { INestApplicationContext } from "@nestjs/common";
 import type { Job } from "pg-boss";
 import { createDispatcher, type SubscriberRegistry } from "./subscribers";
@@ -38,6 +39,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const userAdmin = deps.context.get(UserAdminService);
   const videoAvailability = deps.context.get(AvailabilityService);
   const videoAdmin = deps.context.get(VideoAdminService);
+  const quizAttempts = deps.context.get(QuizAttemptsService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
     "auth.session-cleanup": () => sessions.deleteEnded(),
@@ -49,6 +51,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "meeting.tick": () => lifecycle.tick(),
     "video.availability-check": () => videoAvailability.checkAll(),
     "video.purge-deleted": () => videoAdmin.purgeDeleted(),
+    "quiz.expire": (job) => quizAttempts.expire((job.data as { attemptId: string }).attemptId),
     "attendance.recompute": (job) =>
       attendance.recompute((job.data as { meetingId: string }).meetingId),
     "class-meeting.finalize": (job) =>
