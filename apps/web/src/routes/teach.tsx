@@ -596,7 +596,14 @@ function OfferingRecordings({ offeringId }: { offeringId: string }) {
               {v.title}{" "}
               <span className="text-slate-500">
                 ({v.status === "PUBLISHED" ? "published" : v.status.toLowerCase()})
-              </span>
+              </span>{" "}
+              <Link
+                to="/recordings/$videoId"
+                params={{ videoId: v.id }}
+                className="text-blue-700 underline"
+              >
+                Watch
+              </Link>
             </span>
             <span className="flex gap-3">
               <button

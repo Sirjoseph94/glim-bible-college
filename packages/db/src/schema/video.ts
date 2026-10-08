@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
+  numeric,
   pgTable,
   text,
   uniqueIndex,
@@ -67,5 +69,38 @@ export const videos = pgTable(
     index("videos_delete_after")
       .on(t.deleteAfter)
       .where(sql`status = 'DELETED'`),
+  ],
+);
+
+/**
+ * Owner: video. Where a viewer stopped in a video, so it resumes there (TRD §6.5, §13.4). One row
+ * per viewer and video; `max_position_ms` only grows, `completed` is set at 90 %, and `last_seq`
+ * drops reports that arrive out of order.
+ */
+export const playbackProgress = pgTable(
+  "playback_progress",
+  {
+    ...std(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    positionMs: bigint("position_ms", { mode: "number" }).notNull(),
+    maxPositionMs: bigint("max_position_ms", { mode: "number" }).notNull(),
+    durationMs: bigint("duration_ms", { mode: "number" }).notNull(),
+    percentComplete: numeric("percent_complete", { precision: 5, scale: 2 }).notNull(),
+    completed: boolean().notNull().default(false),
+    completedAt: tstz("completed_at"),
+    lastSeq: bigint("last_seq", { mode: "number" }).notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("playback_progress_video_user").on(t.videoId, t.userId),
+    index("playback_progress_user").on(t.userId),
+    check(
+      "playback_progress_positions",
+      sql`${t.positionMs} >= 0 AND ${t.positionMs} <= ${t.maxPositionMs} AND ${t.maxPositionMs} <= ${t.durationMs}`,
+    ),
   ],
 );

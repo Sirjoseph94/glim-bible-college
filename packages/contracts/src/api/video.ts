@@ -140,3 +140,61 @@ export const reorderVideos = endpoint({
   body: z.object({ videoIds: z.array(z.uuid()).min(1).max(500) }).strict(),
   response: z.object({ items: z.array(videoSchema) }),
 });
+
+export const videoPlaybackSchema = z.object({
+  videoId: z.uuid(),
+  title: z.string(),
+  youtubeVideoId: z.string(),
+  /** youtube-nocookie.com, starting at the resume point. */
+  embedUrl: z.string(),
+  thumbnailUrl: z.string(),
+  durationMs: z.number().int().nullable(),
+  resumeMs: z.number().int(),
+  /** Whether the player should report progress (students only; staff don't keep any). */
+  tracksProgress: z.boolean(),
+});
+
+export type VideoPlayback = z.infer<typeof videoPlaybackSchema>;
+
+export const playVideo = endpoint({
+  method: "GET",
+  path: "/videos/:id/play",
+  summary: "What the player needs to show a recording, with the viewer's resume point",
+  tag: "Video",
+  auth: "session",
+  permission: "video:asset:play",
+  resource: { type: "video", param: "id" },
+  rateLimit: "playback",
+  params: idParams,
+  response: videoPlaybackSchema,
+});
+
+export const playbackProgressSchema = z.object({
+  positionMs: z.number().int(),
+  maxPositionMs: z.number().int(),
+  durationMs: z.number().int(),
+  completed: z.boolean(),
+});
+
+export type PlaybackProgress = z.infer<typeof playbackProgressSchema>;
+
+export const saveProgress = endpoint({
+  method: "PATCH",
+  path: "/videos/:id/progress",
+  summary: "Where the viewer is in a recording (sent every 15 s, on pause and on leaving the page)",
+  tag: "Video",
+  auth: "session",
+  permission: "video:progress:write",
+  resource: { type: "video", param: "id", ownPart: true },
+  rateLimit: "progress",
+  params: idParams,
+  body: z
+    .object({
+      positionMs: z.number().int().min(0).max(86_400_000),
+      durationMs: z.number().int().min(1).max(86_400_000),
+      /** Increases with each report from a page; an older one arriving late is ignored. */
+      seq: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+  response: playbackProgressSchema,
+});

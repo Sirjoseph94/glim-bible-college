@@ -85,7 +85,11 @@ export class AuthGuard implements CanActivate {
       spec.permission,
       spec.resource === undefined || typeof resourceId !== "string"
         ? undefined
-        : { type: spec.resource.type, id: resourceId },
+        : {
+            type: spec.resource.type,
+            id: resourceId,
+            ...(spec.resource.ownPart === true ? { ownPart: true } : {}),
+          },
     );
     if (decision === "ALLOW") return true;
     if (unsafe) await this.auditDenied(req, session, spec.permission);

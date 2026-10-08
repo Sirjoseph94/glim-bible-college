@@ -3,6 +3,7 @@ import { AuthorizationModule, AuthorizationService } from "@glim/modules/authori
 import { IdentityModule } from "@glim/modules/identity";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
+import { PlaybackService } from "./playback.service";
 import { VideosService } from "./videos.service";
 
 /** Videos tell authorization which offering each belongs to (§7.2). */
@@ -25,7 +26,7 @@ class VideoResources implements OnModuleInit {
 /** Course videos on YouTube (TRD §13, ADR-0003). */
 @Module({
   imports: [AuditModule, AuthorizationModule, IdentityModule],
-  providers: [VideosService, VideoResources],
-  exports: [VideosService],
+  providers: [VideosService, PlaybackService, VideoResources],
+  exports: [VideosService, PlaybackService],
 })
 export class VideoModule {}

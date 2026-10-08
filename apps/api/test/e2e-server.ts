@@ -20,7 +20,7 @@ import {
 } from "@glim/modules/academic";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { AssignmentsService, LecturersService } from "@glim/modules/lecturing";
-import { StaffAccountsService } from "@glim/modules/identity";
+import { hashPassword, StaffAccountsService } from "@glim/modules/identity";
 import { systemClock, unwrap } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -210,7 +210,9 @@ const teachingOffering = unwrap(
   ),
 );
 unwrap(await app.get(OfferingsService).publish(teachingOffering, SYSTEM_ACTOR));
-// Two students on that offering, one on campus and one online, for the roll-call spec.
+// Two students on that offering, one on campus and one online, for the roll-call spec. The
+// online one can sign in, to watch recordings (recordings spec).
+const studentPassword = await hashPassword("student passphrase 2026");
 for (const [n, given, family, mode] of [
   [1, "Ada", "Campus", "ON_CAMPUS"],
   [2, "Bola", "Online", "ONLINE"],
@@ -218,8 +220,8 @@ for (const [n, given, family, mode] of [
   const one = async (text: string, values: unknown[]) =>
     (await db.pool.query<{ id: string }>(text, values)).rows[0]?.id;
   const userId = await one(
-    "INSERT INTO users (email, display_name, status) VALUES ($1, $2, 'ACTIVE') RETURNING id",
-    [`e2e-student${String(n)}@glim.test`, `${given} ${family}`],
+    "INSERT INTO users (email, display_name, status, password_hash) VALUES ($1, $2, 'ACTIVE', $3) RETURNING id",
+    [`e2e-student${String(n)}@glim.test`, `${given} ${family}`, n === 2 ? studentPassword : null],
   );
   const studentId = await one(
     "INSERT INTO students (user_id, given_name, family_name) VALUES ($1, $2, $3) RETURNING id",

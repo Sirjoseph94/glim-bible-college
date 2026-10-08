@@ -18,6 +18,11 @@ export type ResourceContextLoader = (id: string) => Promise<ResourceContext | nu
 export interface ResourceRef {
   type: ResourceType;
   id: string;
+  /**
+   * The caller's own part of the resource (e.g. their playback progress on a video): the write can
+   * only reach the caller's row, so "own" rules hold by construction.
+   */
+  ownPart?: boolean;
 }
 
 /** A lecturer's active assignment on one offering, as `v_offering_access` reports it. */
@@ -138,7 +143,7 @@ export class AuthorizationService {
       }
       const loaded = await loader(resource.id);
       if (loaded === null) return "NOT_FOUND";
-      context = loaded;
+      context = resource.ownPart === true ? { ...loaded, ownerUserId: principal.userId } : loaded;
     }
 
     // Staff path (§7.2 step 2).

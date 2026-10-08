@@ -11,6 +11,7 @@ export {
 } from "./google-sign-in.service";
 export { IdentityModule } from "./identity.module";
 export { MeService } from "./me.service";
+export { hashPassword } from "./passwords";
 export {
   SESSION_COOKIE,
   SESSION_LIFETIME,

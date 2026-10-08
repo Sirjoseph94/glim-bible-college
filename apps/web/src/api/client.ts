@@ -43,6 +43,8 @@ export async function api<E extends EndpointSpec>(
     params?: Record<string, string>;
     query?: Record<string, string | number | undefined>;
     headers?: Record<string, string>;
+    /** Lets the request finish after the page is gone (progress sent on `pagehide`). */
+    keepalive?: boolean;
   } = {},
 ): Promise<ResponseOf<E>> {
   const headers: Record<string, string> = { ...init.headers };
@@ -62,6 +64,7 @@ export async function api<E extends EndpointSpec>(
     headers,
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     ...(init.signal ? { signal: init.signal } : {}),
+    ...(init.keepalive === true ? { keepalive: true } : {}),
   });
   if (!res.ok) {
     const envelope = (await res.json().catch(() => null)) as ErrorEnvelope | null;

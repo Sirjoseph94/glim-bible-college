@@ -73,6 +73,8 @@ export const ENDPOINTS = [
   video.publishVideo,
   video.unpublishVideo,
   video.reorderVideos,
+  video.playVideo,
+  video.saveProgress,
   meetings.getMySchedule,
   auth.login,
   auth.logout,
@@ -198,4 +200,4 @@ export type { AdmissionsReport, ReferralReport } from "./reports";
 export type { Lecturer, Offering } from "./offerings";
 export type { PolicyView, Settings } from "./settings";
 export type { UserDetail, UserListItem } from "./users";
-export type { Video } from "./video";
+export type { PlaybackProgress, Video, VideoPlayback } from "./video";

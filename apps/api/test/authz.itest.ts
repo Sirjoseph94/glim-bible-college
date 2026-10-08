@@ -39,6 +39,8 @@ interface SampleRequest {
   offering?: OfferingKey;
   /** The persona who owns the resource (an applicant's application), for the applicant path. */
   owner?: PersonaName;
+  /** The request only touches the caller's own part of the resource (their video progress). */
+  ownPart?: boolean;
 }
 
 type Sample = (t: TestApp) => Promise<SampleRequest>;
@@ -564,6 +566,16 @@ const SAMPLES: Record<string, Sample> = {
     payload: { videoIds: [await videoFixture(t), "00000000-0000-7000-8000-000000000000"] },
     offering: "O1",
   }),
+  "GET /videos/:id/play": async (t) => ({
+    url: `/api/v1/videos/${await playableVideoFixture(t)}/play`,
+    offering: "O1",
+  }),
+  "PATCH /videos/:id/progress": async (t) => ({
+    url: `/api/v1/videos/${await playableVideoFixture(t)}/progress`,
+    payload: { positionMs: 1000, durationMs: 60_000, seq: ++n },
+    offering: "O1",
+    ownPart: true,
+  }),
   "GET /admissions/applications": () => Promise.resolve({ url: "/api/v1/admissions/applications" }),
   "GET /admissions/applications/:id": async (t) => ({
     url: `/api/v1/admissions/applications/${await submittedApplicationFixture(t)}`,
@@ -649,6 +661,24 @@ async function videoFixture(t: TestApp): Promise<string> {
   );
   videoShared = created.id;
   return videoShared;
+}
+
+let playableShared: string | undefined;
+/** A published video on O1 that no other sample unpublishes. */
+async function playableVideoFixture(t: TestApp): Promise<string> {
+  if (playableShared !== undefined) return playableShared;
+  await videoFixture(t);
+  const created = unwrap(
+    await t.app
+      .get(VideosService)
+      .add(
+        personas.world.offerings.O1,
+        { youtubeUrl: "https://youtu.be/fixture0002" },
+        { ...SYSTEM_ACTOR, userId: personas.acadAdmin.userId },
+      ),
+  );
+  playableShared = created.id;
+  return playableShared;
 }
 
 async function freshOffering(t: TestApp): Promise<string> {
@@ -869,7 +899,8 @@ function expectedAllowed(
   permission: NonNullable<EndpointSpec["permission"]>,
   sample: SampleRequest,
 ): boolean {
-  const { offering, owner } = sample;
+  const { offering } = sample;
+  const owner = sample.ownPart === true ? persona.name : sample.owner;
   if (AuthorizationService.staffGrants(persona.roles, permission)) return true;
   if (MATRIX.permissions[permission].applicant === true && owner === persona.name) return true;
   const studentRule = MATRIX.permissions[permission].student;

@@ -20,8 +20,12 @@ export interface EndpointSpec {
    * With `resource`, the decision is made for that resource, and one the caller can't see is a 404.
    */
   permission?: Permission;
-  /** `param` names a path parameter, or a query parameter with `in: "query"`. */
-  resource?: { type: ResourceType; param: string; in?: "path" | "query" };
+  /**
+   * `param` names a path parameter, or a query parameter with `in: "query"`. `ownPart` marks an
+   * endpoint that only touches the caller's own part of the resource (their progress on a video),
+   * so "own" rules in the matrix hold.
+   */
+  resource?: { type: ResourceType; param: string; in?: "path" | "query"; ownPart?: boolean };
   params?: z.ZodType;
   query?: z.ZodType;
   body?: z.ZodType;

@@ -211,6 +211,16 @@ const meetingAttendanceRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/roll-call"), "MeetingAttendancePage"),
 });
 
+const recordingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recordings/$videoId",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/recording"), "RecordingPage"),
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
@@ -279,6 +289,7 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   rollCallRoute,
   meetingAttendanceRoute,
+  recordingRoute,
   loginRoute,
   forgotRoute,
   resetRoute,

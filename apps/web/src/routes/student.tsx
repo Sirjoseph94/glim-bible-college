@@ -7,6 +7,7 @@ import type {
   video,
 } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
 import { useSubmit } from "../components/use-submit";
@@ -137,7 +138,15 @@ function CourseRecordings({ offeringId }: { offeringId: string }) {
       <summary className="cursor-pointer text-slate-700">Recordings ({items.length})</summary>
       <ul className="mt-2 space-y-1">
         {items.map((v) => (
-          <li key={v.id}>{v.title}</li>
+          <li key={v.id}>
+            <Link
+              to="/recordings/$videoId"
+              params={{ videoId: v.id }}
+              className="text-blue-700 underline"
+            >
+              {v.title}
+            </Link>
+          </li>
         ))}
       </ul>
     </details>
