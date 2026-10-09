@@ -20,6 +20,8 @@ export interface TestApp {
   app: NestFastifyApplication;
   db: Db;
   boss: PgBoss;
+  /** Errors pg-boss reported (its connections dropping), heard as `main.ts` hears them. */
+  bossErrors: Error[];
   clock: TestClock;
   /** Scriptable YouTube (TRD §21.3). */
   videoHost: FakeVideoHost;
@@ -70,6 +72,8 @@ export async function createTestApp(
   });
   await storage.ensureBucket(config.storage.bucket);
   const boss = createBoss(database.appUrl, { max: 2 });
+  const bossErrors: Error[] = [];
+  boss.on("error", (error) => bossErrors.push(error));
   await boss.start();
   const db = new Db(createPool(database.appUrl, 4), boss);
   const clock = new TestClock("2026-11-02T09:00:00Z");
@@ -97,6 +101,7 @@ export async function createTestApp(
     app,
     db,
     boss,
+    bossErrors,
     clock,
     videoHost,
     mailer,

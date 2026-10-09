@@ -29,10 +29,11 @@ Then:
 
 1. In **Spaces → glim-backups → postgres/**, download the dump you want (`glim-<date>.dump.age`).
 2. Decrypt it: `age --decrypt -i glim-backup-key.txt glim-<date>.dump.age > glim.dump`
-3. Create an empty database `glim` on the target cluster, owned by `glim_migrator`.
+3. Create an empty database `glim` on the target cluster, owned by `glim_migrator`. The roles `glim_migrator` and `glim_app` must already exist on that cluster.
 4. Restore as the migrator:
-   `pg_restore --no-owner --role=glim_migrator --dbname="<migrator connection string>" glim.dump`
-5. Run the migrations once, which also restores the app role's permissions: run the `migrate` job (redeploy), or `pnpm --filter @glim/db migrate` with `DATABASE_URL_MIGRATOR` set.
+   `pg_restore --no-owner --clean --if-exists --role=glim_migrator --dbname="<migrator connection string>" glim.dump`
+   It should print nothing. (`--clean --if-exists` replaces the empty `public` schema the new database starts with; without it pg_restore reports `schema "public" already exists`.) The dump carries the `citext` and `btree_gist` extensions and the app role's permissions, including the audit log's missing UPDATE and DELETE.
+5. Run the migrations once (they find nothing to do unless the dump is older than the code, and they re-grant the job queue): run the `migrate` job (redeploy), or `pnpm --filter @glim/db migrate` with `DATABASE_URL_MIGRATOR` set.
 6. Point the app at it as in A.4, and check as in A.5.
 
 The dump holds the `public` (college data), `pgboss` (background jobs) and `drizzle` (migration history) schemas. Uploaded files (photos, documents) live in the `glim-files` Space and aren't in the dump.
@@ -41,3 +42,14 @@ The dump holds the `public` (college data), `pgboss` (background jobs) and `driz
 
 - The worker runs `db.logical-backup` every Sunday at 01:00 UTC. If it fails, it appears on the ops page (ticket 44) and in the worker logs.
 - The `glim-backups` Space has a lifecycle rule that deletes dumps after 12 weeks.
+
+## Drill record
+
+| Date | Where | What | Result | Time |
+|---|---|---|---|---|
+| 2026-10-09 | Local (Postgres 18.6, MacBook), ticket 46 | Section B without `age`: `pg_dump` as `glim_app` with the backup job's flags, of the e2e stack's database (14 users, 37 audit rows, 45 migrations, 320 KB); restore as `glim_migrator` into an empty database; migrate | Row counts identical; `glim_app` reads and writes the data and the job queue; `glim_app` still can't change `audit_logs` | dump 0.1 s, restore 0.4 s, migrate 1.3 s: **1.9 s** |
+| — | Staging (DigitalOcean), before launch | Section A (point-in-time restore to a new cluster) and section B with a real weekly dump and the `age` key | To do (System Admin) | Record the time from "decide to restore" to "`/readyz` green" |
+
+The first local attempt found two faults in the weekly dump, both fixed in ticket 46 and covered by `apps/worker/test/backup.itest.ts`, which restores a dump this way on every integration run:
+1. `--schema` leaves extensions out of a dump, so restoring into an empty database failed on every `citext` column. The dump now includes `citext` and `btree_gist`.
+2. The dump was taken with `--no-privileges`, and the app role's permissions on the college data come from the first migration, which doesn't run again on a restored database. The app would have been unable to read anything. The dump now keeps privileges.

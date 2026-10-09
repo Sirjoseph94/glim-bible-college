@@ -32,7 +32,10 @@ export function AdminAuditPage() {
                   {entry.actorUserId ?? entry.actorType.toLowerCase()}
                 </div>
                 {Object.keys(entry.metadata).length > 0 ? (
-                  <pre className="overflow-x-auto rounded bg-slate-50 p-2 text-xs">
+                  <pre
+                    tabIndex={0}
+                    className="overflow-x-auto rounded bg-slate-50 p-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
                     {JSON.stringify(entry.metadata, null, 2)}
                   </pre>
                 ) : null}

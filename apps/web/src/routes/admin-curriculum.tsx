@@ -91,7 +91,12 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
           });
         }}
       >
-        <div className="overflow-x-auto">
+        <div
+          role="region"
+          aria-label="Curriculum courses"
+          tabIndex={0}
+          className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
           <table className="w-full min-w-[36rem] border-collapse text-sm">
             <thead>
               <tr className="text-left text-slate-600">

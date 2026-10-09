@@ -327,7 +327,12 @@ function TranscriptView({ transcript: d }: { transcript: Transcript }) {
               </span>
             ) : null}
           </h3>
-          <div className="overflow-x-auto">
+          <div
+            role="region"
+            aria-label="Courses"
+            tabIndex={0}
+            className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
             <table className="min-w-full text-left">
               <thead className="text-slate-600">
                 <tr>

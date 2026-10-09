@@ -24,6 +24,9 @@ if (values.email === undefined || values.name === undefined) {
 const config = loadConfig();
 const logger = createLogger({ service: "bootstrap", level: config.logLevel });
 const boss = createBoss(config.db.url, { max: 1 });
+boss.on("error", (error) => {
+  logger.error({ err: error }, "pg-boss error");
+});
 await boss.start();
 const db = new Db(createPool(config.db.url, 2), boss);
 const app = await NestFactory.createApplicationContext(

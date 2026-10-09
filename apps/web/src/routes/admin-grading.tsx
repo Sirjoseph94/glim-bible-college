@@ -113,7 +113,12 @@ function SchemeCard({
         Programmes:{" "}
         {s.programmes.length === 0 ? "none" : s.programmes.map((x) => x.code).join(", ")}
       </p>
-      <div className="overflow-x-auto">
+      <div
+        role="region"
+        aria-label="Grade bands"
+        tabIndex={0}
+        className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      >
         <table className="text-left">
           <thead>
             <tr className="text-slate-600">

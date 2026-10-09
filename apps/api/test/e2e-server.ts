@@ -50,6 +50,9 @@ await objectStorage.ensureBucket(config.storage.bucket);
 const database = await createTestDatabase(services.postgresAdminUrl);
 
 const boss = createBoss(database.appUrl, { max: 2 });
+boss.on("error", (error) => {
+  logger.warn({ err: error }, "pg-boss error");
+});
 await boss.start();
 const db = new Db(createPool(database.appUrl, 4), boss);
 const mailer = new MemoryMailer();

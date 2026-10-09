@@ -34,6 +34,22 @@ jobs:
       - run: pnpm test
       - run: pnpm budget:check
 
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f docker/Dockerfile -t glim:ci .
+      # Trivy (TRD §21.2 security checklist): the image's OS packages and the lockfile's
+      # dependencies, failing on fixable HIGH or CRITICAL vulnerabilities.
+      - name: Trivy image scan
+        run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest
+          image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress glim:ci
+      - name: Trivy dependency scan
+        run: >
+          docker run --rm -v "$PWD:/repo" aquasec/trivy:latest
+          fs --scanners vuln --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress /repo
+
   integration:
     runs-on: ubuntu-latest
     steps:
@@ -69,3 +85,19 @@ jobs:
       - run: pnpm --filter @glim/web exec playwright install --with-deps chromium
       # The e2e server starts Postgres 18 with Testcontainers.
       - run: pnpm test:e2e
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @glim/web build
+      # LCP <= 4 s on slow 4G (apps/web/lighthouserc.cjs); the e2e stack serves the build.
+      - name: Lighthouse CI
+        working-directory: apps/web
+        run: pnpm dlx @lhci/cli@0.15.1 autorun

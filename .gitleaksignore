@@ -1,0 +1,5 @@
+# Reviewed false positives (ticket 46): sentinel strings in tests that prove sensitive applicant
+# answers never reach logs or exports. They are not credentials. Add an entry only after review.
+8ccd0583f24e82d7240646412910f9533f10fec4:apps/api/test/review.itest.ts:generic-api-key:23
+0600190077b7b93dbd298478e3d62d3b84eb31ff:apps/api/test/applications.itest.ts:generic-api-key:429
+c9a8c5eba96f328c46a4c4fdf48f0d4af45cb012:apps/api/test/applications.itest.ts:generic-api-key:277

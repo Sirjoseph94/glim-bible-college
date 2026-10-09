@@ -9,4 +9,8 @@ coverage/
 apps/api/static/
 playwright-report/
 test-results/
+.lighthouseci/
 .DS_Store
+
+# k6 test accounts (passwords)
+load/*.csv

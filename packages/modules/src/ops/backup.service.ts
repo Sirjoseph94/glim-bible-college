@@ -9,6 +9,11 @@ import { Encrypter } from "age-encryption";
 
 /** The schemas a logical dump holds: the app's data, the job queue, and the migration journal. */
 const SCHEMAS = ["public", "pgboss", "drizzle"];
+/**
+ * The extensions the schemas use. `--schema` leaves extensions out of a dump, so without these
+ * a restore into an empty database fails on every citext column (found in the ticket 46 drill).
+ */
+const EXTENSIONS = ["citext", "btree_gist"];
 
 /**
  * The weekly logical backup (`db.logical-backup`, TRD §22.7): `pg_dump -Fc` over the direct
@@ -38,7 +43,14 @@ export class BackupService {
     // The password travels in the environment, never on the command line.
     const dump = spawn(
       this.config.backup.pgDumpPath,
-      ["--format=custom", "--no-owner", "--no-privileges", ...SCHEMAS.map((s) => `--schema=${s}`)],
+      // Privileges are kept: the public grants (and the audit log's revoked UPDATE/DELETE) are
+      // made by migrations, which don't run again on a restored database.
+      [
+        "--format=custom",
+        "--no-owner",
+        ...SCHEMAS.map((s) => `--schema=${s}`),
+        ...EXTENSIONS.map((e) => `--extension=${e}`),
+      ],
       {
         env: {
           PATH: "/usr/local/bin:/usr/bin:/bin",

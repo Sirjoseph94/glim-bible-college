@@ -111,7 +111,12 @@ function GradeTable({
 }) {
   return (
     // The table scrolls sideways inside its box on a phone; the page itself doesn't.
-    <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+    <div
+      role="region"
+      aria-label="Gradebook"
+      tabIndex={0}
+      className="overflow-x-auto rounded border border-slate-200 bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+    >
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50 text-left align-bottom">
           <tr>

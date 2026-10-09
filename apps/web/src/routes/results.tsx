@@ -496,7 +496,12 @@ export function SemesterResultsPage() {
               No semester results yet. Compute them once course results are finalized.
             </p>
           ) : null}
-          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+          <div
+            role="region"
+            aria-label="Semester results"
+            tabIndex={0}
+            className="overflow-x-auto rounded border border-slate-200 bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>

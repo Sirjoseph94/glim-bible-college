@@ -81,4 +81,11 @@ export default tseslint.config(
     files: ["**/*.js", "**/*.cjs", "**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // k6 scripts run in k6's JavaScript runtime, which provides these (load/README.md).
+    files: ["load/**/*.js"],
+    languageOptions: {
+      globals: { __ENV: "readonly", __VU: "readonly", __ITER: "readonly", open: "readonly" },
+    },
+  },
 );

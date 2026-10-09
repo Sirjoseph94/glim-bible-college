@@ -14,6 +14,11 @@ const logger = createLogger({ service: "api", level: config.logLevel });
 
 // The API only sends jobs (on the caller's transaction); it never polls, supervises or migrates.
 const boss = createBoss(config.db.url, { max: 1 });
+// pg-boss re-emits its pool's errors (a Postgres restart drops every connection); unheard, an
+// "error" event would be thrown and stop the API. The pool reconnects on the next query.
+boss.on("error", (error) => {
+  logger.error({ err: error }, "pg-boss error");
+});
 await boss.start();
 const db = new Db(createPool(config.db.url, config.db.poolApi), boss);
 

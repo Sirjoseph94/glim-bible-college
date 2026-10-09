@@ -173,7 +173,12 @@ export function AdminJobsPage() {
         about it.
       </p>
       {list.isError ? <Alert tone="error">We couldn't load the queues.</Alert> : null}
-      <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+      <div
+        role="region"
+        aria-label="Job queues"
+        tabIndex={0}
+        className="overflow-x-auto rounded border border-slate-200 bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      >
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50">
             <tr>

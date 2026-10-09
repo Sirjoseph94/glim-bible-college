@@ -85,6 +85,7 @@ module.exports = {
           "(^|/)\\.[^/]+\\.(c|m)?js$",
           "\\.d\\.ts$",
           "(^|/)(vite|vitest|drizzle|playwright|tailwind|postcss|eslint)\\.config\\.(c|m)?[jt]s$",
+          "(^|/)lighthouserc\\.cjs$",
           TEST,
           "/main\\.tsx?$",
         ],

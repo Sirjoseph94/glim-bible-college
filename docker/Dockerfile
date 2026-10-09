@@ -27,7 +27,11 @@ RUN apt-get update \
  && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 COPY --chown=node:node . .
+# The pnpm store is dropped once node_modules is linked, and so is the npm bundled with Node:
+# nothing runs them, and Trivy flags their contents (ticket 46).
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
+ && rm -rf "$(pnpm store path)" \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
  && chown -R node:node /app/node_modules
 COPY --from=build --chown=node:node /app/apps/api/static ./apps/api/static
 USER node
