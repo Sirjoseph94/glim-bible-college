@@ -53,6 +53,7 @@ import { AssignmentsController } from "./http/assessment/assignments.controller"
 import { GradebookController } from "./http/assessment/gradebook.controller";
 import { AwardsController } from "./http/results/awards.controller";
 import { NotificationsController } from "./http/notifications/notifications.controller";
+import { OpsController } from "./http/ops/ops.controller";
 import { TranscriptsController } from "./http/transcripts/transcripts.controller";
 import { CourseResultsController } from "./http/results/course-results.controller";
 import { GradingSchemesController } from "./http/results/grading-schemes.controller";
@@ -137,6 +138,7 @@ export class AppModule {
         AwardsController,
         TranscriptsController,
         NotificationsController,
+        OpsController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

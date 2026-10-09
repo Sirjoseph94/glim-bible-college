@@ -12,12 +12,23 @@ export interface VideoCheck {
   thumbnailUrl?: string;
 }
 
+export interface ServiceCheck {
+  reachable: boolean;
+  detail: string | null;
+  channels: { url: string; resolves: boolean; detail: string | null }[];
+}
+
 export interface VideoHost {
   readonly name: "youtube_link" | "youtube_api" | "fake";
   /** The video id in a watch, short-link, live or embed URL; null for anything else. */
   parseUrl(url: string): { videoId: string } | null;
   /** Whether the host serves the video. Throws `VideoHostUnavailableError` if it can't tell. */
   checkVideo(videoId: string): Promise<VideoCheck>;
+  /**
+   * The ops check (TRD §15.3): whether the host answers at all, and whether each configured
+   * channel URL resolves. Never throws; problems are reported in the result.
+   */
+  checkService(channelUrls: string[]): Promise<ServiceCheck>;
   /** The privacy-enhanced embed and thumbnail URLs (pure). */
   embed(
     videoId: string,

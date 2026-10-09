@@ -12,6 +12,7 @@ import * as me from "./me";
 import * as meetings from "./meetings";
 import * as notifications from "./notifications";
 import * as offerings from "./offerings";
+import * as ops from "./ops";
 import * as platform from "./platform";
 import * as reports from "./reports";
 import * as transcripts from "./transcripts";
@@ -37,6 +38,7 @@ export {
   meetings,
   notifications,
   offerings,
+  ops,
   platform,
   reports,
   results,
@@ -261,6 +263,11 @@ export const ENDPOINTS = [
   notifications.getNotificationPreferences,
   notifications.setNotificationPreference,
   notifications.sendgridEvents,
+  ops.listOpsFailures,
+  ops.replayOpsFailure,
+  ops.listQueues,
+  ops.getYouTubeStatus,
+  ops.testYouTube,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -331,6 +338,7 @@ export type {
 } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
 export type { Notification, NotificationPreference } from "./notifications";
+export type { OpsFailure, QueueStat, YouTubeStatus } from "./ops";
 export type {
   Transcript,
   TranscriptRequest,

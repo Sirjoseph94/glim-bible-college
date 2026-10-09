@@ -6,7 +6,7 @@ import { MeetingLifecycleService, SeriesService } from "@glim/modules/class-meet
 import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
-import { BackupService, InboxService } from "@glim/modules/ops";
+import { BackupService, InboxService, OpsService } from "@glim/modules/ops";
 import { AvailabilityService, VideoAdminService } from "@glim/modules/video";
 import { QuizAttemptsService } from "@glim/modules/assessment";
 import { SemesterResultsService } from "@glim/modules/results";
@@ -29,6 +29,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const sessions = deps.context.get(SessionService);
   const backup = deps.context.get(BackupService);
   const inbox = deps.context.get(InboxService);
+  const ops = deps.context.get(OpsService);
   const intakes = deps.context.get(IntakesService);
   const notifications = deps.context.get(NotificationsService);
   const offers = deps.context.get(OffersService);
@@ -54,7 +55,15 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "admissions.purge": () => purge.run(),
     "class-meeting.series-extend": () => series.extend(),
     "meeting.tick": () => lifecycle.tick(),
-    "video.availability-check": () => videoAvailability.checkAll(),
+    // The daily sweep, or one video the System Admin asked to recheck from the ops page.
+    "video.availability-check": async (job) => {
+      const one = job.data as { videoId?: string; actorUserId?: string } | null;
+      if (one?.videoId === undefined) return videoAvailability.checkAll();
+      return videoAvailability.recheck(one.videoId, {
+        type: "USER",
+        userId: one.actorUserId ?? "",
+      });
+    },
     "video.purge-deleted": () => videoAdmin.purgeDeleted(),
     "quiz.expire": (job) => quizAttempts.expire((job.data as { attemptId: string }).attemptId),
     "transcript.generate": (job) =>
@@ -85,6 +94,8 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     // The 06:00 Lagos cron (no user) fans out; each person's digest then runs on its own.
     "notify.digest": (job) =>
       notifications.digest((job.data as { userId?: string } | null)?.userId),
+    "ops.queue-health": () => ops.checkQueues(),
+    "ops.youtube-check": () => ops.runYoutubeCheck(),
     "provider-event.process": (job) =>
       inbox.process((job.data as { providerEventId: string }).providerEventId),
   };

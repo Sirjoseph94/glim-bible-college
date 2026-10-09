@@ -21,6 +21,7 @@ export const NOTIFICATION_KINDS = [
     label: "Delete a recording in YouTube (staff)",
     critical: true,
   },
+  { kind: "ops.queue-backlog", label: "Job queue falling behind (staff)", critical: true },
   { kind: "content.announcement", label: "Course announcements", critical: false },
   { kind: "assessment.grade-released", label: "Grades released", critical: false },
   { kind: "results.course-finalized", label: "Course result out", critical: false },

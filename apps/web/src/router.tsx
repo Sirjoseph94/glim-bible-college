@@ -104,6 +104,20 @@ const adminVideosRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-videos"), "AdminVideosPage"),
 });
 
+const adminOpsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/ops",
+  beforeLoad: requireRole("SYSTEM_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-ops"), "AdminOpsPage"),
+});
+
+const adminJobsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/jobs",
+  beforeLoad: requireRole("SYSTEM_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-ops"), "AdminJobsPage"),
+});
+
 const adminAuditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin/audit",
@@ -464,6 +478,8 @@ const routeTree = rootRoute.addChildren([
   adminUsersRoute,
   adminUserRoute,
   adminAuditRoute,
+  adminOpsRoute,
+  adminJobsRoute,
   adminSettingsRoute,
   adminAcademicRoute,
   adminCurriculumRoute,

@@ -191,6 +191,16 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
     });
   },
 
+  "ops.queue-backlog": ({ data, appOrigin }) =>
+    email({
+      subject: `Job queue ${str(data.queue)} is falling behind`,
+      category: "ops-alert",
+      paragraphs: [
+        `The oldest waiting job on ${str(data.queue)} has waited ${String(Number(data.oldestSeconds))} seconds (${String(Number(data.queued))} waiting). The worker may be down or overloaded.`,
+      ],
+      link: { label: "Open the job dashboard", url: `${appOrigin}/admin/jobs` },
+    }),
+
   "results.semester-published": ({ data, appOrigin }) =>
     email({
       subject: "Your semester results are published",

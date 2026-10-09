@@ -139,6 +139,8 @@ export const QUEUES = {
     slice: "integration",
   },
   "db.logical-backup": { role: "scheduler", retryLimit: 2, expireInSeconds: HOUR, slice: "v1" },
+  "ops.queue-health": { role: "general", retryLimit: 0, expireInSeconds: MIN, slice: "v1" },
+  "ops.youtube-check": { role: "general", retryLimit: 2, expireInSeconds: 2 * MIN, slice: "v1" },
   "idempotency.cleanup": {
     role: "scheduler",
     retryLimit: 2,
@@ -195,6 +197,7 @@ export const CRON_SCHEDULES = {
   "idempotency.cleanup": { queue: "idempotency.cleanup", cron: "15 * * * *", tz: "UTC" },
   "auth.session-cleanup": { queue: "auth.session-cleanup", cron: "45 * * * *", tz: "UTC" },
   "db.logical-backup": { queue: "db.logical-backup", cron: "0 1 * * 0", tz: "UTC" },
+  "ops.queue-health": { queue: "ops.queue-health", cron: "* * * * *", tz: "UTC" },
 } as const satisfies Record<string, CronSpec>;
 
 export type CronName = keyof typeof CRON_SCHEDULES;

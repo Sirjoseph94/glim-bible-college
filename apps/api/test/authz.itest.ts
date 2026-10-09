@@ -266,6 +266,15 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/transcripts/${await transcriptFixture(t)}/revoke`,
     payload: { reason: "Issued in error" },
   }),
+  "GET /admin/ops/failures": () => Promise.resolve({ url: "/api/v1/admin/ops/failures" }),
+  // Provisioning can't be replayed in v1: allowed callers get 400.
+  "POST /admin/ops/replay/:kind/:id": () =>
+    Promise.resolve({ url: "/api/v1/admin/ops/replay/meeting-provision/x" }),
+  "GET /admin/jobs": () => Promise.resolve({ url: "/api/v1/admin/jobs" }),
+  "GET /admin/integrations/youtube/status": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/status" }),
+  "POST /admin/integrations/youtube/test": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/test" }),
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;

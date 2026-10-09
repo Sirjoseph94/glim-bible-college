@@ -2,6 +2,7 @@ import {
   parseYouTubeUrl,
   VideoHostUnavailableError,
   youTubeEmbed,
+  type ServiceCheck,
   type VideoCheck,
   type VideoHost,
 } from "./port";
@@ -9,6 +10,8 @@ import {
 type Fetch = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
 
 const OEMBED = "https://www.youtube.com/oembed";
+/** A long-lived public video ("Me at the zoo") used only to see that oEmbed answers. */
+const PROBE_VIDEO = "jNQXAC9IVRw";
 const TIMEOUT_MS = 5000;
 
 /**
@@ -57,5 +60,31 @@ export class YouTubeLinkHost implements VideoHost {
       ...(typeof body.author_url === "string" ? { channelUrl: body.author_url } : {}),
       ...(typeof body.thumbnail_url === "string" ? { thumbnailUrl: body.thumbnail_url } : {}),
     };
+  }
+
+  async checkService(channelUrls: string[]): Promise<ServiceCheck> {
+    let reachable = false;
+    let detail: string | null = null;
+    try {
+      const probe = await this.checkVideo(PROBE_VIDEO);
+      reachable = true;
+      if (probe.status !== "AVAILABLE") detail = "oEmbed answered, but not for a public video.";
+    } catch (error) {
+      detail = error instanceof Error ? error.message : "YouTube couldn't be reached.";
+    }
+    const channels = [];
+    for (const url of channelUrls) {
+      try {
+        const res = await this.fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+        channels.push({
+          url,
+          resolves: res.ok,
+          detail: res.ok ? null : `YouTube answered ${String(res.status)}.`,
+        });
+      } catch {
+        channels.push({ url, resolves: false, detail: "YouTube couldn't be reached." });
+      }
+    }
+    return { reachable, detail, channels };
   }
 }

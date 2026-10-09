@@ -86,6 +86,7 @@ const E2E_STAFF: [email: string, displayName: string, role: StaffRole][] = [
   ["e2e-imports@glim.test", "Ike Imports", "ACADEMIC_ADMIN"],
   ["e2e-videos@glim.test", "Vera Videos", "SYSTEM_ADMIN"],
   ["e2e-registrar@glim.test", "Remi Registrar", "REGISTRAR"],
+  ["e2e-opspage@glim.test", "Opal Ops", "SYSTEM_ADMIN"],
 ];
 for (const [email, displayName, role] of E2E_STAFF) {
   await app

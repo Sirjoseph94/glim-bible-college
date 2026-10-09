@@ -2,6 +2,7 @@ import {
   parseYouTubeUrl,
   VideoHostUnavailableError,
   youTubeEmbed,
+  type ServiceCheck,
   type VideoCheck,
   type VideoHost,
 } from "./port";
@@ -44,5 +45,17 @@ export class FakeVideoHost implements VideoHost {
         thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       },
     );
+  }
+
+  /** Reachable unless `down`; only `FAKE_CHANNEL_URL` resolves. */
+  checkService(channelUrls: string[]): Promise<ServiceCheck> {
+    return Promise.resolve({
+      reachable: !this.down,
+      detail: this.down ? "Fake YouTube is down." : null,
+      channels: channelUrls.map((url) => {
+        const resolves = !this.down && url === FAKE_CHANNEL_URL;
+        return { url, resolves, detail: resolves ? null : "YouTube answered 404." };
+      }),
+    });
   }
 }
