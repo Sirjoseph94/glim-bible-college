@@ -236,6 +236,10 @@ export const ENDPOINTS = [
   results.approveSemesterResults,
   results.publishSemesterResults,
   results.getResultsBroadsheet,
+  results.listAwardCandidates,
+  results.listAwards,
+  results.proposeAward,
+  results.confirmAward,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -296,6 +300,8 @@ export type {
 } from "./assessment";
 export type { Announcement, Material } from "./content";
 export type {
+  Award,
+  AwardCandidate,
   CourseResultRow,
   CourseResults,
   GradingScheme,

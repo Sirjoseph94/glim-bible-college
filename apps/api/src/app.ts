@@ -47,6 +47,7 @@ import { VideosController } from "./http/video/videos.controller";
 import { MaterialsController } from "./http/content/materials.controller";
 import { AssignmentsController } from "./http/assessment/assignments.controller";
 import { GradebookController } from "./http/assessment/gradebook.controller";
+import { AwardsController } from "./http/results/awards.controller";
 import { CourseResultsController } from "./http/results/course-results.controller";
 import { GradingSchemesController } from "./http/results/grading-schemes.controller";
 import { QuizzesController } from "./http/assessment/quizzes.controller";
@@ -124,6 +125,7 @@ export class AppModule {
         GradebookController,
         GradingSchemesController,
         CourseResultsController,
+        AwardsController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

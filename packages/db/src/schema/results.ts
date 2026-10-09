@@ -3,10 +3,12 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   unique,
   uniqueIndex,
@@ -144,5 +146,57 @@ export const semesterResults = pgTable(
     enumCheck("semester_results.status", t.status),
     unique("semester_results_once").on(t.programmeEnrollmentId, t.semesterId),
     index("semester_results_semester").on(t.semesterId, t.status),
+  ],
+);
+
+/** One line of an award's requirements checklist (§14.6). */
+export interface AwardRequirement {
+  key: string;
+  label: string;
+  met: boolean;
+  detail: string | null;
+}
+
+/** Owner: results. Gap-free certificate numbers per award type and year. */
+export const awardSequences = pgTable(
+  "award_sequences",
+  {
+    awardType: text("award_type").notNull(),
+    year: integer().notNull(),
+    nextValue: integer("next_value").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.awardType, t.year] })],
+);
+
+/**
+ * Owner: results (TRD §6.8, §14.6). The Certificate or Diploma conferred on completing a
+ * programme: proposed (DRAFT, with its checklist), then CONFERRED by the Registrar with a
+ * certificate number.
+ */
+export const awards = pgTable(
+  "awards",
+  {
+    ...std(),
+    programmeEnrollmentId: uuid("programme_enrollment_id")
+      .notNull()
+      .unique()
+      .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
+    cgpaX100: integer("cgpa_x100").notNull(),
+    awardClass: text("award_class"),
+    creditsEarnedX10: integer("credits_earned_x10").notNull(),
+    requirements: jsonb().$type<AwardRequirement[]>().notNull().default([]),
+    awardedOn: date("awarded_on"),
+    certificateNo: text("certificate_no").unique(),
+    status: text().notNull().default("DRAFT"),
+    proposedBy: uuid("proposed_by").references(() => users.id, { onDelete: "set null" }),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: tstz("approved_at"),
+  },
+  (t) => [
+    enumCheck("awards.status", t.status),
+    check(
+      "awards_conferred_check",
+      sql`${t.status} <> 'CONFERRED' OR (${t.certificateNo} IS NOT NULL AND ${t.awardedOn} IS NOT NULL AND ${t.awardClass} IS NOT NULL)`,
+    ),
   ],
 );

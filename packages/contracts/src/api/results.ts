@@ -348,3 +348,94 @@ export const getResultsBroadsheet = endpoint({
   }),
   response: broadsheetSchema,
 });
+
+// ---- awards (§14.6) ----
+
+export const awardRequirementSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  met: z.boolean(),
+  detail: z.string().nullable(),
+});
+
+export const awardSchema = z.object({
+  id: z.uuid(),
+  programmeEnrollmentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string(),
+  programmeCode: z.string(),
+  programmeName: z.string(),
+  cgpaX100: z.number().int(),
+  /** Distinction, Credit or Pass; null is no award (CGPA below the minimum). */
+  awardClass: z.string().nullable(),
+  creditsEarnedX10: z.number().int(),
+  requirements: z.array(awardRequirementSchema),
+  status: z.enum(ENUMS["awards.status"]),
+  awardedOn: z.iso.date().nullable(),
+  certificateNo: z.string().nullable(),
+  version: z.number().int(),
+});
+
+export type Award = z.infer<typeof awardSchema>;
+
+export const awardCandidateSchema = z.object({
+  programmeEnrollmentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string(),
+  programmeCode: z.string(),
+  /** From the latest semester result, if any. */
+  cgpaX100: z.number().int().nullable(),
+  creditsEarnedX10: z.number().int(),
+  award: z.object({ id: z.uuid(), status: z.enum(ENUMS["awards.status"]) }).nullable(),
+});
+
+export type AwardCandidate = z.infer<typeof awardCandidateSchema>;
+
+export const listAwardCandidates = endpoint({
+  method: "GET",
+  path: "/awards/candidates",
+  summary: "Students on a programme (ACTIVE enrollments), with their CGPA and any award",
+  tag: "Results",
+  auth: "session",
+  permission: "results:award:confirm",
+  query: z.object({ programmeId: z.uuid().optional() }),
+  response: z.object({ items: z.array(awardCandidateSchema) }),
+});
+
+export const listAwards = endpoint({
+  method: "GET",
+  path: "/awards",
+  summary: "Proposed and conferred awards",
+  tag: "Results",
+  auth: "session",
+  permission: "results:award:confirm",
+  query: z.object({ status: z.enum(ENUMS["awards.status"]).optional() }),
+  response: z.object({ items: z.array(awardSchema) }),
+});
+
+export const proposeAward = endpoint({
+  method: "POST",
+  path: "/programme-enrollments/:id/award/propose",
+  summary:
+    "Work out the award: final CGPA, credits, award class and a checklist of requirements (unmet ones don't block the proposal)",
+  tag: "Results",
+  auth: "session",
+  permission: "results:award:confirm",
+  params: idParams,
+  response: awardSchema,
+  successStatus: 200,
+});
+
+export const confirmAward = endpoint({
+  method: "POST",
+  path: "/awards/:id/confirm",
+  summary:
+    "Confer the award: a certificate number, the programme enrollment COMPLETED and the student GRADUATED (REQUIREMENTS_NOT_MET, NO_AWARD)",
+  tag: "Results",
+  auth: "session",
+  permission: "results:award:confirm",
+  idempotent: true,
+  params: idParams,
+  response: awardSchema,
+  successStatus: 200,
+});

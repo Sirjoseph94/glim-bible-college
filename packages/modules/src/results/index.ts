@@ -9,3 +9,4 @@ export {
 export * from "./domain/grading";
 export { SemesterResultsService, type SemesterScope } from "./semester-results.service";
 export { recordImportedResult, type ImportedResult } from "./legacy";
+export { AwardsService } from "./awards.service";

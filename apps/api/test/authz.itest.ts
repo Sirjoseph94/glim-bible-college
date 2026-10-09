@@ -213,6 +213,19 @@ const SAMPLES: Record<string, Sample> = {
   },
   "GET /reports/results": () =>
     Promise.resolve({ url: `/api/v1/reports/results?semesterId=${personas.world.semesterId}` }),
+  "GET /awards/candidates": () => Promise.resolve({ url: "/api/v1/awards/candidates" }),
+  "GET /awards": () => Promise.resolve({ url: "/api/v1/awards" }),
+  "POST /programme-enrollments/:id/award/propose": async (t) => ({
+    url: `/api/v1/programme-enrollments/${await diplomaEnrollment(t)}/award/propose`,
+  }),
+  // Nothing is published, so allowed callers get REQUIREMENTS_NOT_MET and nobody graduates.
+  "POST /awards/:id/confirm": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/awards/${await proposedAward(t)}/confirm`,
+      headers: { "idempotency-key": `authz-confirm-${String(n).padStart(8, "0")}` },
+    };
+  },
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;
@@ -1302,6 +1315,28 @@ async function finalizedResult(t: TestApp): Promise<string> {
      ON CONFLICT (course_enrollment_id) DO UPDATE SET status = 'FINALIZED', finalized_at = now()
      RETURNING id`,
     [personas.world.offerings.O1, personas.sEnrolled.userId, scheme],
+  );
+  return rows[0]?.id ?? "";
+}
+
+/** sEnrolled's programme enrollment. */
+async function diplomaEnrollment(t: TestApp): Promise<string> {
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `SELECT pe.id FROM programme_enrollments pe JOIN students s ON s.id = pe.student_id
+      WHERE s.user_id = $1`,
+    [personas.sEnrolled.userId],
+  );
+  return rows[0]?.id ?? "";
+}
+
+/** A DRAFT award for sEnrolled. */
+async function proposedAward(t: TestApp): Promise<string> {
+  const pe = await diplomaEnrollment(t);
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO awards (programme_enrollment_id, cgpa_x100, credits_earned_x10)
+     VALUES ($1, 0, 0) ON CONFLICT (programme_enrollment_id) DO UPDATE SET status = 'DRAFT'
+     RETURNING id`,
+    [pe],
   );
   return rows[0]?.id ?? "";
 }

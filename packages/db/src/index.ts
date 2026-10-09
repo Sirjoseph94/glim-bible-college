@@ -12,3 +12,4 @@ export type {
   SnapshotQuestion,
 } from "./schema/assessment";
 export type { ClassBand, GradeBand } from "./schema/grading-schemes";
+export type { AwardRequirement } from "./schema/results";

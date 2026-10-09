@@ -92,6 +92,9 @@ export function RootLayout() {
                 <Link to="/results/semesters" className="underline">
                   Semester results
                 </Link>
+                <Link to="/results/awards" className="underline">
+                  Awards
+                </Link>
                 <Link to="/admin/grading-schemes" className="underline">
                   Grading schemes
                 </Link>
