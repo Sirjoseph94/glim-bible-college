@@ -281,6 +281,20 @@
       "when": 1791521933665,
       "tag": "0039_wp_awards",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791522555833,
+      "tag": "0040_wp_transcripts",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791522556423,
+      "tag": "0041_wp_transcripts_guard",
+      "breakpoints": true
     }
   ]
 }

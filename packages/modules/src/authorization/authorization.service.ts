@@ -36,6 +36,8 @@ interface PrincipalLookups {
   isLecturer: () => Promise<boolean>;
   assignmentOn: (offeringId: string) => Promise<OfferingAssignment | null>;
   isStudent: () => Promise<boolean>;
+  /** A student who has GRADUATED: their own records stay theirs (transcripts, results). */
+  isAlumnus: () => Promise<boolean>;
   /** The student's course enrollment status on an offering (ENROLLED or COMPLETED), if any. */
   studentAccessOn: (offeringId: string) => Promise<string | null>;
 }
@@ -46,6 +48,7 @@ export class Principal {
   private lecturer: Promise<boolean> | undefined;
   private readonly assignments = new Map<string, Promise<OfferingAssignment | null>>();
   private student: Promise<boolean> | undefined;
+  private alumnus: Promise<boolean> | undefined;
   private readonly studentAccess = new Map<string, Promise<string | null>>();
 
   constructor(
@@ -66,6 +69,11 @@ export class Principal {
   isStudent(): Promise<boolean> {
     this.student ??= this.lookups.isStudent();
     return this.student;
+  }
+
+  isAlumnus(): Promise<boolean> {
+    this.alumnus ??= this.lookups.isAlumnus();
+    return this.alumnus;
   }
 
   studentAccessOn(offeringId: string): Promise<string | null> {
@@ -126,6 +134,7 @@ export class AuthorizationService {
       isLecturer: () => this.isActiveLecturer(userId),
       assignmentOn: (offeringId) => this.assignmentOn(userId, offeringId),
       isStudent: () => this.isActiveStudent(userId),
+      isAlumnus: () => this.isGraduate(userId),
       studentAccessOn: (offeringId) => this.studentAccessOn(userId, offeringId),
     });
   }
@@ -161,7 +170,12 @@ export class AuthorizationService {
     // Student path (step 4): any active student, or entitlement on the resource's offering
     // through v_offering_access (E = ENROLLED; E/C = ENROLLED or COMPLETED), plus ownership.
     const rule = MATRIX.permissions[permission].student;
-    if (rule !== undefined && (await principal.isStudent())) {
+    // A graduate keeps rules that are only about their own records (no enrollment status).
+    const ownOnly = rule?.own === true && rule.status === undefined && rule.any !== true;
+    if (
+      rule !== undefined &&
+      ((await principal.isStudent()) || (ownOnly && (await principal.isAlumnus())))
+    ) {
       if (rule.any === true) return "ALLOW";
       const owns = rule.own !== true || context?.ownerUserId === principal.userId;
       if (rule.status !== undefined) {
@@ -193,15 +207,19 @@ export class AuthorizationService {
   }
 
   /** Roles derived from data rather than assignments (§7.1), for navigation (`GET /me`). */
-  async derivedRoles(
-    userId: string,
-  ): Promise<{ isLecturer: boolean; isStudent: boolean; isApplicant: boolean }> {
-    const [isLecturer, isStudent, isApplicant] = await Promise.all([
+  async derivedRoles(userId: string): Promise<{
+    isLecturer: boolean;
+    isStudent: boolean;
+    isAlumnus: boolean;
+    isApplicant: boolean;
+  }> {
+    const [isLecturer, isStudent, isAlumnus, isApplicant] = await Promise.all([
       this.isActiveLecturer(userId),
       this.isActiveStudent(userId),
+      this.isGraduate(userId),
       this.ownsAnApplication(userId),
     ]);
-    return { isLecturer, isStudent, isApplicant };
+    return { isLecturer, isStudent, isAlumnus, isApplicant };
   }
 
   private async isActiveStudent(userId: string): Promise<boolean> {
@@ -210,6 +228,15 @@ export class AuthorizationService {
       .select({ id: s.id })
       .from(s)
       .where(and(eq(s.userId, userId), eq(s.status, "ACTIVE")));
+    return row !== undefined;
+  }
+
+  private async isGraduate(userId: string): Promise<boolean> {
+    const s = schema.students;
+    const [row] = await this.db.read
+      .select({ id: s.id })
+      .from(s)
+      .where(and(eq(s.userId, userId), eq(s.status, "GRADUATED")));
     return row !== undefined;
   }
 

@@ -13,6 +13,7 @@ import * as meetings from "./meetings";
 import * as offerings from "./offerings";
 import * as platform from "./platform";
 import * as reports from "./reports";
+import * as transcripts from "./transcripts";
 import * as results from "./results";
 import * as settings from "./settings";
 import * as users from "./users";
@@ -37,6 +38,7 @@ export {
   platform,
   reports,
   results,
+  transcripts,
   settings,
   users,
   assessment,
@@ -240,6 +242,14 @@ export const ENDPOINTS = [
   results.listAwards,
   results.proposeAward,
   results.confirmAward,
+  transcripts.requestTranscript,
+  transcripts.getMyTranscripts,
+  transcripts.listTranscriptRequests,
+  transcripts.approveTranscriptRequest,
+  transcripts.rejectTranscriptRequest,
+  transcripts.issueTranscript,
+  transcripts.getTranscript,
+  transcripts.verifyTranscript,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -309,3 +319,9 @@ export type {
   SemesterResultRow,
 } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
+export type {
+  Transcript,
+  TranscriptRequest,
+  TranscriptSnapshot,
+  Verification,
+} from "./transcripts";

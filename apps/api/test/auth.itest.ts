@@ -84,7 +84,13 @@ describe("bootstrap and invite", () => {
     expect(me.json()).toMatchObject({
       user: { email: ADMIN.email, displayName: ADMIN.displayName, timezone: "Africa/Lagos" },
       institution: { name: "GLIM Online Bible College", timezone: "Africa/Lagos" },
-      roles: { staff: ["SYSTEM_ADMIN"], isLecturer: false, isStudent: false, isApplicant: false },
+      roles: {
+        staff: ["SYSTEM_ADMIN"],
+        isLecturer: false,
+        isStudent: false,
+        isAlumnus: false,
+        isApplicant: false,
+      },
     });
 
     const reuse = await t.request({

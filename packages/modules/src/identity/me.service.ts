@@ -43,6 +43,7 @@ export class MeService {
         staff,
         isLecturer: derived.isLecturer,
         isStudent: derived.isStudent,
+        isAlumnus: derived.isAlumnus,
         isApplicant: derived.isApplicant,
       },
       csrfToken: session.csrfToken,

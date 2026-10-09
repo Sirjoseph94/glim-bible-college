@@ -8,6 +8,7 @@ import {
 } from "@glim/modules/academic";
 import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
+import { TranscriptsService } from "@glim/modules/transcripts";
 import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { VideosService } from "@glim/modules/video";
 import {
@@ -226,6 +227,31 @@ const SAMPLES: Record<string, Sample> = {
       headers: { "idempotency-key": `authz-confirm-${String(n).padStart(8, "0")}` },
     };
   },
+  "POST /programme-enrollments/:id/transcript-requests": async (t) => ({
+    url: `/api/v1/programme-enrollments/${await diplomaEnrollment(t)}/transcript-requests`,
+    payload: { kind: "UNOFFICIAL" },
+    owner: "sEnrolled",
+  }),
+  "GET /transcript-requests": () => Promise.resolve({ url: "/api/v1/transcript-requests" }),
+  "POST /transcript-requests/:id/approve": async (t) => ({
+    url: `/api/v1/transcript-requests/${await transcriptRequest(t, "approve")}/approve`,
+  }),
+  "POST /transcript-requests/:id/reject": async (t) => ({
+    url: `/api/v1/transcript-requests/${await transcriptRequest(t, "reject")}/reject`,
+    payload: { reason: "Incomplete" },
+  }),
+  // Approved but with nothing approved to put on it: allowed callers get TRANSCRIPT_NOT_ISSUABLE.
+  "POST /transcript-requests/:id/issue": async (t) => {
+    n++;
+    return {
+      url: `/api/v1/transcript-requests/${await transcriptRequest(t, "issue")}/issue`,
+      headers: { "idempotency-key": `authz-issue-${String(n).padStart(8, "0")}` },
+    };
+  },
+  "GET /transcripts/:id": async (t) => ({
+    url: `/api/v1/transcripts/${await transcriptFixture(t)}`,
+    owner: "sEnrolled",
+  }),
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;
@@ -1329,6 +1355,46 @@ async function diplomaEnrollment(t: TestApp): Promise<string> {
   return rows[0]?.id ?? "";
 }
 
+const transcriptRequests = new Map<string, string>();
+/** An OFFICIAL request by sEnrolled, one per use: REQUESTED, or APPROVED to issue. */
+async function transcriptRequest(t: TestApp, use: "approve" | "reject" | "issue"): Promise<string> {
+  const known = transcriptRequests.get(use);
+  if (known !== undefined) return known;
+  const pe = await diplomaEnrollment(t);
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO transcript_requests (student_id, programme_enrollment_id, kind, purpose, recipient_name, recipient_email, status)
+     SELECT student_id, id, 'OFFICIAL', 'Further study', 'Admissions', 'admissions@seminary.test', $2
+       FROM programme_enrollments WHERE id = $1 RETURNING id`,
+    [pe, use === "issue" ? "APPROVED" : "REQUESTED"],
+  );
+  const id = rows[0]?.id ?? "";
+  transcriptRequests.set(use, id);
+  return id;
+}
+
+let transcriptShared: string | undefined;
+/** An issued (unofficial) transcript of sEnrolled's, issued the way a student asks for one. */
+async function transcriptFixture(t: TestApp): Promise<string> {
+  if (transcriptShared !== undefined) return transcriptShared;
+  // A transcript needs the programme's grading scheme.
+  await t.db.pool.query(
+    `UPDATE programmes SET grading_scheme_id = $2
+      WHERE id = (SELECT programme_id FROM programme_enrollments WHERE id = $1)`,
+    [await diplomaEnrollment(t), await seededScheme(t)],
+  );
+  const request = unwrap(
+    await t.app
+      .get(TranscriptsService)
+      .request(
+        await diplomaEnrollment(t),
+        { kind: "UNOFFICIAL" },
+        { ...SYSTEM_ACTOR, type: "USER", userId: personas.sEnrolled.userId },
+      ),
+  );
+  transcriptShared = request.transcript?.id ?? "";
+  return transcriptShared;
+}
+
 /** A DRAFT award for sEnrolled. */
 async function proposedAward(t: TestApp): Promise<string> {
   const pe = await diplomaEnrollment(t);
@@ -1624,6 +1690,16 @@ function expectedAllowed(
     if (studentRule.status === undefined && studentRule.own === true && owner === persona.name)
       return true;
   }
+  // A graduate keeps rules about their own records only (no enrollment status).
+  if (
+    studentRule !== undefined &&
+    persona.name === "sGraduated" &&
+    studentRule.own === true &&
+    studentRule.status === undefined &&
+    studentRule.any !== true &&
+    owner === persona.name
+  )
+    return true;
   const capability = MATRIX.permissions[permission].lecturer;
   if (capability === undefined) return false;
   if (capability === "*") return Object.keys(persona.teaches).length > 0;

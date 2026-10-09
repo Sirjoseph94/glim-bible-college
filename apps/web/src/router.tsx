@@ -180,6 +180,13 @@ const requireStudent = async ({ context }: { context: RouterContext }) => {
   if (!me.roles.isStudent) throw redirect({ to: "/" });
 };
 
+/** Students, and graduates, who keep their results and transcripts. */
+const requireStudentOrAlumnus = async ({ context }: { context: RouterContext }) => {
+  const me = await context.queryClient.query(meQuery);
+  if (me === null) throw redirect({ to: "/login" });
+  if (!me.roles.isStudent && !me.roles.isAlumnus) throw redirect({ to: "/" });
+};
+
 const registrationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/registration",
@@ -319,8 +326,39 @@ const awardsRoute = createRoute({
 const myResultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results",
-  beforeLoad: requireStudent,
+  beforeLoad: requireStudentOrAlumnus,
   component: lazyRouteComponent(() => import("./routes/results"), "MyResultsPage"),
+});
+
+const myTranscriptsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/transcripts",
+  beforeLoad: requireStudentOrAlumnus,
+  component: lazyRouteComponent(() => import("./routes/transcripts"), "MyTranscriptsPage"),
+});
+
+const transcriptRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/transcripts/$transcriptId",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/transcripts"), "TranscriptPage"),
+});
+
+const registrarTranscriptsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/results/transcripts",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR"),
+  component: lazyRouteComponent(() => import("./routes/transcripts"), "RegistrarTranscriptsPage"),
+});
+
+/** Public: anyone holding a transcript can check it (§14.7). */
+const verifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/verify/$code",
+  component: lazyRouteComponent(() => import("./routes/transcripts"), "VerifyPage"),
 });
 
 const applyRoute = createRoute({
@@ -401,6 +439,10 @@ const routeTree = rootRoute.addChildren([
   resultsCoursesRoute,
   semesterResultsRoute,
   awardsRoute,
+  myTranscriptsRoute,
+  transcriptRoute,
+  registrarTranscriptsRoute,
+  verifyRoute,
   myResultsRoute,
   adminVideosRoute,
   loginRoute,

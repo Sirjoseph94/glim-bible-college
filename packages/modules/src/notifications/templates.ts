@@ -177,6 +177,17 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
     });
   },
 
+  "transcript.issued": ({ data, appOrigin }) =>
+    email({
+      subject: `Your official transcript ${str(data.serialNo)} is ready`,
+      category: "transcript-issued",
+      paragraphs: [
+        `The Registrar has issued your official transcript, serial number ${str(data.serialNo)}.`,
+        "You can view it in the app. Anyone you share it with can check it is genuine with the verification code printed on it.",
+      ],
+      link: { label: "My transcripts", url: `${appOrigin}/transcripts` },
+    }),
+
   "video.unavailable": ({ data, appOrigin }) =>
     email({
       subject: `${str(data.courseCode)} recording unavailable: ${str(data.title)}`,

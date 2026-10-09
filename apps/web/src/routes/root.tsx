@@ -55,6 +55,18 @@ export function RootLayout() {
                 <Link to="/results" className="underline">
                   My results
                 </Link>
+                <Link to="/transcripts" className="underline">
+                  Transcripts
+                </Link>
+              </>
+            ) : me.data.roles.isAlumnus ? (
+              <>
+                <Link to="/results" className="underline">
+                  My results
+                </Link>
+                <Link to="/transcripts" className="underline">
+                  Transcripts
+                </Link>
               </>
             ) : null}
             {me.data.roles.isLecturer ? (
@@ -94,6 +106,9 @@ export function RootLayout() {
                 </Link>
                 <Link to="/results/awards" className="underline">
                   Awards
+                </Link>
+                <Link to="/results/transcripts" className="underline">
+                  Transcript requests
                 </Link>
                 <Link to="/admin/grading-schemes" className="underline">
                   Grading schemes

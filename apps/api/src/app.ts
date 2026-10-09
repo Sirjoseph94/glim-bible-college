@@ -11,6 +11,7 @@ import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule } from "@glim/modules/authorization";
 import { AssessmentModule } from "@glim/modules/assessment";
 import { ResultsModule } from "@glim/modules/results";
+import { TranscriptsModule } from "@glim/modules/transcripts";
 import { ContentModule } from "@glim/modules/content";
 import { EnrollmentModule } from "@glim/modules/enrollment";
 import { AttendanceModule } from "@glim/modules/attendance";
@@ -48,6 +49,7 @@ import { MaterialsController } from "./http/content/materials.controller";
 import { AssignmentsController } from "./http/assessment/assignments.controller";
 import { GradebookController } from "./http/assessment/gradebook.controller";
 import { AwardsController } from "./http/results/awards.controller";
+import { TranscriptsController } from "./http/transcripts/transcripts.controller";
 import { CourseResultsController } from "./http/results/course-results.controller";
 import { GradingSchemesController } from "./http/results/grading-schemes.controller";
 import { QuizzesController } from "./http/assessment/quizzes.controller";
@@ -87,6 +89,7 @@ export class AppModule {
         ContentModule,
         AssessmentModule,
         ResultsModule,
+        TranscriptsModule,
         EnrollmentModule,
         AdmissionsModule,
         ImportsModule,
@@ -126,6 +129,7 @@ export class AppModule {
         GradingSchemesController,
         CourseResultsController,
         AwardsController,
+        TranscriptsController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

@@ -63,7 +63,9 @@ export type ResourceType =
   | "assignment"
   | "assignment-submission"
   | "quiz"
-  | "quiz-attempt";
+  | "quiz-attempt"
+  | "programme-enrollment"
+  | "transcript";
 
 export type RateLimitClass = "auth" | "apply" | "join" | "playback" | "progress" | "verify";
 

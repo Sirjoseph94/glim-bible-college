@@ -24,6 +24,8 @@ export const meSchema = z.object({
     staff: z.array(z.enum(STAFF_ROLES)),
     isLecturer: z.boolean(),
     isStudent: z.boolean(),
+    /** Graduated: no courses any more, but their own results and transcripts. */
+    isAlumnus: z.boolean(),
     isApplicant: z.boolean(),
   }),
   csrfToken: z.string(),
