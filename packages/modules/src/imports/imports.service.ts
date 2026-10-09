@@ -190,11 +190,12 @@ export class ImportsService {
         await this.db.withTx(async ({ db, boss }) => {
           const now = this.clock.now();
           const createdUsers: string[] = [];
+          const semesters = new Set<string>();
           for (const [offset, record] of batch.entries()) {
             const rowNumber = start + offset + 2; // header is row 1
             try {
               const outcome: RowOutcome = await withSavepoint(db, () =>
-                spec.applyRow({ db, now, createdUsers }, record),
+                spec.applyRow({ db, now, createdUsers, semesters }, record),
               );
               counted.valid++;
               counted[outcome]++;
@@ -213,6 +214,9 @@ export class ImportsService {
               { startAfter: Math.floor(invites++ / INVITES_PER_SECOND) },
             );
           }
+          // Imported results change GPAs: recompute their semesters (and the CGPA after them).
+          for (const semesterId of semesters)
+            await boss.send("results.compute-semester", { semesterId });
           await this.saveProgress(db, job.id, start + batch.length, add(stats, counted));
         });
       } catch (error) {

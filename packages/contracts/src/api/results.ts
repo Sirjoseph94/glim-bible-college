@@ -245,3 +245,106 @@ export const getMyResults = endpoint({
   auth: "session",
   response: myResultsSchema,
 });
+
+// ---- semester results (§14.5) ----
+
+export const semesterResultRowSchema = z.object({
+  id: z.uuid(),
+  programmeEnrollmentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string(),
+  programmeCode: z.string(),
+  semesterId: z.uuid(),
+  creditsAttemptedX10: z.number().int(),
+  creditsEarnedX10: z.number().int(),
+  gpaX100: z.number().int().nullable(),
+  cumCreditsAttemptedX10: z.number().int(),
+  cumCreditsEarnedX10: z.number().int(),
+  cgpaX100: z.number().int().nullable(),
+  standing: z.enum(ENUMS["semester_results.standing"]),
+  status: z.enum(ENUMS["semester_results.status"]),
+  calcVersion: z.number().int(),
+  computedAt: z.iso.datetime(),
+  /** Course results in the semester still in draft (reopened): approving waits for them. */
+  draftCourseResults: z.number().int(),
+});
+
+export type SemesterResultRow = z.infer<typeof semesterResultRowSchema>;
+
+const semesterScope = z.object({
+  semesterId: z.uuid(),
+  programmeId: z.uuid().optional(),
+  cohortId: z.uuid().optional(),
+});
+
+export const listSemesterResults = endpoint({
+  method: "GET",
+  path: "/results/semesters",
+  summary: "Semester results for a semester, optionally one programme or cohort",
+  tag: "Results",
+  auth: "session",
+  permission: "results:record:read",
+  query: semesterScope,
+  response: z.object({ items: z.array(semesterResultRowSchema) }),
+});
+
+export const computeSemesterResults = endpoint({
+  method: "POST",
+  path: "/results/semesters/compute",
+  summary:
+    "Recompute semester results (and later semesters' CGPA) from course results; unchanged ones stay as they are",
+  tag: "Results",
+  auth: "session",
+  permission: "results:semester:compute",
+  idempotent: true,
+  body: z.object({ semesterId: z.uuid(), programmeId: z.uuid().optional() }).strict(),
+  response: z.object({ computed: z.number().int(), changed: z.number().int() }),
+  successStatus: 200,
+});
+
+export const approveSemesterResults = endpoint({
+  method: "POST",
+  path: "/results/semesters/approve",
+  summary:
+    "Approve DRAFT semester results and their course results in bulk (skipping students with a reopened course result)",
+  tag: "Results",
+  auth: "session",
+  permission: "results:semester:approve",
+  idempotent: true,
+  body: semesterScope.strict(),
+  response: z.object({ approved: z.number().int(), skipped: z.number().int() }),
+  successStatus: 200,
+});
+
+export const publishSemesterResults = endpoint({
+  method: "POST",
+  path: "/results/semesters/publish",
+  summary: "Publish APPROVED semester results: the Provisional label goes and students are told",
+  tag: "Results",
+  auth: "session",
+  permission: "results:semester:publish",
+  idempotent: true,
+  body: semesterScope.strict(),
+  response: z.object({ published: z.number().int() }),
+  successStatus: 200,
+});
+
+export const broadsheetSchema = z.object({
+  semester: z.object({ id: z.uuid(), name: z.string(), sessionCode: z.string() }),
+  items: z.array(semesterResultRowSchema),
+});
+
+export const getResultsBroadsheet = endpoint({
+  method: "GET",
+  path: "/reports/results",
+  summary: "The results broadsheet (credits, GPA, CGPA, standing), as JSON or (`format=csv`) CSV",
+  tag: "Results",
+  auth: "session",
+  permission: "results:record:read",
+  query: z.object({
+    semesterId: z.uuid(),
+    programmeId: z.uuid().optional(),
+    format: z.enum(["json", "csv"]).default("json"),
+  }),
+  response: broadsheetSchema,
+});

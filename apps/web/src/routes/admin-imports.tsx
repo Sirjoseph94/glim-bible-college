@@ -13,6 +13,7 @@ const KIND_LABELS: Record<ImportKind, string> = {
   STUDENTS: "Students (with Matric Numbers and programme enrollment)",
   LECTURERS: "Lecturers",
   COURSE_ENROLLMENTS: "Course enrollments",
+  COURSE_RESULTS: "Past course results (count toward CGPA)",
 };
 
 const startImport = (kind: ImportKind, fileId: string, dryRun: boolean) =>

@@ -302,6 +302,13 @@ const resultsCoursesRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/results"), "ResultsCoursesPage"),
 });
 
+const semesterResultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/results/semesters",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/results"), "SemesterResultsPage"),
+});
+
 const myResultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results",
@@ -385,6 +392,7 @@ const routeTree = rootRoute.addChildren([
   gradebookRoute,
   courseResultsRoute,
   resultsCoursesRoute,
+  semesterResultsRoute,
   myResultsRoute,
   adminVideosRoute,
   loginRoute,

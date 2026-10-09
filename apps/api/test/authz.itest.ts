@@ -185,6 +185,34 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/course-results/${await finalizedResult(t)}/reopen`,
     payload: { reason: "Marking error" },
   }),
+  "GET /results/semesters": () =>
+    Promise.resolve({ url: `/api/v1/results/semesters?semesterId=${personas.world.semesterId}` }),
+  "POST /results/semesters/compute": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/results/semesters/compute",
+      payload: { semesterId: personas.world.semesterId },
+      headers: { "idempotency-key": `authz-compute-${String(n).padStart(8, "0")}` },
+    });
+  },
+  "POST /results/semesters/approve": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/results/semesters/approve",
+      payload: { semesterId: personas.world.semesterId },
+      headers: { "idempotency-key": `authz-approve-${String(n).padStart(8, "0")}` },
+    });
+  },
+  "POST /results/semesters/publish": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/results/semesters/publish",
+      payload: { semesterId: personas.world.semesterId },
+      headers: { "idempotency-key": `authz-publish-s-${String(n).padStart(8, "0")}` },
+    });
+  },
+  "GET /reports/results": () =>
+    Promise.resolve({ url: `/api/v1/reports/results?semesterId=${personas.world.semesterId}` }),
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;

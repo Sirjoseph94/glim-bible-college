@@ -27,6 +27,7 @@ import {
   type RoundBeforeBanding,
 } from "./domain/grading";
 import { GradingSchemesService, rulesOf } from "./grading-schemes.service";
+import { lineOf, SemesterResultsService } from "./semester-results.service";
 
 type ResultRow = typeof schema.courseResults.$inferSelect;
 type SchemeRow = typeof schema.gradingSchemes.$inferSelect;
@@ -80,6 +81,7 @@ export class CourseResultsService {
     @Inject(GradebookService) private readonly gradebook: GradebookService,
     @Inject(GradingSchemesService) private readonly schemes: GradingSchemesService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(SemesterResultsService) private readonly semesters: SemesterResultsService,
   ) {}
 
   /** Each student's result, or a preview of what finalizing would record for them. */
@@ -239,6 +241,8 @@ export class CourseResultsService {
         createdAt: now,
       });
       await unlockStudents(db, row.courseOfferingId, [row.studentId]);
+      // The semester's GPA (and every later CGPA) depend on it: back to DRAFT until recomputed.
+      await this.semesters.reopenFrom(db, row.programmeEnrollmentId, row.semesterId);
       const [student] = await db
         .select({ userId: schema.students.userId })
         .from(schema.students)
@@ -320,6 +324,21 @@ export class CourseResultsService {
         ),
       )
       .orderBy(asc(ses.startsOn), asc(s.sequence), asc(c.code));
+    const published = await this.db.read
+      .select({
+        programmeEnrollmentId: schema.semesterResults.programmeEnrollmentId,
+        semesterId: schema.semesterResults.semesterId,
+      })
+      .from(schema.semesterResults)
+      .where(
+        and(
+          inArray(
+            schema.semesterResults.programmeEnrollmentId,
+            enrollments.map((e) => e.id),
+          ),
+          eq(schema.semesterResults.status, "PUBLISHED"),
+        ),
+      );
     const schemeIds = enrollments.flatMap((e) => (e.schemeId === null ? [] : [e.schemeId]));
     const schemes: SchemeRow[] =
       schemeIds.length === 0
@@ -369,7 +388,10 @@ export class CourseResultsService {
               gpaX100: term.gpaX100,
               cgpaX100: cumulative.gpaX100,
               standing: rules === null ? "UNKNOWN" : standingFor(cumulative.gpaX100, rules),
-              provisional: inSemester.some((x) => x.result.status !== "PUBLISHED"),
+              // Provisional until the Registrar publishes the semester result.
+              provisional: !published.some(
+                (x) => x.programmeEnrollmentId === e.id && x.semesterId === semesterId,
+              ),
             };
           }),
         };
@@ -590,18 +612,5 @@ function snapshot(row: ResultRow): Record<string, unknown> {
     passed: row.passed,
     resultKind: row.resultKind,
     gradingSchemeId: row.gradingSchemeId,
-  };
-}
-
-function lineOf(row: ResultRow): ResultLine {
-  return {
-    courseId: row.courseId,
-    attemptOrder: row.attemptNo,
-    creditsX10: row.creditsX10,
-    pointsX100: row.pointsX100,
-    qualityPointsX1000: row.qualityPointsX1000 ?? 0,
-    resultKind: row.resultKind as ResultKind,
-    countsInGpa: row.countsInGpa,
-    passed: row.passed,
   };
 }

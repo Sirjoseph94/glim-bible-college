@@ -30,6 +30,13 @@ export function createSubscribers(context: INestApplicationContext): SubscriberR
         await db.withTx(({ boss }) => attendance.queueFinalize(boss, meetingId));
       },
     ],
+    // Semester results are computed when the semester closes (§14.5).
+    "academic.semester.closed": [
+      async (event) => {
+        const { semesterId } = event.payload as { semesterId: string };
+        await db.withTx(({ boss }) => boss.send("results.compute-semester", { semesterId }));
+      },
+    ],
     // Compulsory courses are registered when a semester opens registration (§9.3).
     "academic.semester.registration-opened": [
       async (event) => {

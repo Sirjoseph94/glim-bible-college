@@ -1,6 +1,8 @@
 import type { ImportKind } from "@glim/contracts";
 import { schema, type Database } from "@glim/db";
 import { and, eq, inArray } from "drizzle-orm";
+import { recordImportedResult } from "@glim/modules/results";
+import { parseDecimal } from "@glim/shared";
 import { z } from "zod";
 
 /** What applying one row did. */
@@ -14,6 +16,8 @@ export interface RowContext {
   now: Date;
   /** Users the row created (they get invites and referral codes after the batch). */
   createdUsers: string[];
+  /** Semesters whose results the row changed (they're recomputed after the batch). */
+  semesters: Set<string>;
 }
 
 const text = (max = 200) => z.string().trim().min(1).max(max);
@@ -404,6 +408,104 @@ const courseEnrollments: ImportKindSpec<z.infer<typeof courseEnrollmentRow>> = {
   },
 };
 
+const courseResultRow = z.object({
+  matric_number: z.string().trim().toUpperCase().min(1).max(40),
+  course_code: z.string().trim().toUpperCase().min(1).max(20),
+  session_code: text(20),
+  semester_code: text(20),
+  result_kind: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .transform((v) => (v === "" ? "GRADED" : v))
+    .pipe(z.enum(["GRADED", "EXEMPT", "INCOMPLETE", "WITHDRAWN"]))
+    .optional()
+    .transform((v) => v ?? "GRADED"),
+  percent: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(
+      z
+        .string()
+        .regex(/^\d{1,3}(\.\d{1,2})?$/, "use a percentage with at most two decimal places")
+        .refine((v) => parseDecimal(v, 2) <= 10_000, "at most 100")
+        .nullable(),
+    )
+    .optional()
+    .transform((v) => v ?? null),
+  credits: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(
+      z
+        .string()
+        .regex(/^\d{1,2}(\.\d)?$/, "use credits with at most one decimal place")
+        .nullable(),
+    )
+    .optional()
+    .transform((v) => v ?? null),
+});
+
+/** Past results of current students (D-04): APPROVED, so they count toward CGPA. */
+const courseResults: ImportKindSpec<z.infer<typeof courseResultRow>> = {
+  columns: [
+    "matric_number",
+    "course_code",
+    "session_code",
+    "semester_code",
+    "percent",
+    "credits",
+    "result_kind",
+  ],
+  required: ["matric_number", "course_code", "session_code", "semester_code"],
+  example: ["GLIM/DIP/2025/0012", "BIB101", "2025/2026", "S1", "72", "", "GRADED"],
+  parse: (row) => courseResultRow.safeParse(row),
+  async apply(ctx, row) {
+    const { db } = ctx;
+    const pe = schema.programmeEnrollments;
+    const [enrollment] = await db
+      .select({ id: pe.id })
+      .from(pe)
+      .where(eq(pe.matricNumber, row.matric_number));
+    if (enrollment === undefined)
+      throw new RowError(`No student with Matric Number ${row.matric_number}`);
+    const [course] = await db
+      .select({ id: schema.courses.id })
+      .from(schema.courses)
+      .where(eq(schema.courses.code, row.course_code));
+    if (course === undefined) throw new RowError(`No course ${row.course_code}`);
+    const s = schema.semesters;
+    const [semester] = await db
+      .select({ id: s.id })
+      .from(s)
+      .innerJoin(schema.academicSessions, eq(schema.academicSessions.id, s.academicSessionId))
+      .where(
+        and(eq(schema.academicSessions.code, row.session_code), eq(s.code, row.semester_code)),
+      );
+    if (semester === undefined)
+      throw new RowError(`No semester ${row.semester_code} in ${row.session_code}`);
+    if (row.result_kind === "GRADED" && row.percent === null)
+      throw new RowError("percent: a graded result needs a percent");
+    const recorded = await recordImportedResult(
+      db,
+      {
+        programmeEnrollmentId: enrollment.id,
+        semesterId: semester.id,
+        courseId: course.id,
+        creditsX10: row.credits === null ? null : parseDecimal(row.credits, 1),
+        finalPctX100: row.percent === null ? null : parseDecimal(row.percent, 2),
+        resultKind: row.result_kind,
+      },
+      ctx.now,
+    );
+    if (!recorded.ok) throw new RowError(recorded.error.message);
+    if (recorded.value !== "unchanged") ctx.semesters.add(semester.id);
+    return recorded.value;
+  },
+};
+
 /** A kind ready to run: validates a raw row, then applies it (validation failures are row errors). */
 export interface RunnableKind {
   columns: string[];
@@ -432,4 +534,5 @@ export const IMPORT_KIND_SPECS: Record<ImportKind, RunnableKind> = {
   STUDENTS: runnable(students),
   LECTURERS: runnable(lecturers),
   COURSE_ENROLLMENTS: runnable(courseEnrollments),
+  COURSE_RESULTS: runnable(courseResults),
 };

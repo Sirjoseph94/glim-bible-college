@@ -15,6 +15,7 @@ import { AttendanceModule } from "@glim/modules/attendance";
 import { ClassMeetingModule } from "@glim/modules/class-meeting";
 import { VideoModule } from "@glim/modules/video";
 import { AssessmentModule } from "@glim/modules/assessment";
+import { ResultsModule } from "@glim/modules/results";
 import { ImportsModule } from "@glim/modules/imports";
 import { OpsModule } from "@glim/modules/ops";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -41,6 +42,7 @@ class WorkerModule {
         AttendanceModule,
         VideoModule,
         AssessmentModule,
+        ResultsModule,
       ],
     };
   }

@@ -7,8 +7,13 @@ import { endpoint } from "../http";
  * same, unchanged file. Row errors come back as a downloadable CSV.
  */
 
-/** Kinds v1 imports now; COURSE_RESULTS arrives with legacy results (ticket 39). */
-export const IMPORT_KINDS = ["STUDENTS", "LECTURERS", "COURSE_ENROLLMENTS"] as const;
+/** The kinds v1 imports, including past course results (legacy results, ticket 39). */
+export const IMPORT_KINDS = [
+  "STUDENTS",
+  "LECTURERS",
+  "COURSE_ENROLLMENTS",
+  "COURSE_RESULTS",
+] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
 export const importJobSchema = z.object({

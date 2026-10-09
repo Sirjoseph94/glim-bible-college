@@ -5,8 +5,9 @@ import { NotificationsModule } from "@glim/modules/notifications";
 import { Module } from "@nestjs/common";
 import { CourseResultsService } from "./course-results.service";
 import { GradingSchemesService } from "./grading-schemes.service";
+import { SemesterResultsService } from "./semester-results.service";
 
-const services = [GradingSchemesService, CourseResultsService];
+const services = [GradingSchemesService, CourseResultsService, SemesterResultsService];
 
 /** Results (TRD §14.3–14.5): grading schemes, course results and the results arithmetic. */
 @Module({

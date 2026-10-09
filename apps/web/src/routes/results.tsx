@@ -1,4 +1,12 @@
-import type { CourseResultRow, MyResults, offerings, results } from "@glim/contracts";
+import type {
+  academic,
+  calendar,
+  CourseResultRow,
+  MyResults,
+  offerings,
+  results,
+  SemesterResultRow,
+} from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
@@ -325,5 +333,207 @@ function ProgrammeResults({ programme: p }: { programme: MyResults["programmes"]
         </div>
       ))}
     </section>
+  );
+}
+
+const STATUS_LABELS: Record<SemesterResultRow["status"], string> = {
+  DRAFT: "Draft",
+  APPROVED: "Approved",
+  PUBLISHED: "Published",
+};
+
+/**
+ * The Registrar's semester results (TRD §14.5): compute from course results, approve and publish
+ * in bulk (all programmes or one), and download the broadsheet.
+ */
+export function SemesterResultsPage() {
+  const queryClient = useQueryClient();
+  const sessions = useQuery({
+    queryKey: ["academic-sessions"],
+    queryFn: ({ signal }) =>
+      api<typeof calendar.listAcademicSessions>("GET", "/academic-sessions", { signal }),
+  });
+  const semesters = useQuery({
+    queryKey: ["semesters", "all"],
+    queryFn: ({ signal }) =>
+      api<typeof calendar.listSemesters>("GET", "/semesters", { query: {}, signal }),
+  });
+  const programmes = useQuery({
+    queryKey: ["programmes"],
+    queryFn: ({ signal }) => api<typeof academic.listProgrammes>("GET", "/programmes", { signal }),
+  });
+  const [semesterId, setSemesterId] = useState("");
+  const [programmeId, setProgrammeId] = useState("");
+  const scope = { semesterId, ...(programmeId === "" ? {} : { programmeId }) };
+  const listKey = ["semester-results", semesterId, programmeId];
+  const list = useQuery({
+    queryKey: listKey,
+    enabled: semesterId !== "",
+    queryFn: ({ signal }) =>
+      api<typeof results.listSemesterResults>("GET", "/results/semesters", {
+        query: scope,
+        signal,
+      }),
+  });
+  const { busy, error, run } = useSubmit();
+  const [message, setMessage] = useState<string | null>(null);
+  const sessionCode = (id: string) => sessions.data?.items.find((x) => x.id === id)?.code ?? "";
+  const options = [...(semesters.data?.items ?? [])].sort((a, b) =>
+    b.startsOn.localeCompare(a.startsOn),
+  );
+  const items = list.data?.items ?? [];
+  const act = (action: () => Promise<string>) => {
+    void run(async () => {
+      setMessage(null);
+      setMessage(await action());
+      await queryClient.invalidateQueries({ queryKey: ["semester-results"] });
+    });
+  };
+  const headers = () => ({ "idempotency-key": crypto.randomUUID() });
+  const broadsheet = `/api/v1/reports/results?${new URLSearchParams({ ...scope, format: "csv" }).toString()}`;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Semester results</h2>
+      <div className="flex flex-wrap gap-3 text-sm">
+        <label className="block">
+          <span className="block text-slate-700">Semester</span>
+          <select
+            value={semesterId}
+            onChange={(e) => {
+              setSemesterId(e.target.value);
+              setMessage(null);
+            }}
+            className="rounded border border-slate-300 px-2 py-2"
+          >
+            <option value="">Choose…</option>
+            {options.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}, {sessionCode(s.academicSessionId)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="block text-slate-700">Programme</span>
+          <select
+            value={programmeId}
+            onChange={(e) => {
+              setProgrammeId(e.target.value);
+            }}
+            className="rounded border border-slate-300 px-2 py-2"
+          >
+            <option value="">All programmes</option>
+            {(programmes.data?.items ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {message ? <Alert tone="success">{message}</Alert> : null}
+      {semesterId === "" ? null : (
+        <>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded border border-slate-300 px-3 py-2"
+              onClick={() => {
+                act(async () => {
+                  const r = await api<typeof results.computeSemesterResults>(
+                    "POST",
+                    "/results/semesters/compute",
+                    { body: scope, headers: headers() },
+                  );
+                  return `Computed ${String(r.computed)}; ${String(r.changed)} changed.`;
+                });
+              }}
+            >
+              Compute
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded border border-slate-300 px-3 py-2"
+              onClick={() => {
+                act(async () => {
+                  const r = await api<typeof results.approveSemesterResults>(
+                    "POST",
+                    "/results/semesters/approve",
+                    { body: scope, headers: headers() },
+                  );
+                  return `Approved ${String(r.approved)}${r.skipped > 0 ? `; ${String(r.skipped)} wait for a reopened course result` : ""}.`;
+                });
+              }}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
+              onClick={() => {
+                act(async () => {
+                  const r = await api<typeof results.publishSemesterResults>(
+                    "POST",
+                    "/results/semesters/publish",
+                    { body: scope, headers: headers() },
+                  );
+                  return `Published ${String(r.published)}. Students have been told.`;
+                });
+              }}
+            >
+              Publish
+            </button>
+            <a href={broadsheet} className="px-3 py-2 text-brand underline" download>
+              Broadsheet (CSV)
+            </a>
+          </div>
+          {list.isSuccess && items.length === 0 ? (
+            <p className="text-sm text-slate-600">
+              No semester results yet. Compute them once course results are finalized.
+            </p>
+          ) : null}
+          <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="p-2">Student</th>
+                  <th className="p-2">Credits</th>
+                  <th className="p-2">GPA</th>
+                  <th className="p-2">CGPA</th>
+                  <th className="p-2">Standing</th>
+                  <th className="p-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((x) => (
+                  <tr key={x.id} className="border-t border-slate-100">
+                    <td className="p-2">
+                      <div className="font-medium">{x.studentName}</div>
+                      <div className="text-xs text-slate-500">
+                        {x.matricNumber} · {x.programmeCode}
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      {credits(x.creditsEarnedX10)}/{credits(x.creditsAttemptedX10)}
+                    </td>
+                    <td className="p-2">{x100(x.gpaX100)}</td>
+                    <td className="p-2">{x100(x.cgpaX100)}</td>
+                    <td className="p-2">{STANDING_LABELS[x.standing] || "–"}</td>
+                    <td className="p-2">
+                      {STATUS_LABELS[x.status]}
+                      {x.draftCourseResults > 0 ? " (a course result is reopened)" : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

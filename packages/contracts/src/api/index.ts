@@ -231,6 +231,11 @@ export const ENDPOINTS = [
   results.finalizeCourseResults,
   results.reopenCourseResult,
   results.getMyResults,
+  results.listSemesterResults,
+  results.computeSemesterResults,
+  results.approveSemesterResults,
+  results.publishSemesterResults,
+  results.getResultsBroadsheet,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -290,5 +295,11 @@ export type {
   SubmissionForGrading,
 } from "./assessment";
 export type { Announcement, Material } from "./content";
-export type { CourseResultRow, CourseResults, GradingScheme, MyResults } from "./results";
+export type {
+  CourseResultRow,
+  CourseResults,
+  GradingScheme,
+  MyResults,
+  SemesterResultRow,
+} from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
