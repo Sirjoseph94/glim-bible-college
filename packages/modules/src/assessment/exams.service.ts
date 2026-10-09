@@ -16,6 +16,7 @@ import { and, asc, eq, max } from "drizzle-orm";
 import { attemptsScore } from "./exam-scores";
 import { GradebookService } from "./gradebook.service";
 import { GradesService, toGrade } from "./grades.service";
+import { gradebookLocked, offeringLocked, studentLocked } from "./gradebook-locks";
 
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
 
@@ -40,7 +41,8 @@ export class ExamsService {
     offeringId: string,
     input: { title: string; maxScore: string; weight: string; heldAt?: string | null | undefined },
     actor: AuditActor,
-  ): Promise<GradebookColumn> {
+  ): Promise<DomainResult<GradebookColumn>> {
+    if (await offeringLocked(this.db.read, offeringId)) return err(gradebookLocked());
     const id = await this.db.withTx(async ({ db }) => {
       const a = schema.assessments;
       const [last] = await db
@@ -77,7 +79,7 @@ export class ExamsService {
       });
       return row.id;
     });
-    return this.gradebook.column(id);
+    return ok(await this.gradebook.column(id));
   }
 
   async grants(quizId: string): Promise<OnlineGrant[]> {
@@ -193,6 +195,7 @@ export class ExamsService {
         .where(eq(schema.quizzes.assessmentId, assessmentId));
       if (quiz === undefined || !(await this.grades.onCourse(db, quiz.courseOfferingId, studentId)))
         return notFound();
+      if (await studentLocked(db, quiz.courseOfferingId, studentId)) return err(gradebookLocked());
       const current = await this.grades.lock(db, assessmentId, studentId);
       if ((current?.version ?? 0) !== expectedVersion)
         return err(

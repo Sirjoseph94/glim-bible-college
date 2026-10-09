@@ -21,6 +21,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, isNotNull, max, sql } from "drizzle-orm";
 import { attemptsScore } from "./exam-scores";
 import { GradesService, normaliseScore, switchesPath, toGrade } from "./grades.service";
+import { gradebookLocked, offeringLocked, studentLocked } from "./gradebook-locks";
 
 type AssessmentRow = typeof schema.assessments.$inferSelect;
 
@@ -137,7 +138,8 @@ export class GradebookService {
     offeringId: string,
     input: { title: string; maxScore: string; weight: string },
     actor: AuditActor,
-  ): Promise<GradebookColumn> {
+  ): Promise<DomainResult<GradebookColumn>> {
+    if (await offeringLocked(this.db.read, offeringId)) return err(gradebookLocked());
     const id = await this.db.withTx(async ({ db }) => {
       const a = schema.assessments;
       const [last] = await db
@@ -173,7 +175,7 @@ export class GradebookService {
       });
       return row.id;
     });
-    return this.column(id);
+    return ok(await this.column(id));
   }
 
   /** Renames a column or changes its weight; the maximum score belongs to its assignment or quiz. */
@@ -194,6 +196,8 @@ export class GradebookService {
             "Someone else changed this column. Reload and try again.",
           ),
         );
+      if (change.weight !== undefined && (await offeringLocked(db, row.courseOfferingId)))
+        return err(gradebookLocked());
       await db
         .update(a)
         .set({
@@ -378,6 +382,10 @@ export class GradebookService {
           continue;
         }
         seen.add(matric);
+        if (await studentLocked(db, offeringId, student.studentId)) {
+          row.message = "This student's result is finalized.";
+          continue;
+        }
         const checked = normaliseScore(cells[scoreAt] ?? "", assessment.maxScore);
         if ("message" in checked) {
           row.message = checked.message;

@@ -246,6 +246,11 @@ for (const [n, given, family, mode] of [
 }
 // Recordings may come from the fake YouTube's channel.
 await db.pool.query("UPDATE settings SET youtube_channel_urls = $1", [[FAKE_CHANNEL_URL]]);
+// The Diploma in Ministry is graded with the seeded GLIM Diploma scheme (the results spec finalizes).
+await db.pool.query(
+  "UPDATE programmes SET grading_scheme_id = (SELECT id FROM grading_schemes WHERE name = 'GLIM Diploma') WHERE id = $1",
+  [ministry.id],
+);
 await app.listen(config.port, "127.0.0.1");
 
 // The worker runs in-process on the general queues (no cron), so queued emails are sent.

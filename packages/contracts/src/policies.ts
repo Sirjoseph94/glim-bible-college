@@ -104,6 +104,10 @@ export const gradingDefaultsPolicy = z
   .object({
     repeatPolicy: z.enum(["KEEP_ALL", "REPLACE_LATEST", "BEST"]).default("BEST"),
     goodStandingMinCgpaX100: z.number().int().min(0).max(500).default(100),
+    /** At finalization, a missing grade in a counted column scores 0 (§14.3). */
+    missingGradeAsZero: z.boolean().default(true),
+    /** Round the final percentage to a whole number before banding (§14.3: 69.50 ⇒ 70 ⇒ A). */
+    roundBeforeBanding: z.enum(["NONE", "INTEGER"]).default("INTEGER"),
   })
   .strict();
 

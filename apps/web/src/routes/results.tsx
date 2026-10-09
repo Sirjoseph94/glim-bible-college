@@ -1,0 +1,329 @@
+import type { CourseResultRow, MyResults, offerings, results } from "@glim/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useParams } from "@tanstack/react-router";
+import { useState } from "react";
+import { api } from "../api/client";
+import { meQuery } from "../api/session";
+import { Alert, formText } from "../components/form";
+import { useSubmit } from "../components/use-submit";
+
+/** Hundredths as a decimal with two places, e.g. 7200 → "72.00", 339 → "3.39". */
+function x100(v: number | null): string {
+  if (v === null) return "–";
+  return `${String(Math.trunc(v / 100))}.${String(v % 100).padStart(2, "0")}`;
+}
+
+/** Tenths of a credit, e.g. 30 → "3", 25 → "2.5". */
+function credits(v: number): string {
+  return v % 10 === 0 ? String(v / 10) : `${String(Math.trunc(v / 10))}.${String(v % 10)}`;
+}
+
+const KIND_LABELS: Record<CourseResultRow["resultKind"], string> = {
+  GRADED: "",
+  INCOMPLETE: "Incomplete",
+  WITHDRAWN: "Withdrawn",
+  EXEMPT: "Exempt",
+  AUDIT: "Audit",
+};
+
+const resultsKey = (offeringId: string) => ["course-results", offeringId];
+
+/**
+ * A course's results (TRD §14.3): a preview of what finalizing records, then the frozen results.
+ * The PRIMARY Lecturer (or an Academic Admin) finalizes; the Registrar can reopen one result.
+ */
+export function CourseResultsPage() {
+  const { offeringId } = useParams({ strict: false });
+  const id = offeringId ?? "";
+  const queryClient = useQueryClient();
+  const me = useQuery(meQuery);
+  const canReopen =
+    me.data?.roles.staff.some((r) => r === "REGISTRAR" || r === "SYSTEM_ADMIN") ?? false;
+  const list = useQuery({
+    queryKey: resultsKey(id),
+    queryFn: ({ signal }) =>
+      api<typeof results.listCourseResults>("GET", "/course-offerings/:id/results", {
+        params: { id },
+        signal,
+      }),
+  });
+  const { busy, error, run } = useSubmit();
+  const [confirming, setConfirming] = useState(false);
+  if (list.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
+  if (list.isError) return <Alert tone="error">We couldn't load the results.</Alert>;
+  const r = list.data;
+  const pending = r.items.length - r.finalized;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Course results</h2>
+      <p className="text-sm text-slate-600">
+        {r.finalized === 0
+          ? "Nothing is finalized yet: this is what finalizing would record, from the gradebook as it is now."
+          : `${String(r.finalized)} of ${String(r.items.length)} results finalized. Students see them straight away.`}
+      </p>
+      {r.blocker !== null ? <Alert tone="error">{r.blocker}</Alert> : null}
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {pending > 0 && r.blocker === null ? (
+        confirming ? (
+          <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm">
+            <p>
+              Finalize {pending} result{pending === 1 ? "" : "s"}? Their grades lock: after this
+              only the Registrar can reopen a result.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
+                onClick={() =>
+                  void run(async () => {
+                    await api<typeof results.finalizeCourseResults>(
+                      "POST",
+                      "/course-offerings/:id/results/finalize",
+                      { params: { id }, headers: { "idempotency-key": crypto.randomUUID() } },
+                    );
+                    setConfirming(false);
+                    await queryClient.invalidateQueries({ queryKey: resultsKey(id) });
+                  })
+                }
+              >
+                Finalize now
+              </button>
+              <button
+                type="button"
+                className="underline"
+                onClick={() => {
+                  setConfirming(false);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="rounded bg-brand px-3 py-2 text-white"
+            onClick={() => {
+              setConfirming(true);
+            }}
+          >
+            Finalize results
+          </button>
+        )
+      ) : null}
+      <ul className="space-y-2 text-sm">
+        {r.items.map((item) => (
+          <ResultItem
+            key={item.courseEnrollmentId}
+            item={item}
+            offeringId={id}
+            canReopen={canReopen}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ResultItem({
+  item,
+  offeringId,
+  canReopen,
+}: {
+  item: CourseResultRow;
+  offeringId: string;
+  canReopen: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { busy, error, run } = useSubmit();
+  const [reopening, setReopening] = useState(false);
+  const final = item.status !== null && item.status !== "DRAFT";
+  return (
+    <li
+      className="space-y-1 rounded border border-slate-200 bg-white p-3"
+      aria-label={item.studentName}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-medium">
+          {item.studentName} <span className="font-normal text-slate-500">{item.matricNumber}</span>
+        </span>
+        <span>
+          {x100(item.finalPctX100)} % · {item.letter ?? "–"}
+          {KIND_LABELS[item.resultKind] === "" ? "" : ` · ${KIND_LABELS[item.resultKind]}`}
+        </span>
+      </div>
+      <div className="text-slate-600">
+        {final
+          ? `Finalized${item.reopenedCount > 0 ? ` (reopened ${String(item.reopenedCount)}×)` : ""}`
+          : item.status === "DRAFT"
+            ? "Reopened: finalize again to record it"
+            : "Preview"}{" "}
+        · {credits(item.creditsX10)} credits
+        {item.attemptNo > 1 ? ` · attempt ${String(item.attemptNo)}` : ""}
+      </div>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {final && canReopen && item.id !== null ? (
+        reopening ? (
+          <form
+            aria-label="Reopen result"
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const reason = formText(new FormData(e.currentTarget), "reason");
+              const resultId = item.id ?? "";
+              void run(async () => {
+                await api<typeof results.reopenCourseResult>("POST", "/course-results/:id/reopen", {
+                  params: { id: resultId },
+                  body: { reason },
+                });
+                setReopening(false);
+                await queryClient.invalidateQueries({ queryKey: resultsKey(offeringId) });
+              });
+            }}
+          >
+            <label className="block">
+              <span className="block text-slate-700">Reason</span>
+              <input
+                name="reason"
+                required
+                maxLength={500}
+                className="block w-full rounded border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
+            >
+              Reopen
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="text-brand underline"
+            onClick={() => {
+              setReopening(true);
+            }}
+          >
+            Reopen
+          </button>
+        )
+      ) : null}
+    </li>
+  );
+}
+
+/** The Registrar's way in: every course offering, each linking to its results. */
+export function ResultsCoursesPage() {
+  const list = useQuery({
+    queryKey: ["offerings", "all"],
+    queryFn: ({ signal }) =>
+      api<typeof offerings.listOfferings>("GET", "/course-offerings", { query: {}, signal }),
+  });
+  if (list.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
+  if (list.isError) return <Alert tone="error">We couldn't load the courses.</Alert>;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Course results</h2>
+      <ul className="space-y-2 text-sm">
+        {list.data.items.map((o) => (
+          <li key={o.id} className="rounded border border-slate-200 bg-white p-3">
+            <Link
+              to="/course-results/$offeringId"
+              params={{ offeringId: o.id }}
+              className="font-medium text-blue-700 underline"
+            >
+              {o.courseCode} {o.title}
+            </Link>
+            <div className="text-slate-600">
+              {o.semesterName}, {o.sessionCode} · section {o.sectionCode}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * A student's results (TRD §14.3, §14.5): each course as soon as it's finalized, and semester
+ * GPA and CGPA, marked Provisional until the Registrar publishes the semester.
+ */
+export function MyResultsPage() {
+  const mine = useQuery({
+    queryKey: ["my-results"],
+    queryFn: ({ signal }) => api<typeof results.getMyResults>("GET", "/me/results", { signal }),
+  });
+  if (mine.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
+  if (mine.isError) return <Alert tone="error">We couldn't load your results.</Alert>;
+  const programmes = mine.data.programmes;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">My results</h2>
+      {programmes.every((p) => p.semesters.length === 0) ? (
+        <p className="text-sm text-slate-600">
+          No results yet. They appear here as soon as your Lecturers finalize them.
+        </p>
+      ) : null}
+      {programmes.map((p) => (
+        <ProgrammeResults key={p.programmeEnrollmentId} programme={p} />
+      ))}
+    </div>
+  );
+}
+
+const STANDING_LABELS: Record<string, string> = {
+  GOOD: "Good standing",
+  PROBATION: "Probation",
+  WITHDRAW_REQUIRED: "Below good standing",
+  UNKNOWN: "",
+};
+
+function ProgrammeResults({ programme: p }: { programme: MyResults["programmes"][number] }) {
+  if (p.semesters.length === 0) return null;
+  return (
+    <section className="space-y-3">
+      <h3 className="font-medium">
+        {p.programmeName} <span className="font-normal text-slate-500">{p.matricNumber}</span>
+      </h3>
+      {p.semesters.map((s) => (
+        <div
+          key={s.semesterId}
+          className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm"
+          aria-label={`${s.semesterName} ${s.sessionCode}`}
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="font-medium">
+              {s.semesterName}, {s.sessionCode}
+            </span>
+            {s.provisional ? (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-900">Provisional</span>
+            ) : null}
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {s.results.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1">
+                <span>
+                  {c.courseCode} {c.courseTitle}{" "}
+                  <span className="text-slate-500">({credits(c.creditsX10)} credits)</span>
+                </span>
+                <span>
+                  {x100(c.finalPctX100)} % ·{" "}
+                  <strong>{c.letter ?? KIND_LABELS[c.resultKind]}</strong>
+                  {c.attemptNo > 1 ? " · repeat" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p>
+            GPA {x100(s.gpaX100)} · CGPA {x100(s.cgpaX100)} · {credits(s.creditsEarnedX10)} of{" "}
+            {credits(s.creditsAttemptedX10)} credits earned
+            {STANDING_LABELS[s.standing] === "" ? "" : ` · ${STANDING_LABELS[s.standing] ?? ""}`}
+          </p>
+        </div>
+      ))}
+    </section>
+  );
+}

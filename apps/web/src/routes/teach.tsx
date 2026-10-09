@@ -768,6 +768,13 @@ function OfferingItem({ offering }: { offering: Offering }) {
       >
         Gradebook
       </Link>
+      <Link
+        to="/course-results/$offeringId"
+        params={{ offeringId: offering.id }}
+        className="block text-sm text-brand underline"
+      >
+        Results
+      </Link>
       {showContent ? (
         <div className="space-y-4">
           <h4 className="font-medium">Announcements</h4>

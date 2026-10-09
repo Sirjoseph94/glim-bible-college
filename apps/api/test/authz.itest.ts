@@ -166,6 +166,25 @@ const SAMPLES: Record<string, Sample> = {
       payload: { gradingSchemeId: scheme },
     };
   },
+  "GET /course-offerings/:id/results": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/results`,
+      offering: "O1",
+    }),
+  // The fixture gradebook's weights don't add up to 100, so allowed callers get 422.
+  "POST /course-offerings/:id/results/finalize": () => {
+    n++;
+    return Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/results/finalize`,
+      headers: { "idempotency-key": `authz-finalize-${String(n).padStart(8, "0")}` },
+      offering: "O1",
+    });
+  },
+  // A finalized result each time, so allowed callers have something to reopen.
+  "POST /course-results/:id/reopen": async (t) => ({
+    url: `/api/v1/course-results/${await finalizedResult(t)}/reopen`,
+    payload: { reason: "Marking error" },
+  }),
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;
@@ -1188,13 +1207,15 @@ let examShared:
 async function examFixture(t: TestApp) {
   if (examShared !== undefined) return examShared;
   const { essayId } = await quizFixture(t);
-  const column = await t.app
-    .get(ExamsService)
-    .create(
-      personas.world.offerings.O1,
-      { title: "Fixture exam", maxScore: "100", weight: "0" },
-      SYSTEM_ACTOR,
-    );
+  const column = unwrap(
+    await t.app
+      .get(ExamsService)
+      .create(
+        personas.world.offerings.O1,
+        { title: "Fixture exam", maxScore: "100", weight: "0" },
+        SYSTEM_ACTOR,
+      ),
+  );
   const online = unwrap(
     await t.app.get(QuizzesService).createOnlineExam(column.assessmentId, {
       questions: [{ questionId: essayId }],
@@ -1237,6 +1258,25 @@ const SCHEME_SAMPLE = {
   goodStandingCgpaX100: 100,
   probationCgpaX100: null,
 };
+
+/** sEnrolled's result on O1, (re)set to FINALIZED; its grades stay unlocked. */
+async function finalizedResult(t: TestApp): Promise<string> {
+  const scheme = await seededScheme(t);
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    `INSERT INTO course_results (course_enrollment_id, programme_enrollment_id, semester_id, course_offering_id,
+       course_id, student_id, grading_scheme_id, credits_x10, final_pct_x100, letter, points_x100,
+       quality_points_x1000, passed, status, finalized_at)
+     SELECT ce.id, ce.programme_enrollment_id, o.semester_id, o.id, o.course_id, ce.student_id, $3,
+       30, 7200, 'A', 500, 15000, true, 'FINALIZED', now()
+       FROM course_enrollments ce JOIN course_offerings o ON o.id = ce.course_offering_id
+       JOIN students s ON s.id = ce.student_id
+      WHERE ce.course_offering_id = $1 AND s.user_id = $2
+     ON CONFLICT (course_enrollment_id) DO UPDATE SET status = 'FINALIZED', finalized_at = now()
+     RETURNING id`,
+    [personas.world.offerings.O1, personas.sEnrolled.userId, scheme],
+  );
+  return rows[0]?.id ?? "";
+}
 
 /** The seeded GLIM Diploma scheme. */
 async function seededScheme(t: TestApp): Promise<string> {

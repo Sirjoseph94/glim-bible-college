@@ -14,6 +14,7 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { gradebookLocked, studentLocked } from "./gradebook-locks";
 
 type GradeRow = typeof schema.grades.$inferSelect;
 type AssessmentRow = typeof schema.assessments.$inferSelect;
@@ -107,6 +108,8 @@ export class GradesService {
       if (assessment === undefined) return err(domainError("NOT_FOUND", "Not found."));
       if (!(await this.onCourse(db, assessment.courseOfferingId, studentId)))
         return err(domainError("NOT_FOUND", "Not found."));
+      if (await studentLocked(db, assessment.courseOfferingId, studentId))
+        return err(gradebookLocked());
 
       let score: string | null = null;
       if (input.score !== null && input.excused !== true) {
@@ -198,6 +201,8 @@ export class GradesService {
       .from(schema.assessments)
       .where(eq(schema.assessments.id, input.assessmentId));
     if (assessment === undefined) throw new Error("grade for a missing assessment");
+    // A quiz marked after finalization keeps its score on the attempt; the result stands.
+    if (await studentLocked(db, assessment.courseOfferingId, input.studentId)) return;
     await this.write(db, {
       assessment,
       studentId: input.studentId,

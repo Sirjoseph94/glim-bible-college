@@ -16,6 +16,7 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, max, sql, type SQL } from "drizzle-orm";
+import { gradebookLocked, offeringLocked } from "./gradebook-locks";
 
 type QuizRow = typeof schema.quizzes.$inferSelect;
 type QuestionRow = typeof schema.questions.$inferSelect;
@@ -172,6 +173,7 @@ export class QuizzesService {
   async create(offeringId: string, input: QuizInput): Promise<DomainResult<Quiz>> {
     const window = checkWindow(toDate(input.opensAt) ?? null, toDate(input.closesAt) ?? null);
     if (window !== null) return err(window);
+    if (await offeringLocked(this.db.read, offeringId)) return err(gradebookLocked());
     const result = await this.db.withTxResult(async ({ db }) => {
       const picked = await this.pickQuestions(db, offeringId, input.questions);
       if (!picked.ok) return picked;
@@ -270,6 +272,11 @@ export class QuizzesService {
       const [column] = await db.select({ kind: a.kind }).from(a).where(eq(a.id, row.assessmentId));
       // An exam keeps its own maximum and date; a quiz's maximum is its questions' total.
       const exam = column?.kind === "EXAM";
+      if (
+        (change.weight !== undefined || (change.questions !== undefined && !exam)) &&
+        (await offeringLocked(db, row.courseOfferingId))
+      )
+        return err(gradebookLocked());
       let maxScore: string | undefined;
       if (change.questions !== undefined) {
         if (row.status !== "DRAFT")
@@ -324,6 +331,7 @@ export class QuizzesService {
       const [row] = await db.select().from(z).where(eq(z.id, id)).for("update");
       if (row === undefined) return notFound();
       if (row.status !== "DRAFT") return ok(null);
+      if (await offeringLocked(db, row.courseOfferingId)) return err(gradebookLocked());
       const now = this.clock.now();
       await db
         .update(z)

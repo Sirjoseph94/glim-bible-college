@@ -25,6 +25,8 @@ describe("policy defaults", () => {
     expect(defaultPolicy("GRADING_DEFAULTS")).toEqual({
       repeatPolicy: "BEST",
       goodStandingMinCgpaX100: 100,
+      missingGradeAsZero: true,
+      roundBeforeBanding: "INTEGER",
     });
   });
 

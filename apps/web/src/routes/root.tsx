@@ -52,6 +52,9 @@ export function RootLayout() {
                 <Link to="/registration" className="underline">
                   Registration
                 </Link>
+                <Link to="/results" className="underline">
+                  My results
+                </Link>
               </>
             ) : null}
             {me.data.roles.isLecturer ? (
@@ -82,9 +85,14 @@ export function RootLayout() {
               </>
             ) : null}
             {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "REGISTRAR") ? (
-              <Link to="/admin/grading-schemes" className="underline">
-                Grading schemes
-              </Link>
+              <>
+                <Link to="/results/courses" className="underline">
+                  Course results
+                </Link>
+                <Link to="/admin/grading-schemes" className="underline">
+                  Grading schemes
+                </Link>
+              </>
             ) : null}
             {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
               <>

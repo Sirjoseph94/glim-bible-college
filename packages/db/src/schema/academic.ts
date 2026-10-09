@@ -13,7 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { citext, enumCheck, std } from "./columns";
-import { gradingSchemes } from "./results";
+import { gradingSchemes } from "./grading-schemes";
 
 /** Owner: academic. GLIM: CERT (1 year, Year 1) and DIP (2 years, Years 1–2) (TRD §6.3). */
 export const programmes = pgTable(

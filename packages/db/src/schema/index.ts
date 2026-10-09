@@ -15,4 +15,5 @@ export * from "./notifications";
 export * from "./platform";
 export * from "./settings";
 export * from "./video";
+export * from "./grading-schemes";
 export * from "./results";

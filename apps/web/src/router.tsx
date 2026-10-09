@@ -285,6 +285,30 @@ const gradebookRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/gradebook"), "GradebookPage"),
 });
 
+const courseResultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/course-results/$offeringId",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/results"), "CourseResultsPage"),
+});
+
+const resultsCoursesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/results/courses",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/results"), "ResultsCoursesPage"),
+});
+
+const myResultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/results",
+  beforeLoad: requireStudent,
+  component: lazyRouteComponent(() => import("./routes/results"), "MyResultsPage"),
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
@@ -359,6 +383,9 @@ const routeTree = rootRoute.addChildren([
   quizRoute,
   quizGradingRoute,
   gradebookRoute,
+  courseResultsRoute,
+  resultsCoursesRoute,
+  myResultsRoute,
   adminVideosRoute,
   loginRoute,
   forgotRoute,

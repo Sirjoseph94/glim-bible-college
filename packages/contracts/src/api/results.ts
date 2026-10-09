@@ -116,3 +116,132 @@ export const setProgrammeScheme = endpoint({
   body: z.object({ gradingSchemeId: z.uuid() }).strict(),
   response: gradingSchemeSchema,
 });
+
+// ---- course results (§14.3) ----
+
+export const courseResultRowSchema = z.object({
+  /** Null for a preview: what finalizing would record. */
+  id: z.uuid().nullable(),
+  courseEnrollmentId: z.uuid(),
+  studentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string().nullable(),
+  /** Null for a preview. */
+  status: z.enum(ENUMS["course_results.status"]).nullable(),
+  creditsX10: z.number().int(),
+  finalPctX100: z.number().int().nullable(),
+  letter: z.string().nullable(),
+  pointsX100: z.number().int().nullable(),
+  qualityPointsX1000: z.number().int().nullable(),
+  resultKind: z.enum(ENUMS["course_results.result_kind"]),
+  countsInGpa: z.boolean(),
+  passed: z.boolean().nullable(),
+  attemptNo: z.number().int(),
+  finalizedAt: z.iso.datetime().nullable(),
+  reopenedCount: z.number().int(),
+  version: z.number().int(),
+});
+
+export type CourseResultRow = z.infer<typeof courseResultRowSchema>;
+
+export const courseResultsSchema = z.object({
+  /** Why finalizing can't run now (weights, a missing scheme, missing grades), or null. */
+  blocker: z.string().nullable(),
+  finalized: z.number().int(),
+  items: z.array(courseResultRowSchema),
+});
+
+export type CourseResults = z.infer<typeof courseResultsSchema>;
+
+export const listCourseResults = endpoint({
+  method: "GET",
+  path: "/course-offerings/:id/results",
+  summary: "Each student's course result, or a preview of what finalizing would record",
+  tag: "Results",
+  auth: "session",
+  permission: "results:record:read",
+  resource: { type: "course-offering", param: "id" },
+  params: idParams,
+  response: courseResultsSchema,
+});
+
+export const finalizeCourseResults = endpoint({
+  method: "POST",
+  path: "/course-offerings/:id/results/finalize",
+  summary:
+    "Finalize the course: freeze each student's result (weights must total 100) and lock the gradebook",
+  tag: "Results",
+  auth: "session",
+  permission: "results:course-result:finalize",
+  resource: { type: "course-offering", param: "id" },
+  idempotent: true,
+  params: idParams,
+  response: courseResultsSchema,
+  successStatus: 200,
+});
+
+export const reopenCourseResult = endpoint({
+  method: "POST",
+  path: "/course-results/:id/reopen",
+  summary:
+    "Reopen a finalized result with a reason: back to DRAFT, the student's grades unlocked, the change kept",
+  tag: "Results",
+  auth: "session",
+  permission: "results:course-result:reopen",
+  params: idParams,
+  body: z.object({ reason: z.string().trim().min(1).max(500) }).strict(),
+  response: courseResultRowSchema,
+  successStatus: 200,
+});
+
+export const myCourseResultSchema = z.object({
+  id: z.uuid(),
+  courseCode: z.string(),
+  courseTitle: z.string(),
+  creditsX10: z.number().int(),
+  finalPctX100: z.number().int().nullable(),
+  letter: z.string().nullable(),
+  pointsX100: z.number().int().nullable(),
+  resultKind: z.enum(ENUMS["course_results.result_kind"]),
+  countsInGpa: z.boolean(),
+  passed: z.boolean().nullable(),
+  attemptNo: z.number().int(),
+  status: z.enum(ENUMS["course_results.status"]),
+});
+
+export const myResultsSchema = z.object({
+  programmes: z.array(
+    z.object({
+      programmeEnrollmentId: z.uuid(),
+      programmeName: z.string(),
+      matricNumber: z.string(),
+      semesters: z.array(
+        z.object({
+          semesterId: z.uuid(),
+          semesterName: z.string(),
+          sessionCode: z.string(),
+          results: z.array(myCourseResultSchema),
+          creditsAttemptedX10: z.number().int(),
+          creditsEarnedX10: z.number().int(),
+          gpaX100: z.number().int().nullable(),
+          cgpaX100: z.number().int().nullable(),
+          standing: z.enum(ENUMS["semester_results.standing"]),
+          /** True until the Registrar approves and publishes the semester. */
+          provisional: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+});
+
+export type MyResults = z.infer<typeof myResultsSchema>;
+
+export const getMyResults = endpoint({
+  method: "GET",
+  path: "/me/results",
+  summary:
+    "The caller's finalized course results by semester, with GPA and CGPA (Provisional until published)",
+  tag: "Results",
+  auth: "session",
+  response: myResultsSchema,
+});

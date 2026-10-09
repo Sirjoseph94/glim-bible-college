@@ -30,3 +30,10 @@ export {
   type QuizChange,
   type QuizInput,
 } from "./quizzes.service";
+export {
+  gradebookLocked,
+  lockStudents,
+  offeringLocked,
+  studentLocked,
+  unlockStudents,
+} from "./gradebook-locks";

@@ -373,3 +373,21 @@ export const quizResponses = pgTable(
 
 /** Chosen option ids (MCQ, true/false) or written text (short text, essay). */
 export type QuizResponseValue = { optionIds: string[] } | { text: string };
+
+/**
+ * Owner: assessment. A student's grades on a course frozen by finalization (§14.3,
+ * `GRADEBOOK_LOCKED`); reopening the result removes the row.
+ */
+export const gradebookLocks = pgTable(
+  "gradebook_locks",
+  {
+    ...stdRo(),
+    courseOfferingId: uuid("course_offering_id")
+      .notNull()
+      .references(() => courseOfferings.id, { onDelete: "restrict" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "restrict" }),
+  },
+  (t) => [unique("gradebook_locks_once").on(t.courseOfferingId, t.studentId)],
+);

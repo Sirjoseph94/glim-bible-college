@@ -31,7 +31,7 @@ export class GradebookController {
     @Body(assessment.createGradebookColumn) body: BodyOf<typeof assessment.createGradebookColumn>,
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof assessment.createGradebookColumn>> {
-    return this.gradebook.createColumn(params.id, body, actor);
+    return unwrap(await this.gradebook.createColumn(params.id, body, actor));
   }
 
   @Endpoint(assessment.updateGradebookColumn)
@@ -80,7 +80,7 @@ export class GradebookController {
     @Body(assessment.createExam) body: BodyOf<typeof assessment.createExam>,
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof assessment.createExam>> {
-    return this.exams.create(params.id, body, actor);
+    return unwrap(await this.exams.create(params.id, body, actor));
   }
 
   @Endpoint(assessment.createOnlineExam)

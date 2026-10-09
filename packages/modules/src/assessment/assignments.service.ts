@@ -14,6 +14,7 @@ import {
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, max, sql, type SQL } from "drizzle-orm";
 import { closesAt } from "./domain/late";
+import { gradebookLocked, offeringLocked } from "./gradebook-locks";
 
 type AssignmentRow = typeof schema.assignments.$inferSelect;
 type AssessmentRow = typeof schema.assessments.$inferSelect;
@@ -73,6 +74,7 @@ export class AssignmentsService {
     const dueAt = new Date(input.dueAt);
     const cutoffAt = input.cutoffAt == null ? null : new Date(input.cutoffAt);
     if (cutoffAt !== null && cutoffAt < dueAt) return cutoffBeforeDue();
+    if (await offeringLocked(this.db.read, offeringId)) return err(gradebookLocked());
     const id = await this.db.withTx(async ({ db }) => {
       const a = schema.assessments;
       const [last] = await db
@@ -138,6 +140,11 @@ export class AssignmentsService {
             ? null
             : new Date(change.cutoffAt);
       if (cutoffAt !== null && cutoffAt < dueAt) return cutoffBeforeDue();
+      if (
+        (change.weight !== undefined || change.maxScore !== undefined) &&
+        (await offeringLocked(db, row.courseOfferingId))
+      )
+        return err(gradebookLocked());
       const now = this.clock.now();
       await db
         .update(s)
@@ -181,6 +188,7 @@ export class AssignmentsService {
       const [row] = await db.select().from(s).where(eq(s.id, id)).for("update");
       if (row === undefined) return notFound();
       if (row.status !== "DRAFT") return ok(null);
+      if (await offeringLocked(db, row.courseOfferingId)) return err(gradebookLocked());
       const now = this.clock.now();
       await db
         .update(s)

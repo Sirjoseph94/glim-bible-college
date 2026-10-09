@@ -1,4 +1,5 @@
 export { ResultsModule } from "./results.module";
+export { CourseResultsService } from "./course-results.service";
 export {
   GradingSchemesService,
   rulesOf,
