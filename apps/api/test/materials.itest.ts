@@ -295,7 +295,8 @@ describe("announcements", () => {
     const notices = await q<{ user_id: string; email_status: string }>(
       "SELECT user_id, email_status FROM notifications WHERE kind = 'content.announcement'",
     );
-    expect(notices.rows).toEqual([{ user_id: p.sEnrolled.userId, email_status: "NOT_REQUESTED" }]);
+    // In-app, and in the daily digest email (not critical, §15.1).
+    expect(notices.rows).toEqual([{ user_id: p.sEnrolled.userId, email_status: "DIGEST" }]);
   });
 
   it("lists pinned ones first, then newest, for everyone on the course", async () => {

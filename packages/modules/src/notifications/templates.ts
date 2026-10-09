@@ -48,6 +48,20 @@ function meetingTime(data: Record<string, unknown>): string {
   return formatDualTime(str(data.scheduledStart), { viewerZone, institutionZone, withDate: true });
 }
 
+/** The daily digest (§15.1): the day's non-critical notifications in one email. */
+export function digestEmail(input: { items: string[]; more: number; appOrigin: string }): Rendered {
+  return email({
+    subject: `Your GLIM updates (${String(input.items.length + input.more)})`,
+    category: "digest",
+    paragraphs: [
+      "Here is what happened since your last summary:",
+      ...input.items.map((title) => `• ${title}`),
+      ...(input.more > 0 ? [`…and ${String(input.more)} more.`] : []),
+    ],
+    link: { label: "See them all", url: `${input.appOrigin}/notifications` },
+  });
+}
+
 /** Email templates by notification kind. Kinds without one are in-app only. */
 export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
   "admissions.application.receipt": ({ data, appOrigin }) =>
@@ -176,6 +190,16 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       link: { label: "See your schedule", url: `${appOrigin}/` },
     });
   },
+
+  "results.semester-published": ({ data, appOrigin }) =>
+    email({
+      subject: "Your semester results are published",
+      category: "results-published",
+      paragraphs: [
+        `The Registrar has published your results for ${str(data.semesterName)}, ${str(data.sessionCode)}. Your GPA and CGPA are now final, not provisional.`,
+      ],
+      link: { label: "My results", url: `${appOrigin}/results` },
+    }),
 
   "transcript.issued": ({ data, appOrigin }) =>
     email({

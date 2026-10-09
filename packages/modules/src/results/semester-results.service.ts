@@ -404,8 +404,12 @@ export class SemesterResultsService {
           userId,
           kind: "results.semester-published",
           title: `Your ${semester?.name ?? ""} ${semester?.session ?? ""} results are published`,
-          data: { semesterId: scope.semesterId },
-          email: false,
+          data: {
+            semesterId: scope.semesterId,
+            semesterName: semester?.name ?? "",
+            sessionCode: semester?.session ?? "",
+          },
+          email: true,
           dedupeKey: `semester-published:${row.id}:${String(now.getTime())}`,
         });
       }

@@ -6,7 +6,7 @@ import { MeetingLifecycleService, SeriesService } from "@glim/modules/class-meet
 import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
-import { BackupService } from "@glim/modules/ops";
+import { BackupService, InboxService } from "@glim/modules/ops";
 import { AvailabilityService, VideoAdminService } from "@glim/modules/video";
 import { QuizAttemptsService } from "@glim/modules/assessment";
 import { SemesterResultsService } from "@glim/modules/results";
@@ -28,6 +28,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const dispatch = createDispatcher(deps.subscribers);
   const sessions = deps.context.get(SessionService);
   const backup = deps.context.get(BackupService);
+  const inbox = deps.context.get(InboxService);
   const intakes = deps.context.get(IntakesService);
   const notifications = deps.context.get(NotificationsService);
   const offers = deps.context.get(OffersService);
@@ -81,5 +82,10 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
       registration.openRegistration((job.data as { semesterId: string }).semesterId),
     "notify.send": (job) =>
       notifications.deliver((job.data as { notificationId: string }).notificationId),
+    // The 06:00 Lagos cron (no user) fans out; each person's digest then runs on its own.
+    "notify.digest": (job) =>
+      notifications.digest((job.data as { userId?: string } | null)?.userId),
+    "provider-event.process": (job) =>
+      inbox.process((job.data as { providerEventId: string }).providerEventId),
   };
 }

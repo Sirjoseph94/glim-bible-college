@@ -45,13 +45,23 @@ function nextAddress(): string {
 
 /** Boots the real API against a fresh Postgres 18 database (spec: Seam 1). */
 export async function createTestApp(
-  options: { staticDir?: string; identityProvider?: IdentityProvider; captureLogs?: boolean } = {},
+  options: {
+    staticDir?: string;
+    identityProvider?: IdentityProvider;
+    captureLogs?: boolean;
+    /** SendGrid's Event Webhook public key (base64 DER), for the webhook tests. */
+    sendgridWebhookPublicKey?: string;
+  } = {},
 ): Promise<TestApp> {
   const database: TestDatabase = await createTestDatabase(inject("glim").postgresAdminUrl);
   const s3 = inject("glim").s3;
   const base = loadConfig({ NODE_ENV: "test", LOG_LEVEL: "silent" });
   // Presigned URLs point at the test bucket's server, as they point at Spaces in production.
-  const config = { ...base, storage: { ...base.storage, endpoint: s3.endpoint } };
+  const config = {
+    ...base,
+    storage: { ...base.storage, endpoint: s3.endpoint },
+    mail: { ...base.mail, sendgridWebhookPublicKey: options.sendgridWebhookPublicKey },
+  };
   const storage = new S3ObjectStorage({
     endpoint: s3.endpoint,
     region: config.storage.region,

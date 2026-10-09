@@ -93,7 +93,14 @@ export const ENUMS = {
   "idempotency_keys.status": ["IN_PROGRESS", "COMPLETED"],
   "audit_logs.actor_type": ["USER", "SYSTEM", "JOB", "PROVIDER"],
   "audit_logs.outcome": ["SUCCESS", "DENIED", "FAILURE"],
-  "notifications.email_status": ["NOT_REQUESTED", "PENDING", "SENT", "FAILED", "SUPPRESSED"],
+  "notifications.email_status": [
+    "NOT_REQUESTED",
+    "PENDING",
+    "DIGEST",
+    "SENT",
+    "FAILED",
+    "SUPPRESSED",
+  ],
   "import_jobs.kind": ["STUDENTS", "LECTURERS", "COURSE_ENROLLMENTS", "COURSE_RESULTS"],
   "import_jobs.status": ["QUEUED", "RUNNING", "COMPLETED", "FAILED"],
   // M07 results, awards and transcripts

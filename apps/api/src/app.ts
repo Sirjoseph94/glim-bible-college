@@ -18,6 +18,8 @@ import { AttendanceModule } from "@glim/modules/attendance";
 import { ClassMeetingModule } from "@glim/modules/class-meeting";
 import { VideoModule } from "@glim/modules/video";
 import { ImportsModule } from "@glim/modules/imports";
+import { NotificationsModule } from "@glim/modules/notifications";
+import { OpsModule } from "@glim/modules/ops";
 import { IdentityModule, SESSION_COOKIE, SessionService } from "@glim/modules/identity";
 import { LecturingModule } from "@glim/modules/lecturing";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -26,6 +28,7 @@ import type { Logger } from "@glim/telemetry";
 import { Module, type DynamicModule, type LoggerService } from "@nestjs/common";
 import { APP_GUARD, APP_INTERCEPTOR, NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { API_PREFIX } from "@glim/contracts";
 import type { PgBoss } from "pg-boss";
 import { AuthGuard } from "./common/auth.guard";
 import { rateLimitKey } from "./common/endpoint";
@@ -49,6 +52,7 @@ import { MaterialsController } from "./http/content/materials.controller";
 import { AssignmentsController } from "./http/assessment/assignments.controller";
 import { GradebookController } from "./http/assessment/gradebook.controller";
 import { AwardsController } from "./http/results/awards.controller";
+import { NotificationsController } from "./http/notifications/notifications.controller";
 import { TranscriptsController } from "./http/transcripts/transcripts.controller";
 import { CourseResultsController } from "./http/results/course-results.controller";
 import { GradingSchemesController } from "./http/results/grading-schemes.controller";
@@ -93,6 +97,8 @@ export class AppModule {
         EnrollmentModule,
         AdmissionsModule,
         ImportsModule,
+        OpsModule,
+        NotificationsModule,
         ClassMeetingModule,
         AttendanceModule,
         VideoModule,
@@ -130,6 +136,7 @@ export class AppModule {
         CourseResultsController,
         AwardsController,
         TranscriptsController,
+        NotificationsController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },
@@ -172,6 +179,10 @@ export async function buildApp(deps: AppDeps): Promise<NestFastifyApplication> {
   });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule.forRoot(deps), adapter, {
     logger: nestLogger(deps.logger),
+    // A wiring mistake throws (and is logged) rather than aborting the process.
+    abortOnError: false,
+    // JSON is parsed by Fastify's own parser, wrapped below to keep webhook bodies raw.
+    bodyParser: false,
   });
   const fastify = app.getHttpAdapter().getInstance();
 
@@ -184,6 +195,15 @@ export async function buildApp(deps: AppDeps): Promise<NestFastifyApplication> {
 
   const ipHeader = deps.config.clientIpHeader;
   const sessions = app.get(SessionService);
+  // Provider webhooks sign the exact bytes they send, so keep the raw JSON for them; every other
+  // route parses JSON exactly as before.
+  const parseJson = fastify.getDefaultJsonParser("error", "error");
+  fastify.decorateRequest("rawBody", null);
+  fastify.removeContentTypeParser("application/json");
+  fastify.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    if (req.url.startsWith(`${API_PREFIX}/integrations/`)) req.rawBody = body as string;
+    void parseJson(req, body as string, done);
+  });
   fastify.decorateRequest("clientIp", "");
   fastify.decorateRequest("session", null);
   fastify.decorateRequest("principal", null);

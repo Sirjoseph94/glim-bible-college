@@ -361,6 +361,16 @@ const verifyRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/transcripts"), "VerifyPage"),
 });
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/notifications",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+  },
+  component: lazyRouteComponent(() => import("./routes/notifications"), "NotificationsPage"),
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply",
@@ -443,6 +453,7 @@ const routeTree = rootRoute.addChildren([
   transcriptRoute,
   registrarTranscriptsRoute,
   verifyRoute,
+  notificationsRoute,
   myResultsRoute,
   adminVideosRoute,
   loginRoute,

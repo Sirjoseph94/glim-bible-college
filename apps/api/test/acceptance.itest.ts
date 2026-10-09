@@ -141,7 +141,8 @@ describe("accepting an offer", () => {
     expect(told).toEqual([
       {
         title: "Ngozi Okafor accepted a place on the Certificate in Theology",
-        email_status: "NOT_REQUESTED",
+        // In-app, and in the Academic Admin's daily digest (not critical, §15.1).
+        email_status: "DIGEST",
       },
     ]);
   });

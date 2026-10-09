@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import type { notifications } from "@glim/contracts";
+import { api } from "../api/client";
 import { institutionQuery } from "../api/institution";
 import { useEffect } from "react";
 import { meQuery, signOut, updateMe } from "../api/session";
@@ -8,6 +10,17 @@ import { browserTimeZone } from "../components/time";
 export function RootLayout() {
   const institution = useQuery(institutionQuery);
   const me = useQuery(meQuery);
+  // The unread count for the nav; marking things read refreshes it (same key prefix).
+  const unread = useQuery({
+    queryKey: ["notifications", "count"],
+    enabled: me.data != null,
+    staleTime: 60_000,
+    queryFn: ({ signal }) =>
+      api<typeof notifications.getMyNotifications>("GET", "/me/notifications", {
+        query: { limit: 1 },
+        signal,
+      }),
+  });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -74,6 +87,10 @@ export function RootLayout() {
                 My offerings
               </Link>
             ) : null}
+            <Link to="/notifications" className="underline">
+              Notifications
+              {(unread.data?.unread ?? 0) > 0 ? ` (${String(unread.data?.unread ?? 0)})` : ""}
+            </Link>
             <Link to="/profile" className="underline">
               Profile
             </Link>

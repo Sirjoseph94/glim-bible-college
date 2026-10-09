@@ -38,6 +38,11 @@ export interface EndpointSpec {
   idempotent?: boolean;
   /** Rate-limit class (§5.4); endpoints without one get the default 600/min. */
   rateLimit?: RateLimitClass;
+  /**
+   * A provider's webhook, authenticated by its signature instead of a session: no browser sends
+   * it, so the same-origin check for writes doesn't apply. The handler must verify the signature.
+   */
+  signedWebhook?: boolean;
 }
 
 /** Resource types whose owning module registers a ResourceContextLoader (§7.2). */

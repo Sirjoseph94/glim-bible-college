@@ -24,6 +24,8 @@ declare module "fastify" {
     clientIp: string;
     /** The caller for authorization, memoized for this request only (§7.2). */
     principal: Principal | null;
+    /** The exact JSON body, kept for provider webhooks whose signature covers it. */
+    rawBody: string | null;
   }
 }
 
@@ -59,7 +61,7 @@ export class AuthGuard implements CanActivate {
     );
     const req = context.switchToHttp().getRequest<FastifyRequest>();
     const unsafe = !SAFE_METHODS.has(req.method);
-    if (unsafe) this.assertSameOrigin(req);
+    if (unsafe && spec?.signedWebhook !== true) this.assertSameOrigin(req);
     if (spec?.auth !== "session") return true;
 
     const session = req.session;

@@ -10,6 +10,7 @@ import * as files from "./files";
 import * as imports from "./imports";
 import * as me from "./me";
 import * as meetings from "./meetings";
+import * as notifications from "./notifications";
 import * as offerings from "./offerings";
 import * as platform from "./platform";
 import * as reports from "./reports";
@@ -34,6 +35,7 @@ export {
   imports,
   me,
   meetings,
+  notifications,
   offerings,
   platform,
   reports,
@@ -253,6 +255,12 @@ export const ENDPOINTS = [
   transcripts.downloadTranscript,
   transcripts.sendTranscript,
   transcripts.revokeTranscript,
+  notifications.getMyNotifications,
+  notifications.readNotification,
+  notifications.readAllNotifications,
+  notifications.getNotificationPreferences,
+  notifications.setNotificationPreference,
+  notifications.sendgridEvents,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -322,6 +330,7 @@ export type {
   SemesterResultRow,
 } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
+export type { Notification, NotificationPreference } from "./notifications";
 export type {
   Transcript,
   TranscriptRequest,
