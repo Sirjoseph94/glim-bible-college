@@ -1,4 +1,6 @@
+import type { privacy } from "@glim/contracts";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { api } from "../api/client";
 import { useSearch } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
 import { meQuery, updateMe } from "../api/session";
@@ -40,6 +42,7 @@ export function ProfilePage() {
         )}
       </dl>
       <TimezoneForm current={me.user.timezone} />
+      <DataExport />
       <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
         <h3 className="font-semibold">Google account</h3>
         {me.user.googleLinked ? (
@@ -108,5 +111,39 @@ function TimezoneForm({ current }: { current: string }) {
       </datalist>
       <SubmitButton busy={busy}>Save timezone</SubmitButton>
     </form>
+  );
+}
+
+/** Data subject access (TRD §19.4): everything GLIM holds about you, as a JSON file. */
+function DataExport() {
+  const { busy, error, run } = useSubmit();
+  return (
+    <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
+      <h3 className="font-semibold">Your data</h3>
+      <p className="text-sm text-slate-600">
+        Download everything the college holds about you, as a file you can keep.
+      </p>
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      <button
+        type="button"
+        disabled={busy}
+        className="rounded border border-slate-300 px-3 py-2 text-sm disabled:opacity-60"
+        onClick={() => {
+          void run(async () => {
+            const data = await api<typeof privacy.getDataExport>("GET", "/me/data-export", {});
+            const url = URL.createObjectURL(
+              new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+            );
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "glim-my-data.json";
+            link.click();
+            URL.revokeObjectURL(url);
+          });
+        }}
+      >
+        {busy ? "Preparing…" : "Download my data"}
+      </button>
+    </section>
   );
 }

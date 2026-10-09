@@ -20,6 +20,7 @@ import { VideoModule } from "@glim/modules/video";
 import { ImportsModule } from "@glim/modules/imports";
 import { NotificationsModule } from "@glim/modules/notifications";
 import { OpsModule } from "@glim/modules/ops";
+import { PrivacyModule } from "@glim/modules/privacy";
 import { IdentityModule, SESSION_COOKIE, SessionService } from "@glim/modules/identity";
 import { LecturingModule } from "@glim/modules/lecturing";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -54,6 +55,7 @@ import { GradebookController } from "./http/assessment/gradebook.controller";
 import { AwardsController } from "./http/results/awards.controller";
 import { NotificationsController } from "./http/notifications/notifications.controller";
 import { OpsController } from "./http/ops/ops.controller";
+import { PrivacyController } from "./http/privacy/privacy.controller";
 import { TranscriptsController } from "./http/transcripts/transcripts.controller";
 import { CourseResultsController } from "./http/results/course-results.controller";
 import { GradingSchemesController } from "./http/results/grading-schemes.controller";
@@ -99,6 +101,7 @@ export class AppModule {
         AdmissionsModule,
         ImportsModule,
         OpsModule,
+        PrivacyModule,
         NotificationsModule,
         ClassMeetingModule,
         AttendanceModule,
@@ -139,6 +142,7 @@ export class AppModule {
         TranscriptsController,
         NotificationsController,
         OpsController,
+        PrivacyController,
       ],
       providers: [
         { provide: BOSS, useValue: deps.boss },

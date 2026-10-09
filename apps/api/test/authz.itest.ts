@@ -275,6 +275,12 @@ const SAMPLES: Record<string, Sample> = {
     Promise.resolve({ url: "/api/v1/admin/integrations/youtube/status" }),
   "POST /admin/integrations/youtube/test": () =>
     Promise.resolve({ url: "/api/v1/admin/integrations/youtube/test" }),
+  // The Registrar holds a staff role, so allowed callers get 409 and nobody is erased.
+  "POST /users/:id/erase": () =>
+    Promise.resolve({
+      url: `/api/v1/users/${personas.registrar.userId}/erase`,
+      payload: { reason: "Asked to be forgotten" },
+    }),
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;

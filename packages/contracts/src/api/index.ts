@@ -14,6 +14,7 @@ import * as notifications from "./notifications";
 import * as offerings from "./offerings";
 import * as ops from "./ops";
 import * as platform from "./platform";
+import * as privacy from "./privacy";
 import * as reports from "./reports";
 import * as transcripts from "./transcripts";
 import * as results from "./results";
@@ -40,6 +41,7 @@ export {
   offerings,
   ops,
   platform,
+  privacy,
   reports,
   results,
   transcripts,
@@ -268,6 +270,8 @@ export const ENDPOINTS = [
   ops.listQueues,
   ops.getYouTubeStatus,
   ops.testYouTube,
+  privacy.getDataExport,
+  privacy.eraseUser,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -339,6 +343,7 @@ export type {
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
 export type { Notification, NotificationPreference } from "./notifications";
 export type { OpsFailure, QueueStat, YouTubeStatus } from "./ops";
+export type { DataExport } from "./privacy";
 export type {
   Transcript,
   TranscriptRequest,

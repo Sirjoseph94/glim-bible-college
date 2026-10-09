@@ -7,6 +7,9 @@
     "identity:user:manage": {
       "staff": ["SYSTEM_ADMIN"]
     },
+    "identity:user:erase": {
+      "staff": ["SYSTEM_ADMIN"]
+    },
     "identity:role:manage": {
       "staff": ["SYSTEM_ADMIN"]
     },

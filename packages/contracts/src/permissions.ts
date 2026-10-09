@@ -5,6 +5,7 @@
 export const PERMISSIONS = [
   "identity:user:read",
   "identity:user:manage",
+  "identity:user:erase",
   "identity:role:manage",
   "identity:policy:manage",
   "identity:import:run",

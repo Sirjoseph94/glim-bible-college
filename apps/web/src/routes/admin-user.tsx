@@ -1,4 +1,4 @@
-import type { users } from "@glim/contracts";
+import type { privacy, users } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
@@ -189,6 +189,24 @@ export function AdminUserPage() {
               }}
             >
               Deactivate
+            </button>
+          ) : null}
+          {!u.email.endsWith("@erased.invalid") ? (
+            <button
+              type="button"
+              className="text-red-700 underline"
+              onClick={() => {
+                withReason(
+                  "Erasing removes this person's personal details for good (their academic record stays, under a pseudonym). Why erase them?",
+                  (reason) =>
+                    api<typeof privacy.eraseUser>("POST", "/users/:id/erase", {
+                      params: { id: u.id },
+                      body: { reason },
+                    }),
+                );
+              }}
+            >
+              Erase personal data
             </button>
           ) : null}
         </div>
