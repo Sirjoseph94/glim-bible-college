@@ -15,11 +15,16 @@
     "@aws-sdk/s3-request-presigner": "3.1147.0",
     "@glim/contracts": "workspace:*",
     "@glim/shared": "workspace:*",
+    "@react-pdf/renderer": "4.9.0",
     "jose": "6.2.12",
     "nodemailer": "10.0.15",
-    "openid-client": "6.8.8"
+    "openid-client": "6.8.8",
+    "qrcode": "1.5.4",
+    "react": "19.3.0"
   },
   "devDependencies": {
-    "@types/nodemailer": "8.0.2"
+    "@types/nodemailer": "8.0.2",
+    "@types/qrcode": "1.5.5",
+    "@types/react": "19.3.0"
   }
 }

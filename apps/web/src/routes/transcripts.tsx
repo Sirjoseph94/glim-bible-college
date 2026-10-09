@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
+import { meQuery } from "../api/session";
 import { Alert, formText } from "../components/form";
 import { Time } from "../components/time";
 import { useSubmit } from "../components/use-submit";
@@ -199,7 +200,98 @@ export function TranscriptPage() {
   });
   if (doc.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
   if (doc.isError) return <Alert tone="error">We couldn't load the transcript.</Alert>;
-  return <TranscriptView transcript={doc.data} />;
+  return (
+    <div className="space-y-3">
+      <a
+        href={`/api/v1/transcripts/${doc.data.id}/download`}
+        className="inline-block rounded bg-brand px-3 py-2 text-sm text-white"
+      >
+        Download PDF
+      </a>
+      <RegistrarActions transcript={doc.data} />
+      <TranscriptView transcript={doc.data} />
+    </div>
+  );
+}
+
+/** The Registrar's actions on an issued transcript: email the PDF, or revoke it. */
+function RegistrarActions({ transcript: d }: { transcript: Transcript }) {
+  const queryClient = useQueryClient();
+  const me = useQuery(meQuery);
+  const { busy, error, run } = useSubmit();
+  const [done, setDone] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const staff = me.data?.roles.staff.some((r) => r === "REGISTRAR" || r === "SYSTEM_ADMIN");
+  if (staff !== true || d.status !== "ISSUED") return null;
+  return (
+    <section aria-label="Registrar actions" className="space-y-2 text-sm">
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {done ? <Alert tone="success">{done}</Alert> : null}
+      <form
+        className="flex flex-wrap items-end gap-2"
+        aria-label="Email the PDF"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const to = formText(new FormData(e.currentTarget), "to").trim();
+          void run(async () => {
+            const sent = await api<typeof transcripts.sendTranscript>(
+              "POST",
+              "/transcripts/:id/send",
+              { params: { id: d.id }, body: to === "" ? {} : { to } },
+            );
+            setDone(`The PDF is on its way to ${sent.to}.`);
+          });
+        }}
+      >
+        <label className="block">
+          <span className="block text-slate-700">Email to (blank: the request's recipient)</span>
+          <input name="to" type="email" className={input} />
+        </label>
+        <button type="submit" disabled={busy} className="rounded border border-slate-300 px-3 py-2">
+          Email PDF
+        </button>
+      </form>
+      {revoking ? (
+        <form
+          aria-label="Revoke transcript"
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const reason = formText(new FormData(e.currentTarget), "reason");
+            void run(async () => {
+              await api<typeof transcripts.revokeTranscript>("POST", "/transcripts/:id/revoke", {
+                params: { id: d.id },
+                body: { reason },
+              });
+              await queryClient.invalidateQueries({ queryKey: ["transcript", d.id] });
+            });
+          }}
+        >
+          <label className="block">
+            <span className="block text-slate-700">Why it's being revoked</span>
+            <input name="reason" required maxLength={500} className={input} />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded bg-red-700 px-3 py-2 text-white disabled:opacity-60"
+          >
+            Revoke transcript
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="text-red-700 underline"
+          onClick={() => {
+            setRevoking(true);
+          }}
+        >
+          Revoke…
+        </button>
+      )}
+    </section>
+  );
 }
 
 function TranscriptView({ transcript: d }: { transcript: Transcript }) {

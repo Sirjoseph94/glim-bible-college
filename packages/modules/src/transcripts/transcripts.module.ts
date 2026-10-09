@@ -1,5 +1,6 @@
 import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
+import { ContentModule } from "@glim/modules/content";
 import { NotificationsModule } from "@glim/modules/notifications";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
@@ -25,7 +26,7 @@ class TranscriptResources implements OnModuleInit {
 
 /** Transcripts (TRD §14.7): requests, issue, and public verification. */
 @Module({
-  imports: [AuditModule, AuthorizationModule, NotificationsModule],
+  imports: [AuditModule, AuthorizationModule, ContentModule, NotificationsModule],
   providers: [TranscriptsService, TranscriptResources],
   exports: [TranscriptsService],
 })

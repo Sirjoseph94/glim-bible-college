@@ -252,6 +252,20 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/transcripts/${await transcriptFixture(t)}`,
     owner: "sEnrolled",
   }),
+  // 302 once the PDF exists, 409 before: either way the caller got through.
+  "GET /transcripts/:id/download": async (t) => ({
+    url: `/api/v1/transcripts/${await transcriptFixture(t)}/download`,
+    owner: "sEnrolled",
+  }),
+  // No PDF yet: allowed callers get 409.
+  "POST /transcripts/:id/send": async (t) => ({
+    url: `/api/v1/transcripts/${await transcriptFixture(t)}/send`,
+    payload: { to: "someone@seminary.test" },
+  }),
+  "POST /transcripts/:id/revoke": async (t) => ({
+    url: `/api/v1/transcripts/${await transcriptFixture(t)}/revoke`,
+    payload: { reason: "Issued in error" },
+  }),
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;

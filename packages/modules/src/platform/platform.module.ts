@@ -1,6 +1,7 @@
 import { Db } from "@glim/db";
 import { MAILER, type Mailer } from "@glim/integrations/mail/port";
 import { IDENTITY_PROVIDER, type IdentityProvider } from "@glim/integrations/oidc/port";
+import { TRANSCRIPT_RENDERER, type TranscriptRenderer } from "@glim/integrations/pdf/port";
 import { OBJECT_STORAGE, type ObjectStorage } from "@glim/integrations/storage/port";
 import { VIDEO_HOST, type VideoHost } from "@glim/integrations/video-host/port";
 import { CLOCK, type Clock } from "@glim/shared";
@@ -21,6 +22,8 @@ export interface PlatformDeps {
   objectStorage: ObjectStorage;
   /** YouTube link checks (v1: oEmbed); the fake in tests. */
   videoHost: VideoHost;
+  /** Transcript PDFs (react-pdf). */
+  transcriptRenderer: TranscriptRenderer;
 }
 
 @Global()
@@ -36,6 +39,7 @@ export class PlatformModule {
       { provide: IDENTITY_PROVIDER, useValue: deps.identityProvider },
       { provide: OBJECT_STORAGE, useValue: deps.objectStorage },
       { provide: VIDEO_HOST, useValue: deps.videoHost },
+      { provide: TRANSCRIPT_RENDERER, useValue: deps.transcriptRenderer },
     ];
     return { module: PlatformModule, providers, exports: providers.map((p) => p.provide) };
   }

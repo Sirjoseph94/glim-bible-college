@@ -1,3 +1,4 @@
+import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 import "reflect-metadata";
 import { createBoss, createPool, Db } from "@glim/db";
 import { createTestDatabase, type TestDatabase } from "@glim/db/testing";
@@ -77,6 +78,7 @@ export async function createTestApp(
     identityProvider: options.identityProvider ?? new DisabledIdentityProvider(),
     objectStorage: storage,
     videoHost,
+    transcriptRenderer: new ReactPdfTranscriptRenderer(),
     logger,
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });

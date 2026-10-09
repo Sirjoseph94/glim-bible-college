@@ -250,6 +250,9 @@ export const ENDPOINTS = [
   transcripts.issueTranscript,
   transcripts.getTranscript,
   transcripts.verifyTranscript,
+  transcripts.downloadTranscript,
+  transcripts.sendTranscript,
+  transcripts.revokeTranscript,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";

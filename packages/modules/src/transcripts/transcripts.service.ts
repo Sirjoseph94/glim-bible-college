@@ -5,7 +5,10 @@ import type {
   Verification,
 } from "@glim/contracts";
 import { Db, schema, type Database, type Tx } from "@glim/db";
+import { MAILER, type Mailer } from "@glim/integrations/mail/port";
+import { TRANSCRIPT_RENDERER, type TranscriptRenderer } from "@glim/integrations/pdf/port";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
+import { FilesService } from "@glim/modules/content";
 import { NotificationsService } from "@glim/modules/notifications";
 import {
   CLOCK,
@@ -16,9 +19,10 @@ import {
   type DomainError,
   type DomainResult,
 } from "@glim/shared";
+import { CONFIG, type Config } from "@glim/shared/config";
 import { toLocalDate, zonedToInstant } from "@glim/shared/time";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
 import { snapshotSha256, verificationCode } from "./domain/canonical";
 import { buildSnapshot } from "./snapshot";
 
@@ -28,6 +32,11 @@ type RequestRow = typeof schema.transcriptRequests.$inferSelect;
 export type RequestInput =
   | { kind: "UNOFFICIAL" }
   | { kind: "OFFICIAL"; purpose: string; recipientName: string; recipientEmail: string };
+
+/** The largest PDF sent as an attachment (§14.7). */
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+const JOB_ACTOR: AuditActor = { userId: null, type: "JOB" };
 
 /** Unofficial transcripts a student may have issued in a day (§14.7). */
 export const UNOFFICIAL_PER_DAY = 5;
@@ -48,6 +57,10 @@ export class TranscriptsService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(FilesService) private readonly files: FilesService,
+    @Inject(TRANSCRIPT_RENDERER) private readonly renderer: TranscriptRenderer,
+    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(CONFIG) private readonly config: Config,
   ) {}
 
   async request(
@@ -203,6 +216,206 @@ export class TranscriptsService {
     };
   }
 
+  /**
+   * The `transcript.generate` job: renders the PDF from the snapshot only and attaches it.
+   * Rendering again changes nothing once a PDF is attached.
+   */
+  async generate(transcriptId: string): Promise<void> {
+    const t = schema.transcripts;
+    const [row] = await this.db.read
+      .select({ transcript: t, userId: schema.students.userId })
+      .from(t)
+      .innerJoin(schema.students, eq(schema.students.id, t.studentId))
+      .where(eq(t.id, transcriptId));
+    if (row === undefined || row.transcript.fileId !== null) return;
+    const pdf = await this.renderer.render({
+      snapshot: row.transcript.snapshot as TranscriptSnapshot,
+      serialNo: row.transcript.serialNo,
+      verificationCode: row.transcript.verificationCode,
+      snapshotSha256: row.transcript.snapshotSha256,
+      verifyUrl: this.verifyUrl(row.transcript.verificationCode),
+    });
+    const file = await this.files.store({
+      ownerUserId: row.userId,
+      purpose: "TRANSCRIPT_PDF",
+      name: `transcript-${row.transcript.serialNo.replaceAll("/", "-")}.pdf`,
+      mime: "application/pdf",
+      bytes: pdf,
+    });
+    await this.db.withTx(({ db }) =>
+      db
+        .update(t)
+        .set({ fileId: file.id })
+        .where(and(eq(t.id, transcriptId), isNull(t.fileId))),
+    );
+  }
+
+  /** A short-lived URL to the PDF, or why there isn't one yet. */
+  async downloadUrl(transcriptId: string): Promise<DomainResult<string>> {
+    const t = schema.transcripts;
+    const [row] = await this.db.read
+      .select({ fileId: t.fileId })
+      .from(t)
+      .where(eq(t.id, transcriptId));
+    if (row === undefined) return notFound();
+    if (row.fileId === null)
+      return conflict("The PDF is still being prepared. Try again in a minute.");
+    const url = (await this.files.presignedReadUrls([row.fileId])).get(row.fileId);
+    return url === undefined ? conflict("The PDF isn't available.") : ok(url);
+  }
+
+  /**
+   * Queues the PDF to be emailed to a recipient (the request's recipient by default). Only an
+   * issued transcript whose PDF is ready can be sent.
+   */
+  async send(
+    transcriptId: string,
+    to: string | undefined,
+    actor: Actor,
+  ): Promise<DomainResult<{ to: string }>> {
+    return this.db.withTxResult<{ to: string }, DomainError>(async (tx) => {
+      const t = schema.transcripts;
+      const [row] = await tx.db
+        .select({ transcript: t, recipient: schema.transcriptRequests.recipientEmail })
+        .from(t)
+        .leftJoin(schema.transcriptRequests, eq(schema.transcriptRequests.id, t.requestId))
+        .where(eq(t.id, transcriptId));
+      if (row === undefined) return notFound();
+      if (row.transcript.status !== "ISSUED")
+        return conflict("Only a valid transcript can be sent.");
+      if (row.transcript.fileId === null)
+        return conflict("The PDF is still being prepared. Try again in a minute.");
+      const recipient = to ?? row.recipient;
+      if (recipient === null)
+        return err(
+          domainError("VALIDATION_FAILED", "Say who to send it to.", {
+            fieldErrors: [{ path: "body.to", code: "required", message: "Give an email." }],
+          }),
+        );
+      await tx.boss.send("transcript.send", { transcriptId, to: recipient });
+      await this.audit.record(tx.db, actor, {
+        action: "transcript.sent",
+        resourceType: "transcript",
+        resourceId: transcriptId,
+        metadata: { to: recipient },
+      });
+      return ok({ to: recipient });
+    });
+  }
+
+  /** The `transcript.send` job: emails the PDF as an attachment (≤ 5 MB). */
+  async sendNow(transcriptId: string, to: string): Promise<void> {
+    const t = schema.transcripts;
+    const [row] = await this.db.read.select().from(t).where(eq(t.id, transcriptId));
+    if (row?.fileId == null || row.status !== "ISSUED") return;
+    const file = await this.files.read(row.fileId);
+    if (file === null) throw new Error(`transcript ${transcriptId} PDF is missing`);
+    if (file.bytes.byteLength > MAX_ATTACHMENT_BYTES)
+      throw new Error(`transcript ${transcriptId} PDF is too large to attach`);
+    const snapshot = row.snapshot as TranscriptSnapshot;
+    await this.mailer.send({
+      to,
+      subject: `Transcript ${row.serialNo}: ${snapshot.student.legalName}`,
+      text: [
+        `${snapshot.institution.name} sends the ${row.kind === "OFFICIAL" ? "official" : "unofficial"} transcript of ${snapshot.student.legalName} (${snapshot.programme.name}), serial number ${row.serialNo}.`,
+        `Check that it is genuine at ${this.verifyUrl(row.verificationCode)}`,
+      ].join("\n\n"),
+      category: "transcript-delivery",
+      attachments: [
+        { filename: file.file.originalName, contentType: "application/pdf", content: file.bytes },
+      ],
+    });
+  }
+
+  /** Revokes an issued transcript with a reason; the verify page shows it from now on. */
+  async revoke(
+    transcriptId: string,
+    reason: string,
+    actor: Actor,
+  ): Promise<DomainResult<Transcript>> {
+    const result = await this.db.withTxResult<null, DomainError>(async (tx) => {
+      const t = schema.transcripts;
+      const [row] = await tx.db.select().from(t).where(eq(t.id, transcriptId)).for("update");
+      if (row === undefined) return notFound();
+      if (row.status === "REVOKED") return ok(null);
+      if (row.status !== "ISSUED") return conflict("This transcript was already superseded.");
+      const now = this.clock.now();
+      await tx.db
+        .update(t)
+        .set({ status: "REVOKED", revokedBy: actor.userId, revokedAt: now, revokeReason: reason })
+        .where(eq(t.id, transcriptId));
+      const [student] = await tx.db
+        .select({ userId: schema.students.userId })
+        .from(schema.students)
+        .where(eq(schema.students.id, row.studentId));
+      if (student !== undefined)
+        await this.notifications.notify(tx, {
+          userId: student.userId,
+          kind: "transcript.revoked",
+          title: `Transcript ${row.serialNo} was revoked`,
+          body: reason,
+          data: { transcriptId, serialNo: row.serialNo, reason },
+          email: true,
+          dedupeKey: `transcript-revoked:${transcriptId}`,
+        });
+      await this.audit.record(tx.db, actor, {
+        action: "transcript.revoked",
+        resourceType: "transcript",
+        resourceId: transcriptId,
+        metadata: { serialNo: row.serialNo, reason },
+      });
+      return ok(null);
+    });
+    if (!result.ok) return result;
+    const found = await this.get(transcriptId);
+    return found === null ? notFound() : ok(found);
+  }
+
+  /**
+   * After a course result is reopened (§14.3), marks the programme enrollment's issued
+   * transcripts that list that course in that semester SUPERSEDED. Idempotent.
+   */
+  async supersedeFor(input: {
+    programmeEnrollmentId: string;
+    courseCode: string;
+    sessionCode: string;
+    semesterName: string;
+    reason: string;
+  }): Promise<string[]> {
+    return this.db.withTx(async ({ db }) => {
+      const t = schema.transcripts;
+      const path = `$.semesters[*] ? (@.sessionCode == $session && @.semesterName == $semester).courses[*] ? (@.code == $code)`;
+      const vars = JSON.stringify({
+        session: input.sessionCode,
+        semester: input.semesterName,
+        code: input.courseCode,
+      });
+      const rows = await db
+        .update(t)
+        .set({ status: "SUPERSEDED" })
+        .where(
+          and(
+            eq(t.programmeEnrollmentId, input.programmeEnrollmentId),
+            eq(t.status, "ISSUED"),
+            sql`jsonb_path_exists(${t.snapshot}, ${path}::jsonpath, ${vars}::jsonb)`,
+          ),
+        )
+        .returning({ id: t.id, serialNo: t.serialNo });
+      for (const row of rows)
+        await this.audit.record(db, JOB_ACTOR, {
+          action: "transcript.superseded",
+          resourceType: "transcript",
+          resourceId: row.id,
+          metadata: { serialNo: row.serialNo, reason: input.reason },
+        });
+      return rows.map((r) => r.id);
+    });
+  }
+
+  private verifyUrl(code: string): string {
+    return `${this.config.appOrigin}/verify/${code}`;
+  }
+
   /** For authorization: whose transcript it is. */
   async ownerOfTranscript(id: string): Promise<{ ownerUserId: string } | null> {
     const t = schema.transcripts;
@@ -272,6 +485,8 @@ export class TranscriptsService {
       })
       .returning({ id: t.id });
     if (transcript === undefined) throw new Error("transcript insert returned nothing");
+    // The PDF is rendered from the snapshot after commit (§14.7).
+    await tx.boss.send("transcript.generate", { transcriptId: transcript.id });
     const tr = schema.transcriptRequests;
     await db
       .update(tr)

@@ -13,6 +13,7 @@ import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
 import { createVideoHost } from "@glim/integrations/video-host/factory";
+import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 
 const { values } = parseArgs({ options: { email: { type: "string" }, name: { type: "string" } } });
 if (values.email === undefined || values.name === undefined) {
@@ -36,6 +37,7 @@ const app = await NestFactory.createApplicationContext(
     identityProvider: createIdentityProvider(config),
     objectStorage: createObjectStorage(config),
     videoHost: createVideoHost(),
+    transcriptRenderer: new ReactPdfTranscriptRenderer(),
   }),
   { logger: false },
 );

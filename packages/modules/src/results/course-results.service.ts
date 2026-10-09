@@ -243,6 +243,33 @@ export class CourseResultsService {
       await unlockStudents(db, row.courseOfferingId, [row.studentId]);
       // The semester's GPA (and every later CGPA) depend on it: back to DRAFT until recomputed.
       await this.semesters.reopenFrom(db, row.programmeEnrollmentId, row.semesterId);
+      // Transcripts that show it are superseded by the transcripts module (an event: §17.3).
+      const [where] = await db
+        .select({
+          sessionCode: schema.academicSessions.code,
+          semesterName: schema.semesters.name,
+          courseCode: schema.courses.code,
+        })
+        .from(schema.semesters)
+        .innerJoin(
+          schema.academicSessions,
+          eq(schema.academicSessions.id, schema.semesters.academicSessionId),
+        )
+        .innerJoin(schema.courses, eq(schema.courses.id, row.courseId))
+        .where(eq(schema.semesters.id, row.semesterId));
+      await tx.boss.publish(
+        "results.course.reopened",
+        {
+          courseResultId: resultId,
+          programmeEnrollmentId: row.programmeEnrollmentId,
+          semesterId: row.semesterId,
+          courseCode: where?.courseCode ?? "",
+          sessionCode: where?.sessionCode ?? "",
+          semesterName: where?.semesterName ?? "",
+          reason,
+        },
+        { occurredAt: now, actorUserId: actor.userId },
+      );
       const [student] = await db
         .select({ userId: schema.students.userId })
         .from(schema.students)

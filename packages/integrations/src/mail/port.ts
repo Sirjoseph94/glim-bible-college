@@ -6,6 +6,14 @@ export interface MailMessage {
   html?: string;
   /** Category for delivery analytics; never personal data. */
   category?: string;
+  /** Files sent with the message (e.g. a transcript PDF, ≤ 5 MB). */
+  attachments?: MailAttachment[];
+}
+
+export interface MailAttachment {
+  filename: string;
+  contentType: string;
+  content: Uint8Array;
 }
 
 export interface Mailer {

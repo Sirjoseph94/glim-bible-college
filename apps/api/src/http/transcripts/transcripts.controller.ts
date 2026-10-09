@@ -3,7 +3,8 @@ import type { AuditActor } from "@glim/modules/audit";
 import type { ActiveSession } from "@glim/modules/identity";
 import { TranscriptsService } from "@glim/modules/transcripts";
 import { AppError, unwrap } from "@glim/shared";
-import { Controller, Inject } from "@nestjs/common";
+import { Controller, Inject, Res } from "@nestjs/common";
+import type { FastifyReply } from "fastify";
 import { Actor, CurrentSession } from "../../common/auth.guard";
 import { Body, Endpoint, Params, Query } from "../../common/endpoint";
 import type { Reply } from "../../common/response.interceptor";
@@ -90,5 +91,39 @@ export class TranscriptsController {
     if (found === null)
       throw new AppError("NOT_FOUND", "No transcript has this verification code.");
     return found;
+  }
+
+  @Endpoint(transcripts.downloadTranscript)
+  async download(
+    @Params(transcripts.downloadTranscript) params: ParamsOf<typeof transcripts.downloadTranscript>,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const url = unwrap(await this.transcripts.downloadUrl(params.id));
+    void reply.header("cache-control", "private, max-age=240");
+    return void reply.redirect(url, 302);
+  }
+
+  @Endpoint(transcripts.sendTranscript)
+  async send(
+    @Params(transcripts.sendTranscript) params: ParamsOf<typeof transcripts.sendTranscript>,
+    @Body(transcripts.sendTranscript) body: BodyOf<typeof transcripts.sendTranscript>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof transcripts.sendTranscript>> {
+    return unwrap(
+      await this.transcripts.send(params.id, body.to, { ...actor, userId: session.userId }),
+    );
+  }
+
+  @Endpoint(transcripts.revokeTranscript)
+  async revoke(
+    @Params(transcripts.revokeTranscript) params: ParamsOf<typeof transcripts.revokeTranscript>,
+    @Body(transcripts.revokeTranscript) body: BodyOf<typeof transcripts.revokeTranscript>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof transcripts.revokeTranscript>> {
+    return unwrap(
+      await this.transcripts.revoke(params.id, body.reason, { ...actor, userId: session.userId }),
+    );
   }
 }

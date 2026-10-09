@@ -19,6 +19,15 @@ export class SmtpMailer implements Mailer {
       subject: message.subject,
       text: message.text,
       ...(message.html === undefined ? {} : { html: message.html }),
+      ...(message.attachments === undefined
+        ? {}
+        : {
+            attachments: message.attachments.map((a) => ({
+              filename: a.filename,
+              contentType: a.contentType,
+              content: Buffer.from(a.content),
+            })),
+          }),
     });
   }
 }

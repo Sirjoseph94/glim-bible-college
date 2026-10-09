@@ -1,5 +1,7 @@
 import type { GradebookColumn, Transcript, TranscriptRequest, Verification } from "@glim/contracts";
-import { snapshotSha256 } from "@glim/modules/transcripts";
+import { drainQueues } from "@glim/db/testing";
+import { TranscriptsService, snapshotSha256 } from "@glim/modules/transcripts";
+import { createDispatcher, createSubscribers } from "../../worker/src/subscribers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { idempotencyKey } from "./applicants";
 import { createTestApp, type TestApp } from "./harness";
@@ -353,5 +355,143 @@ describe("graduates", () => {
     } finally {
       await q("UPDATE students SET status = 'ACTIVE' WHERE user_id = $1", [p.sEnrolled.userId]);
     }
+  });
+});
+
+const drainTranscriptJobs = () => {
+  const service = t.app.get(TranscriptsService);
+  return drainQueues(t.boss, {
+    "transcript.generate": (job) =>
+      service.generate((job.data as { transcriptId: string }).transcriptId),
+    "transcript.send": (job) => {
+      const { transcriptId, to } = job.data as { transcriptId: string; to: string };
+      return service.sendNow(transcriptId, to);
+    },
+  });
+};
+
+describe("PDF, delivery and revocation (ticket 42)", () => {
+  let officialId = "";
+
+  it("renders each issued transcript to a PDF the student can download", async () => {
+    const { rows } = await q<{ id: string }>("SELECT id FROM transcripts WHERE kind = 'OFFICIAL'");
+    officialId = rows[0]?.id ?? "";
+    const before = await send("sEnrolled", "GET", `/transcripts/${officialId}/download`);
+    expect(before.statusCode).toBe(409);
+    await drainTranscriptJobs();
+    const files = await q<{ purpose: string; mime: string }>(
+      `SELECT f.purpose, f.mime FROM transcripts t JOIN files f ON f.id = t.file_id WHERE t.id = $1`,
+      [officialId],
+    );
+    expect(files.rows).toEqual([{ purpose: "TRANSCRIPT_PDF", mime: "application/pdf" }]);
+    const res = await send("sEnrolled", "GET", `/transcripts/${officialId}/download`);
+    expect(res.statusCode).toBe(302);
+    const pdf = await fetch(res.headers.location as string);
+    expect(pdf.status).toBe(200);
+    expect(
+      Buffer.from(await pdf.arrayBuffer())
+        .subarray(0, 5)
+        .toString(),
+    ).toBe("%PDF-");
+    // Someone else's transcript stays hidden.
+    expect((await send("sOther", "GET", `/transcripts/${officialId}/download`)).statusCode).toBe(
+      404,
+    );
+    // Rendering again changes nothing.
+    await t.app.get(TranscriptsService).generate(officialId);
+    const again = await q<{ n: number }>(
+      "SELECT count(*)::int AS n FROM files WHERE purpose = 'TRANSCRIPT_PDF'",
+    );
+    const transcripts = await q<{ n: number }>("SELECT count(*)::int AS n FROM transcripts");
+    expect(again.rows[0]?.n).toBe(transcripts.rows[0]?.n);
+  });
+
+  it("emails the PDF to the recipient as an attachment", async () => {
+    const res = await send("registrar", "POST", `/transcripts/${officialId}/send`, {});
+    expect(res.statusCode, res.body).toBe(202);
+    expect(res.json()).toEqual({ to: "registrar@seminary.test" });
+    await drainTranscriptJobs();
+    const mail = t.mailer.lastTo("registrar@seminary.test");
+    expect(mail?.subject).toMatch(/^Transcript GLIM\/TR\/2026\/\d{5}: sEnrolled Persona$/);
+    expect(mail?.text).toContain("/verify/");
+    expect(mail?.attachments?.[0]).toMatchObject({ contentType: "application/pdf" });
+    expect(
+      Buffer.from(mail?.attachments?.[0]?.content ?? [])
+        .subarray(0, 5)
+        .toString(),
+    ).toBe("%PDF-");
+    const audit = await q(
+      "SELECT 1 FROM audit_logs WHERE action = 'transcript.sent' AND resource_id = $1",
+      [officialId],
+    );
+    expect(audit.rowCount).toBe(1);
+  });
+
+  it("supersedes the transcripts that show a result when it's reopened", async () => {
+    const { rows } = await q<{ id: string }>(
+      "SELECT id FROM course_results WHERE student_id = (SELECT id FROM students WHERE user_id = $1)",
+      [p.sEnrolled.userId],
+    );
+    const reopened = await send(
+      "registrar",
+      "POST",
+      `/course-results/${rows[0]?.id ?? ""}/reopen`,
+      {
+        reason: "Re-marked",
+      },
+    );
+    expect(reopened.statusCode, reopened.body).toBe(200);
+    const dispatch = createDispatcher(createSubscribers(t.app));
+    await drainQueues(t.boss, {
+      "domain-event": (job) => dispatch(job.data as Parameters<typeof dispatch>[0]),
+    });
+    const statuses = await q<{ status: string; n: number }>(
+      "SELECT status, count(*)::int AS n FROM transcripts GROUP BY status ORDER BY status",
+    );
+    // Every transcript listed PBIB101 in that semester; the one revoked earlier stays revoked.
+    expect(statuses.rows).toEqual([
+      { status: "REVOKED", n: 1 },
+      { status: "SUPERSEDED", n: 5 },
+    ]);
+    const check = await q<{ verification_code: string }>(
+      "SELECT verification_code FROM transcripts WHERE id = $1",
+      [officialId],
+    );
+    const verified = await t.request({
+      url: `/api/v1/public/transcripts/${check.rows[0]?.verification_code ?? ""}`,
+    });
+    expect(verified.json<Verification>()).toMatchObject({ valid: false, status: "SUPERSEDED" });
+  });
+
+  it("revokes with a reason (Registrar only), audited, and tells the student", async () => {
+    // A superseded transcript can't be revoked; put one back to ISSUED for this test.
+    const { rows } = await q<{ id: string }>(
+      "SELECT id FROM transcripts WHERE status = 'SUPERSEDED' LIMIT 1",
+    );
+    const id = rows[0]?.id ?? "";
+    const refused = await send("registrar", "POST", `/transcripts/${id}/revoke`, { reason: "x" });
+    expect(refused.statusCode).toBe(409);
+    await q("UPDATE transcripts SET status = 'ISSUED' WHERE id = $1", [id]);
+    expect(
+      (await send("acadAdmin", "POST", `/transcripts/${id}/revoke`, { reason: "x" })).statusCode,
+    ).toBe(403);
+    const revoked = await send("registrar", "POST", `/transcripts/${id}/revoke`, {
+      reason: "Issued against the wrong record",
+    });
+    expect(revoked.statusCode, revoked.body).toBe(200);
+    expect(revoked.json<Transcript>()).toMatchObject({
+      status: "REVOKED",
+      revokeReason: "Issued against the wrong record",
+    });
+    const notice = await q<{ email_status: string }>(
+      "SELECT email_status FROM notifications WHERE kind = 'transcript.revoked' AND data->>'transcriptId' = $1",
+      [id],
+    );
+    expect(notice.rows.map((r) => r.email_status)).toEqual(["PENDING"]);
+    const audit = await q(
+      "SELECT 1 FROM audit_logs WHERE action = 'transcript.revoked' AND resource_id = $1",
+      [id],
+    );
+    expect(audit.rowCount).toBe(1);
   });
 });

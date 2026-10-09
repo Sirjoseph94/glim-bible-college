@@ -10,6 +10,7 @@ import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fak
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { S3ObjectStorage } from "@glim/integrations/storage/s3";
 import { FAKE_CHANNEL_URL, FakeVideoHost } from "@glim/integrations/video-host/fake";
+import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 import {
   CalendarService,
   CoursesService,
@@ -71,6 +72,7 @@ const app = await buildApp({
   }),
   objectStorage,
   videoHost,
+  transcriptRenderer: new ReactPdfTranscriptRenderer(),
   staticDir: fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });
 await bootstrapSystemAdmin(app, E2E_ADMIN);

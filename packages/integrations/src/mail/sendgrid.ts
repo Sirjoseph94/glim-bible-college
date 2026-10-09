@@ -30,6 +30,16 @@ export class SendGridMailer implements Mailer {
         subject: message.subject,
         content,
         ...(message.category === undefined ? {} : { categories: [message.category] }),
+        ...(message.attachments === undefined
+          ? {}
+          : {
+              attachments: message.attachments.map((a) => ({
+                content: Buffer.from(a.content).toString("base64"),
+                filename: a.filename,
+                type: a.contentType,
+                disposition: "attachment",
+              })),
+            }),
       }),
       signal: AbortSignal.timeout(10_000),
     });

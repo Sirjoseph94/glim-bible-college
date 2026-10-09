@@ -4,6 +4,7 @@ import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
 import { createVideoHost } from "@glim/integrations/video-host/factory";
+import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 import type { VideoHost } from "@glim/integrations/video-host/port";
 import type { ObjectStorage } from "@glim/integrations/storage/port";
 import type { Mailer } from "@glim/integrations/mail/port";
@@ -16,6 +17,7 @@ import { ClassMeetingModule } from "@glim/modules/class-meeting";
 import { VideoModule } from "@glim/modules/video";
 import { AssessmentModule } from "@glim/modules/assessment";
 import { ResultsModule } from "@glim/modules/results";
+import { TranscriptsModule } from "@glim/modules/transcripts";
 import { ImportsModule } from "@glim/modules/imports";
 import { OpsModule } from "@glim/modules/ops";
 import { PlatformModule, type PlatformDeps } from "@glim/modules/platform";
@@ -43,6 +45,7 @@ class WorkerModule {
         VideoModule,
         AssessmentModule,
         ResultsModule,
+        TranscriptsModule,
       ],
     };
   }
@@ -67,6 +70,7 @@ export function createWorkerContext(deps: {
       identityProvider: createIdentityProvider(config),
       objectStorage: deps.objectStorage ?? createObjectStorage(config),
       videoHost: deps.videoHost ?? createVideoHost(),
+      transcriptRenderer: new ReactPdfTranscriptRenderer(),
     }),
     { logger: false },
   );

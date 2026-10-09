@@ -188,6 +188,17 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       link: { label: "My transcripts", url: `${appOrigin}/transcripts` },
     }),
 
+  "transcript.revoked": ({ data, appOrigin }) =>
+    email({
+      subject: `Your transcript ${str(data.serialNo)} was revoked`,
+      category: "transcript-revoked",
+      paragraphs: [
+        `The Registrar has revoked transcript ${str(data.serialNo)}: ${str(data.reason)}`,
+        "Anyone who checks it now sees that it is no longer valid. You can ask for a new one in the app.",
+      ],
+      link: { label: "My transcripts", url: `${appOrigin}/transcripts` },
+    }),
+
   "video.unavailable": ({ data, appOrigin }) =>
     email({
       subject: `${str(data.courseCode)} recording unavailable: ${str(data.title)}`,

@@ -61,7 +61,37 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
   await expect(page.getByText(/^Official transcript · GLIM\/TR\/\d{4}\/00002/)).toBeVisible();
   const code = (await page.locator("footer strong").textContent()) ?? "";
   expect(code).toMatch(/^[A-Z2-7]{16}$/);
+
+  // The worker renders the PDF; then it downloads, and goes to the recipient by email.
+  const href = (await page.getByRole("link", { name: "Download PDF" }).getAttribute("href")) ?? "";
+  await expect
+    .poll(async () => (await page.request.get(href)).headers()["content-type"], {
+      timeout: 20_000,
+    })
+    .toBe("application/pdf");
+  const pdf = await page.request.get(href);
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  await page.getByRole("button", { name: "Email PDF" }).click();
+  await expect(page.getByText("The PDF is on its way to registrar@seminary.test.")).toBeVisible();
+
+  // The unofficial one was issued against the wrong record: revoke it.
+  await page.goBack();
+  await page.getByLabel("Show").selectOption("ISSUED");
+  const unofficialRow = page
+    .getByRole("listitem", { name: "Bola Online" })
+    .filter({ hasText: /\/00001/ });
+  await unofficialRow.getByRole("link", { name: "View" }).click();
+  const unofficialCode = (await page.locator("footer strong").textContent()) ?? "";
+  await page.getByRole("button", { name: "Revoke…" }).click();
+  await page.getByLabel("Why it's being revoked").fill("Issued against the wrong record");
+  await page.getByRole("button", { name: "Revoke transcript" }).click();
+  await expect(
+    page.getByText("This transcript was revoked: Issued against the wrong record."),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
+
+  await page.goto(`/verify/${unofficialCode}`);
+  await expect(page.getByText(/This transcript was revoked and is no longer valid/)).toBeVisible();
 
   // Anyone, signed out.
   await page.goto(`/verify/${code}`);

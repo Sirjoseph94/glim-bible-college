@@ -237,3 +237,42 @@ export const verifyTranscript = endpoint({
   }),
   response: verificationSchema,
 });
+
+export const downloadTranscript = endpoint({
+  method: "GET",
+  path: "/transcripts/:id/download",
+  summary: "Redirect to a 5-minute download URL for the transcript PDF (409 while it's being made)",
+  tag: "Transcripts",
+  auth: "session",
+  permission: "transcript:document:read",
+  resource: { type: "transcript", param: "id" },
+  params: idParams,
+  response: z.object({}),
+  successStatus: 302,
+});
+
+export const sendTranscript = endpoint({
+  method: "POST",
+  path: "/transcripts/:id/send",
+  summary: "Email the PDF to the recipient (the official request's, unless another is given)",
+  tag: "Transcripts",
+  auth: "session",
+  permission: "transcript:document:issue",
+  params: idParams,
+  body: z.object({ to: z.email().max(254).optional() }).strict(),
+  response: z.object({ to: z.string() }),
+  successStatus: 202,
+});
+
+export const revokeTranscript = endpoint({
+  method: "POST",
+  path: "/transcripts/:id/revoke",
+  summary: "Revoke an issued transcript with a reason; verification shows it from now on",
+  tag: "Transcripts",
+  auth: "session",
+  permission: "transcript:document:revoke",
+  params: idParams,
+  body: z.object({ reason: z.string().trim().min(1).max(500) }).strict(),
+  response: transcriptSchema,
+  successStatus: 200,
+});

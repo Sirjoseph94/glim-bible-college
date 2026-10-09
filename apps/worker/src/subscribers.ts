@@ -1,6 +1,7 @@
 import type { DomainEvent, DomainEventName } from "@glim/contracts";
 import { Db } from "@glim/db";
 import { AttendanceService } from "@glim/modules/attendance";
+import { TranscriptsService } from "@glim/modules/transcripts";
 import type { INestApplicationContext } from "@nestjs/common";
 
 /** An idempotent reaction to a domain event (TRD §17.3). Delivery is at-least-once. */
@@ -15,6 +16,7 @@ export type SubscriberRegistry = Partial<Record<DomainEventName, Subscriber[]>>;
 export function createSubscribers(context: INestApplicationContext): SubscriberRegistry {
   const db = context.get(Db);
   const attendance = context.get(AttendanceService);
+  const transcripts = context.get(TranscriptsService);
   return {
     // Year 1 → Year 2 progression when an Academic Session is activated (§9.1, D-03).
     "academic.session.activated": [
@@ -28,6 +30,19 @@ export function createSubscribers(context: INestApplicationContext): SubscriberR
       async (event) => {
         const { meetingId } = event.payload as { meetingId: string };
         await db.withTx(({ boss }) => attendance.queueFinalize(boss, meetingId));
+      },
+    ],
+    // A reopened result supersedes the issued transcripts that show it (§14.3).
+    "results.course.reopened": [
+      async (event) => {
+        const p = event.payload as {
+          programmeEnrollmentId: string;
+          courseCode: string;
+          sessionCode: string;
+          semesterName: string;
+          reason: string;
+        };
+        await transcripts.supersedeFor({ ...p, reason: `Result reopened: ${p.reason}` });
       },
     ],
     // Semester results are computed when the semester closes (§14.5).

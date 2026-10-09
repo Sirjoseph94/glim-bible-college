@@ -18,14 +18,19 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 type FileRow = typeof schema.files.$inferSelect;
 
+/** Files the server makes itself; never uploaded from a browser. */
+export type StoredPurpose = UploadPurpose | "TRANSCRIPT_PDF";
+
 /** Who besides the owner may fetch a file of each purpose, and where it is kept in the bucket. */
-const PURPOSE_RULES: Record<UploadPurpose, { readPermission?: Permission; prefix: string }> = {
+const PURPOSE_RULES: Record<StoredPurpose, { readPermission?: Permission; prefix: string }> = {
   PASSPORT_PHOTO: { readPermission: "admissions:application:read", prefix: "passport-photos" },
   IMPORT: { readPermission: "identity:import:run", prefix: "imports" },
   // Students download materials through the material, which checks their course (§14.1).
   MATERIAL: { prefix: "materials" },
   // Graders download submissions through the submission, which checks their course (§14.2).
   SUBMISSION: { prefix: "submissions" },
+  // Transcript PDFs are downloaded through the transcript, which checks whose it is (§14.7).
+  TRANSCRIPT_PDF: { prefix: "transcripts" },
 };
 
 /** Part URLs stay valid long enough for a slow connection to send a 100 MB file. */
@@ -375,7 +380,7 @@ export class FilesService {
   /** Stores a file the server made (e.g. an import's error report), owned by `ownerUserId`. */
   async store(input: {
     ownerUserId: string;
-    purpose: UploadPurpose;
+    purpose: StoredPurpose;
     name: string;
     mime: string;
     bytes: Uint8Array;
