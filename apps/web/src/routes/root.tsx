@@ -81,6 +81,11 @@ export function RootLayout() {
                 </Link>
               </>
             ) : null}
+            {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "REGISTRAR") ? (
+              <Link to="/admin/grading-schemes" className="underline">
+                Grading schemes
+              </Link>
+            ) : null}
             {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
               <>
                 <Link to="/admin/users" className="underline">

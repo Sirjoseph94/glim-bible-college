@@ -138,6 +138,34 @@ const SAMPLES: Record<string, Sample> = {
     payload: { name: "Renamed" },
     headers: { "if-match": '"999"' },
   }),
+  "GET /grading-schemes": () => Promise.resolve({ url: "/api/v1/grading-schemes" }),
+  "POST /grading-schemes": () => {
+    n++;
+    return Promise.resolve({
+      url: "/api/v1/grading-schemes",
+      payload: { ...SCHEME_SAMPLE, name: `Authz scheme ${String(n)}` },
+      headers: { "idempotency-key": `authz-scheme-${String(n).padStart(8, "0")}` },
+    });
+  },
+  // A stale version, so allowed callers get 412 and nothing changes.
+  "PATCH /grading-schemes/:id": async (t) => ({
+    url: `/api/v1/grading-schemes/${await seededScheme(t)}`,
+    payload: { repeatPolicy: "KEEP_ALL" },
+    headers: { "if-match": '"999"' },
+  }),
+  // The programme's scheme already: allowed callers change nothing.
+  "PUT /programmes/:id/grading-scheme": async (t) => {
+    const programmeId = (await fixtures(t)).programmeId;
+    const scheme = await seededScheme(t);
+    await t.db.pool.query("UPDATE programmes SET grading_scheme_id = $2 WHERE id = $1", [
+      programmeId,
+      scheme,
+    ]);
+    return {
+      url: `/api/v1/programmes/${programmeId}/grading-scheme`,
+      payload: { gradingSchemeId: scheme },
+    };
+  },
   "GET /courses": () => Promise.resolve({ url: "/api/v1/courses" }),
   "POST /courses": () => {
     n++;
@@ -1184,6 +1212,38 @@ async function examFixture(t: TestApp) {
     studentId: rows[0]?.id ?? "",
   };
   return examShared;
+}
+
+/** A valid NUC 5-point scheme body. */
+const SCHEME_SAMPLE = {
+  kind: "NUC_5",
+  bands: [
+    { minX100: 7000, maxX100: 10000, letter: "A", pointsX100: 500, pass: true },
+    { minX100: 6000, maxX100: 6999, letter: "B", pointsX100: 400, pass: true },
+    { minX100: 5000, maxX100: 5999, letter: "C", pointsX100: 300, pass: true },
+    { minX100: 4500, maxX100: 4999, letter: "D", pointsX100: 200, pass: true },
+    { minX100: 4000, maxX100: 4499, letter: "E", pointsX100: 100, pass: true },
+    { minX100: 0, maxX100: 3999, letter: "F", pointsX100: 0, pass: false },
+  ],
+  classBands: [
+    { minCgpaX100: 450, maxCgpaX100: 500, label: "Distinction" },
+    { minCgpaX100: 300, maxCgpaX100: 449, label: "Credit" },
+    { minCgpaX100: 100, maxCgpaX100: 299, label: "Pass" },
+  ],
+  minAwardCgpaX100: 100,
+  maxPointsX100: 500,
+  passMarkX100: 4000,
+  repeatPolicy: "BEST",
+  goodStandingCgpaX100: 100,
+  probationCgpaX100: null,
+};
+
+/** The seeded GLIM Diploma scheme. */
+async function seededScheme(t: TestApp): Promise<string> {
+  const { rows } = await t.db.pool.query<{ id: string }>(
+    "SELECT id FROM grading_schemes WHERE name = 'GLIM Diploma'",
+  );
+  return rows[0]?.id ?? "";
 }
 
 let fileMaterialShared: string | undefined;

@@ -15,3 +15,4 @@ export * from "./notifications";
 export * from "./platform";
 export * from "./settings";
 export * from "./video";
+export * from "./results";

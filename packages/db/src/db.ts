@@ -141,5 +141,10 @@ export async function withSavepoint<T>(db: Database, fn: () => Promise<T>): Prom
 }
 
 export function createPool(connectionString: string, max: number): pg.Pool {
-  return new pg.Pool({ connectionString, max, application_name: "glim" });
+  const pool = new pg.Pool({ connectionString, max, application_name: "glim" });
+  // An idle connection the server closes (a restart, a failover, a dropped test database) is
+  // reported here; the pool has already discarded it and the next query opens a new one. Without
+  // a listener node-postgres would raise it as an uncaught error and stop the process.
+  pool.on("error", () => undefined);
+  return pool;
 }

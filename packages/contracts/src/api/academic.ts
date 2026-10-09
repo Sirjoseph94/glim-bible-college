@@ -27,6 +27,8 @@ export const programmeSchema = z.object({
   durationSemesters: z.number().int(),
   levels: z.number().int(),
   status: z.enum(ENUMS["programmes.status"]),
+  /** The grading scheme its results use (§14.4), set by the Registrar. */
+  gradingSchemeId: z.uuid().nullable(),
   version: z.number().int(),
 });
 

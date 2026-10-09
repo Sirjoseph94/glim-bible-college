@@ -11,3 +11,4 @@ export type {
   QuizResponseValue,
   SnapshotQuestion,
 } from "./schema/assessment";
+export type { ClassBand, GradeBand } from "./schema/results";

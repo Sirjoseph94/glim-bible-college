@@ -13,6 +13,7 @@ import * as meetings from "./meetings";
 import * as offerings from "./offerings";
 import * as platform from "./platform";
 import * as reports from "./reports";
+import * as results from "./results";
 import * as settings from "./settings";
 import * as users from "./users";
 import * as assessment from "./assessment";
@@ -35,6 +36,7 @@ export {
   offerings,
   platform,
   reports,
+  results,
   settings,
   users,
   assessment,
@@ -221,6 +223,10 @@ export const ENDPOINTS = [
   imports.listImports,
   imports.getImport,
   imports.getImportTemplate,
+  results.listGradingSchemes,
+  results.createGradingScheme,
+  results.updateGradingScheme,
+  results.setProgrammeScheme,
 ] as const;
 export type { Course, Curriculum, CurriculumDetail, Programme } from "./academic";
 export type { CurrentIntake, Intake } from "./admissions";
@@ -280,4 +286,5 @@ export type {
   SubmissionForGrading,
 } from "./assessment";
 export type { Announcement, Material } from "./content";
+export type { GradingScheme } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";

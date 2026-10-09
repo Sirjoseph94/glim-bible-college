@@ -13,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { citext, enumCheck, std } from "./columns";
+import { gradingSchemes } from "./results";
 
 /** Owner: academic. GLIM: CERT (1 year, Year 1) and DIP (2 years, Years 1–2) (TRD §6.3). */
 export const programmes = pgTable(
@@ -24,8 +25,10 @@ export const programmes = pgTable(
     awardType: text("award_type").notNull(),
     durationSemesters: smallint("duration_semesters").notNull(),
     levels: smallint().notNull(),
-    /** FK to grading_schemes is added with M07 (ticket 37). */
-    gradingSchemeId: uuid("grading_scheme_id"),
+    /** The scheme its results are graded with (§14.4); set by the Registrar. */
+    gradingSchemeId: uuid("grading_scheme_id").references(() => gradingSchemes.id, {
+      onDelete: "restrict",
+    }),
     status: text().notNull().default("ACTIVE"),
   },
   (t) => [
