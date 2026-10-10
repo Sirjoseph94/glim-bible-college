@@ -8,7 +8,10 @@ import { CourseCard } from "../components/app/course-card";
 import { LoadFailed } from "../components/app/page-states";
 import { planToday, type ScheduledMeeting } from "../components/app/today";
 import { Time } from "../components/time";
-import { myScheduleQuery, UpcomingMeetings } from "../components/meetings";
+import { myScheduleQuery } from "../components/meetings";
+import { navItems } from "../components/app/nav";
+import { cardClass } from "../components/ui/card";
+import { Icon } from "../design/icons";
 import { Badge } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
 import { Button, buttonClass } from "../components/ui/button";
@@ -213,21 +216,65 @@ function LecturerToday({ me }: { me: Me }) {
   );
 }
 
+/** What each area holds, for the cards on a staff Home. */
+const AREA_HINTS: Record<string, string> = {
+  "/application": "Your application to study at GLIM.",
+  "/results": "Your results and transcripts.",
+  "/admissions": "Applications, intakes and reports.",
+  "/admin/academic": "Programmes, the calendar, Course Offerings, Lecturers and imports.",
+  "/results/semesters":
+    "Course and semester results, transcript requests, awards and grading schemes.",
+  "/admin/users": "Accounts and roles.",
+  "/admin/settings": "College details, videos and the audit log.",
+  "/admin/ops": "Failures and job queues.",
+};
+
+/**
+ * Home for staff, applicants and graduates (composed, §11.11): who they are signed in as, and
+ * a card for each area they can open. Their work lives in those areas.
+ */
+function AreasHome({ me }: { me: Me }) {
+  const areas = navItems(me.roles).filter((item) => item.to !== "/" && item.to !== "/profile");
+  return (
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-greeting">Welcome, {me.user.displayName}</h1>
+        {me.roles.staff.length > 0 ? (
+          <p className="text-body-sm text-ink-muted">
+            Signed in as{" "}
+            {me.roles.staff.map((r) => r.replaceAll("_", " ").toLowerCase()).join(", ")}.
+          </p>
+        ) : null}
+      </div>
+      {areas.length > 0 ? (
+        <nav aria-label="Your areas" className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {areas.map((area) => (
+            <Link
+              key={area.to}
+              to={area.to}
+              className={`${cardClass({ interactive: true })} flex items-start gap-3`}
+            >
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand">
+                <Icon name={area.icon} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-heading text-ink">{area.label}</span>
+                {AREA_HINTS[area.to] ? (
+                  <span className="block text-body-sm text-ink-muted">{AREA_HINTS[area.to]}</span>
+                ) : null}
+              </span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+    </div>
+  );
+}
+
 export function HomePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   if (me === null) return null;
   if (me.roles.isStudent) return <StudentToday me={me} />;
   if (me.roles.isLecturer) return <LecturerToday me={me} />;
-  // Staff keep this home until their screens move (WP-UI-10).
-  return (
-    <section className="space-y-2">
-      <h1 className="text-title">Welcome, {me.user.displayName}</h1>
-      {me.roles.staff.length > 0 ? (
-        <p className="text-ink-muted">
-          Signed in as {me.roles.staff.map((r) => r.replaceAll("_", " ").toLowerCase()).join(", ")}.
-        </p>
-      ) : null}
-      <UpcomingMeetings title="Your Class Meetings in the next two weeks" />
-    </section>
-  );
+  return <AreasHome me={me} />;
 }

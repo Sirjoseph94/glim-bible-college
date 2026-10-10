@@ -120,13 +120,9 @@ const AREAS: Area[] = [
     exactly: ["/admin/grading-schemes"],
     pages: [
       { label: "Course results", to: "/results/courses" },
+      // Transcript requests are on Semester results (decision UI-Q8).
       { label: "Semester results", to: "/results/semesters" },
       { label: "Awards", to: "/results/awards", staff: ["SYSTEM_ADMIN", "REGISTRAR"] },
-      {
-        label: "Transcript requests",
-        to: "/results/transcripts",
-        staff: ["SYSTEM_ADMIN", "REGISTRAR"],
-      },
       {
         label: "Grading schemes",
         to: "/admin/grading-schemes",

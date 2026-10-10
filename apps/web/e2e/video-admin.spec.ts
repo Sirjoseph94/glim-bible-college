@@ -41,8 +41,11 @@ test("the System Admin manages videos across the college", async ({ page }) => {
   );
 
   // Deleted by mistake, then restored.
-  page.once("dialog", (dialog) => void dialog.accept());
   await row.getByRole("button", { name: "Delete" }).click();
+  await page
+    .getByRole("dialog", { name: 'Delete "Week 2: Prayer"?' })
+    .getByRole("button", { name: "Delete video" })
+    .click();
   await expect(row).toContainText("Deleted");
   await expect(row).toContainText("Can be restored until");
   await row.getByRole("button", { name: "Restore" }).click();

@@ -24,7 +24,7 @@ test("the Registrar computes, approves and publishes semester results", async ({
   await openTeaching(page, "Pastoral Care", "Gradebook");
   await page.getByRole("link", { name: "Finalize results" }).click();
   await page.getByRole("button", { name: "Finalize results" }).click();
-  await page.getByRole("button", { name: "Finalize now" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Finalize now" }).click();
   await expect(page.getByText("2 of 2 results finalized.", { exact: false })).toBeVisible();
   await signOut(page);
 
@@ -41,10 +41,15 @@ test("the Registrar computes, approves and publishes semester results", async ({
   await expect(page.getByText("Computed 2; 2 changed.")).toBeVisible();
   const bola = page.getByRole("row", { name: /Bola Online/ });
   await expect(bola).toContainText("Draft");
-  await page.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByText("Approved 2.")).toBeVisible();
-  await page.getByRole("button", { name: "Publish" }).click();
-  await expect(page.getByText("Published 2. Students have been told.")).toBeVisible();
+  // §11.10: the cohort is ready; approving publishes too, after a Dialog saying what it does.
+  await expect(page.getByText("1 cohort is ready to approve")).toBeVisible();
+  await page.getByRole("button", { name: "Approve and publish" }).click();
+  const approve = page.getByRole("dialog", { name: /^Approve / });
+  await expect(approve).toContainText("2 students' GPA and CGPA become official");
+  await approve.getByRole("button", { name: "Approve and publish" }).click();
+  await expect(
+    page.getByText("Approved 2 and published 2. Students have been told."),
+  ).toBeVisible();
   await expect(bola).toContainText("Published");
   await expect(page.getByRole("link", { name: "Broadsheet (CSV)" })).toHaveAttribute(
     "href",

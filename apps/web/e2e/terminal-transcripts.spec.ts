@@ -45,7 +45,7 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Transcript requests" }).click();
+  await page.getByRole("link", { name: "Semester results" }).click();
   await page
     .getByRole("listitem", { name: "Bola Online" })
     .getByRole("button", { name: "Approve" })
@@ -84,9 +84,10 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
     .filter({ hasText: /\/00001/ });
   await unofficialRow.getByRole("link", { name: "View" }).click();
   const unofficialCode = (await page.locator("footer strong").textContent()) ?? "";
-  await page.getByRole("button", { name: "Revoke…" }).click();
-  await page.getByLabel("Why it's being revoked").fill("Issued against the wrong record");
   await page.getByRole("button", { name: "Revoke transcript" }).click();
+  const revoke = page.getByRole("dialog", { name: /^Revoke GLIM\/TR\// });
+  await revoke.getByLabel("Why it's being revoked").fill("Issued against the wrong record");
+  await revoke.getByRole("button", { name: "Revoke transcript" }).click();
   await expect(
     page.getByText("This transcript was revoked: Issued against the wrong record."),
   ).toBeVisible();

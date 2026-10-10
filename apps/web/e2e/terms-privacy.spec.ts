@@ -36,8 +36,10 @@ test("a person downloads their data, then the System Admin erases them", async (
   await openArea(page, "People");
   await page.getByLabel("Search by name or email").fill("Bola");
   await page.getByRole("link", { name: "Bola Online" }).click();
-  page.once("dialog", (dialog) => void dialog.accept("Asked to be forgotten"));
   await page.getByRole("button", { name: "Erase personal data" }).click();
+  const erase = page.getByRole("dialog", { name: "Erase this person's personal data?" });
+  await erase.getByLabel("Why erase them?").fill("Asked to be forgotten");
+  await erase.getByRole("button", { name: "Erase personal data" }).click();
   await expect(page.getByRole("heading", { name: /^Erased [0-9a-f]{10}$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Erase personal data" })).toHaveCount(0);
   await signOut(page);

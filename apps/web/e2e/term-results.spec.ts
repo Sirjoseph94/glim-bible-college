@@ -54,15 +54,19 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
 
   await page.getByRole("link", { name: "Finalize results" }).click();
   await expect(page.getByText(/Nothing is finalized yet/)).toBeVisible();
-  await expect(page.getByRole("listitem", { name: "Bola Online" })).toContainText("Preview");
+  await expect(page.getByRole("row", { name: /Bola Online/ })).toContainText("Preview");
   await page.getByRole("button", { name: "Finalize results" }).click();
-  await page.getByRole("button", { name: "Finalize now" }).click();
+  await page
+    .getByRole("dialog", { name: "Finalize 2 results?" })
+    .getByRole("button", { name: "Finalize now" })
+    .click();
   await expect(
     page.getByText("2 of 2 results finalized. Students see them straight away."),
   ).toBeVisible();
-  const bola = page.getByRole("listitem", { name: "Bola Online" });
+  const bola = page.getByRole("row", { name: /Bola Online/ });
   await expect(bola).toContainText("Finalized");
-  const letter = /% · ([A-F])/.exec((await bola.textContent()) ?? "")?.[1];
+  // Cells: Final %, then the letter grade.
+  const letter = /^([A-F])/.exec((await bola.getByRole("cell").nth(1).textContent()) ?? "")?.[1];
   expect(letter).toMatch(/^[A-F]$/);
   await signOut(page);
 
@@ -81,10 +85,11 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
   await openArea(page, "Results");
   await page.getByRole("link", { name: "Course results" }).click();
   await page.getByRole("link", { name: "PAS101 Pastoral Care" }).click();
-  const row = page.getByRole("listitem", { name: "Bola Online" });
-  await row.getByRole("button", { name: "Reopen" }).click();
-  await row.getByLabel("Reason").fill("Final project re-marked");
-  await row.getByRole("button", { name: "Reopen" }).click();
-  await expect(row).toContainText("Reopened: finalize again to record it");
+  const row = page.getByRole("row", { name: /Bola Online/ });
+  await row.getByRole("button", { name: "Reopen Bola Online's result" }).click();
+  const reopen = page.getByRole("dialog", { name: "Reopen Bola Online's result?" });
+  await reopen.getByLabel("Reason").fill("Final project re-marked");
+  await reopen.getByRole("button", { name: "Reopen result" }).click();
+  await expect(row).toContainText("Reopened");
   await expect(page.getByText("1 of 2 results finalized.", { exact: false })).toBeVisible();
 });

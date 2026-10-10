@@ -344,21 +344,21 @@ const courseResultsRoute = createRoute({
     const me = await context.queryClient.query(meQuery);
     if (me === null) throw redirect({ to: "/login" });
   },
-  component: lazyRouteComponent(() => import("./routes/results"), "CourseResultsPage"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "CourseResultsPage"),
 });
 
 const resultsCoursesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/courses",
   beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
-  component: lazyRouteComponent(() => import("./routes/results"), "ResultsCoursesPage"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "ResultsCoursesPage"),
 });
 
 const semesterResultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/semesters",
   beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
-  component: lazyRouteComponent(() => import("./routes/results"), "SemesterResultsPage"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "SemesterResultsPage"),
 });
 
 const awardsRoute = createRoute({
@@ -394,11 +394,13 @@ const transcriptRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/transcripts"), "TranscriptPage"),
 });
 
+/** Transcript requests are on the semester results page now (decision UI-Q8). */
 const registrarTranscriptsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/transcripts",
-  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR"),
-  component: lazyRouteComponent(() => import("./routes/transcripts"), "RegistrarTranscriptsPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/results/semesters" });
+  },
 });
 
 /** Public: anyone holding a transcript can check it (§14.7). */

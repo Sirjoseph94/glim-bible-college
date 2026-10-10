@@ -25,6 +25,7 @@
 | "Finalize unlocks once the exam is graded." | §11.9 | Whether the offering can be finalized, and why not | The course results page already refuses with the server's reason. |
 | "26 students · you are the primary Lecturer" | §11.9 | The viewer's own role on the offering (`lecturers[].lecturerId` is a Lecturer id, not the user id in `/me`) | The gradebook footer counts the students it shows. |
 | "To grade" in gradebook cells | §11.9 | Which students submitted work that has no score yet | Empty cells show "–". |
+| Cohort level and "Courses finalized 8 of 8" on the Registrar's cohorts table | §11.10 | Per programme and level in a semester: the cohort's level, and how many of its Course Offerings have finalized results | Cohorts are grouped by programme from `GET /results/semesters` rows. |
 | Late-submission warning before confirm | §11.5 | Due date vs. cutoff | Probably available on the assignment; confirm in WP-UI-07. |
 
 Rows marked "check" or "confirm" may already be possible. The WP that reaches them verifies against the contracts and builds them if the data exists.
