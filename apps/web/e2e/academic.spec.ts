@@ -100,6 +100,7 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await page.getByLabel("Confirm the new password").fill("lecturer passphrase 2026");
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await openArea(page, "Teaching");
-  await expect(page.getByText("BIB101 Old Testament Survey")).toBeVisible();
-  await expect(page.getByText("Rev Tunde Bello (Primary Lecturer)")).toBeVisible();
+  const course = page.getByRole("link", { name: /Old Testament Survey/ });
+  await expect(course).toContainText("BIB101");
+  await expect(course).toContainText("Rev Tunde Bello");
 });

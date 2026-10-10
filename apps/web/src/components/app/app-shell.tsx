@@ -234,7 +234,8 @@ export function AppShell({
                   <BackLink
                     to={detail.back.to}
                     label={detail.back.label}
-                    {...(detail.back.params ? { params: detail.back.params } : {})}
+                    params={detail.back.params}
+                    search={detail.back.search}
                   />
                   {detail.code ? (
                     <span className="pr-3">
@@ -260,7 +261,8 @@ export function AppShell({
                   <BackLink
                     to={detail.back.to}
                     label={detail.back.label}
-                    {...(detail.back.params ? { params: detail.back.params } : {})}
+                    params={detail.back.params}
+                    search={detail.back.search}
                   />
                 ) : (
                   <InstitutionName name={institutionName} />

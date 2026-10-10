@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, openCourse, signOut } from "./nav";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -14,7 +14,8 @@ async function signIn(page: Page, who: { email: string; password: string }) {
 
 async function addColumn(page: Page, title: string, maxScore: string, weight: string) {
   const form = page.getByRole("form", { name: "Add a column" });
-  if (!(await form.isVisible())) await page.getByText("Columns and weights").click();
+  if (!(await form.isVisible()))
+    await page.getByRole("button", { name: "Columns and weights" }).click();
   await form.getByLabel("Title").fill(title);
   await form.getByLabel("Out of").fill(maxScore);
   await form.getByLabel("Weight (%)").fill(weight);
@@ -30,17 +31,21 @@ test("a Lecturer enters, imports and releases grades; the student sees only rele
   page,
 }) => {
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("link", { name: "Gradebook" }).click();
+  await openTeaching(page, "Pastoral Care", "Gradebook");
   await expect(page.getByRole("heading", { name: "Gradebook" })).toBeVisible();
 
   await addColumn(page, "Memory verse test", "10", "5");
+  // The score goes straight into the cell; feedback in the cell's Sheet (§9.19).
   await page.getByRole("button", { name: "Bola Online, Memory verse test" }).click();
+  await page
+    .getByRole("button", { name: "Feedback and more for Bola Online, Memory verse test" })
+    .click();
   const edit = page.getByRole("form", { name: "Edit grade" });
   await edit.getByLabel(/Score/).fill("8");
   await edit.getByLabel("Feedback").fill("**Word-perfect** recital.");
   await edit.getByRole("button", { name: "Save grade" }).click();
   await expect(edit.getByText("Saved")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Bola Online, Memory verse test" })).toContainText(
     "8.00draft",
   );
@@ -49,12 +54,12 @@ test("a Lecturer enters, imports and releases grades; the student sees only rele
   await addColumn(page, "Paper test", "50", "10");
   const who = await page
     .getByRole("rowheader", { name: /Bola Online/ })
-    .locator("div")
+    .locator("span")
     .nth(1)
     .textContent();
   const matric = (who ?? "").split(" · ")[0] ?? "";
   expect(matric).not.toBe("");
-  await page.getByText("Import scores from CSV").click();
+  await page.getByRole("button", { name: "Import scores (CSV)" }).click();
   const upload = page.getByRole("form", { name: "Import scores" });
   await upload.getByLabel("Column").selectOption({ label: "Paper test (out of 50.00)" });
   await upload.getByLabel("CSV file").setInputFiles({
@@ -73,6 +78,7 @@ test("a Lecturer enters, imports and releases grades; the student sees only rele
   await expect(page.getByText("1 new, 0 changed, 0 unchanged, 0 with problems.")).toBeVisible();
   await page.getByRole("button", { name: "Import 1 scores" }).click();
   await expect(page.getByText(/Imported 1 scores/)).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Bola Online, Paper test" })).toContainText(
     "41.50draft",
   );

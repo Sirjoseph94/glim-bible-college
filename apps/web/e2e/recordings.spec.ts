@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "./test";
 import { testPhoto } from "./images";
-import { openArea, openCourse, signOut } from "./nav";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -59,15 +59,14 @@ test("a student watches a recording on a phone and resumes where they stopped", 
 }) => {
   // The Lecturer (signed up in the meetings spec) adds a published recording.
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("button", { name: "Recordings" }).click();
+  await openTeaching(page, "Pastoral Care", "Recordings");
   await page.getByLabel(/^YouTube link/).fill("https://youtu.be/e2eWatch001");
   await page
     .getByLabel(/^Title/)
     .last()
     .fill("Week 2: Prayer");
   await page.getByRole("button", { name: "Add recording" }).click();
-  await expect(page.getByText("Week 2: Prayer (published)")).toBeVisible();
+  await expect(page.getByRole("listitem", { name: "Week 2: Prayer" })).toContainText("Published");
   await signOut(page);
 
   // The online student (seeded with a password) signs in.

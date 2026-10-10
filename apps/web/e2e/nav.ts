@@ -27,3 +27,10 @@ export async function openCourse(page: Page, title: string, tab: string): Promis
   await page.getByRole("link", { name: new RegExp(title) }).click();
   await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
 }
+
+/** Opens one of the Lecturer's courses from Teaching, at the given tab (§11.9). */
+export async function openTeaching(page: Page, title: string, tab: string): Promise<void> {
+  await openArea(page, "Teaching");
+  await page.getByRole("link", { name: new RegExp(title) }).click();
+  await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
+}

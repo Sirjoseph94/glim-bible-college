@@ -6,6 +6,12 @@ export interface QueuedStep {
   path: string;
   params?: Record<string, string>;
   body?: unknown;
+  /**
+   * For a write guarded by a version (If-Match): the version it was made against, and where to
+   * read the latest one if someone else saved first. The write is then sent again on top of it,
+   * as the screen itself would (last change wins, e.g. roll-call marks).
+   */
+  ifMatch?: { version: number; refreshFrom: string };
 }
 
 /**
@@ -50,6 +56,42 @@ export function memoryStore(): QueueStore {
 
 export type Send = (step: QueuedStep, idempotencyKey: string) => Promise<void>;
 
+/** The HTTP call `sendStep` makes; `api` in the app. */
+export type Request = (
+  method: string,
+  path: string,
+  init: { params?: Record<string, string>; body?: unknown; headers?: Record<string, string> },
+) => Promise<unknown>;
+
+/** How often a versioned write is retried on a newer version before it is given up. */
+const VERSION_ATTEMPTS = 3;
+
+/** Sends one step with its Idempotency-Key and, for a versioned write, If-Match (see `ifMatch`). */
+export async function sendStep(step: QueuedStep, key: string, request: Request): Promise<void> {
+  const params = step.params ? { params: step.params } : {};
+  let version = step.ifMatch?.version;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await request(step.method, step.path, {
+        ...params,
+        ...(step.body === undefined ? {} : { body: step.body }),
+        headers: {
+          "idempotency-key": key,
+          ...(version === undefined ? {} : { "if-match": `"${String(version)}"` }),
+        },
+      });
+      return;
+    } catch (error) {
+      const stale = error instanceof ApiError && error.status === 412;
+      if (!stale || step.ifMatch === undefined || attempt >= VERSION_ATTEMPTS) throw error;
+      const latest = (await request("GET", step.ifMatch.refreshFrom, params)) as {
+        version: number;
+      };
+      version = latest.version;
+    }
+  }
+}
+
 export interface FlushResult {
   sent: QueuedWork[];
   /** Work the server refused (closed, invalid…): dropped from the queue, to tell the person. */
@@ -81,6 +123,17 @@ export class OfflineQueue {
     return all.filter((w) => group === undefined || w.group === group).length;
   }
 
+  /** A group's waiting work, oldest first (to show it on screen until it is sent). */
+  async list(group: string): Promise<QueuedWork[]> {
+    return (await this.sorted())
+      .filter((w) => w.group === group)
+      .map(({ key, group: g, steps }) => ({ key, group: g, steps }));
+  }
+
+  private async sorted(): Promise<Stored[]> {
+    return (await this.store.all()).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
+  }
+
   /** Called after each change: with the outcome when a flush sent or dropped work, else null. */
   subscribe(listener: (result: FlushResult | null) => void): () => void {
     this.listeners.add(listener);
@@ -99,7 +152,7 @@ export class OfflineQueue {
 
   private async run(): Promise<FlushResult> {
     const result: FlushResult = { sent: [], rejected: [] };
-    const all = (await this.store.all()).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
+    const all = await this.sorted();
     try {
       for (const work of all) {
         try {

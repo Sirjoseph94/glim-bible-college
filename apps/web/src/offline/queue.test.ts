@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import { memoryStore, OfflineQueue, type QueuedStep } from "./queue";
+import { memoryStore, OfflineQueue, sendStep, type QueuedStep } from "./queue";
 
 const submission = (key: string) => ({
   key,
@@ -94,5 +94,80 @@ describe("OfflineQueue (handoff §9.20, §10.4)", () => {
     await queue.enqueue(submission("key-000000000006"));
     await queue.flush();
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("sendStep: versioned writes (If-Match)", () => {
+  const rollCall: QueuedStep = {
+    method: "PUT",
+    path: "/class-meetings/:id/roll-call",
+    params: { id: "m1" },
+    body: { marks: [] },
+    ifMatch: { version: 3, refreshFrom: "/class-meetings/:id/roll-call" },
+  };
+  const stale = () =>
+    new ApiError(412, {
+      error: { code: "PRECONDITION_FAILED" as never, message: "Changed.", requestId: "r1" },
+    });
+
+  it("sends the version it was queued with", async () => {
+    const request = vi.fn(() => Promise.resolve({}));
+    await sendStep(rollCall, "key-000000000001", request);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]).toEqual([
+      "PUT",
+      "/class-meetings/:id/roll-call",
+      {
+        params: { id: "m1" },
+        body: { marks: [] },
+        headers: { "idempotency-key": "key-000000000001", "if-match": '"3"' },
+      },
+    ]);
+  });
+
+  it("when someone else saved first, takes the latest version and sends again", async () => {
+    const request = vi
+      .fn<
+        (
+          method: string,
+          path: string,
+          init: { headers?: Record<string, string> },
+        ) => Promise<unknown>
+      >()
+      .mockRejectedValueOnce(stale())
+      .mockResolvedValueOnce({ version: 7 })
+      .mockResolvedValueOnce({});
+    await sendStep(rollCall, "key-000000000001", request);
+    expect(
+      request.mock.calls.map(([method, , init]) => `${method} ${init.headers?.["if-match"] ?? ""}`),
+    ).toEqual(['PUT "3"', "GET ", 'PUT "7"']);
+  });
+
+  it("gives up after three stale versions, so the queue can drop it", async () => {
+    const request = vi.fn((method: string) =>
+      method === "GET" ? Promise.resolve({ version: 9 }) : Promise.reject(stale()),
+    );
+    await expect(sendStep(rollCall, "key-000000000001", request)).rejects.toBeInstanceOf(ApiError);
+    expect(request.mock.calls.filter(([method]) => method === "PUT")).toHaveLength(3);
+  });
+
+  it("does not retry a 412 for a step without If-Match", async () => {
+    const request = vi.fn(() => Promise.reject(stale()));
+    const { ifMatch: _, ...plain } = rollCall;
+    await expect(sendStep(plain, "key-000000000001", request)).rejects.toBeInstanceOf(ApiError);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("OfflineQueue.list", () => {
+  it("returns a group's waiting work, oldest first", async () => {
+    const queue = new OfflineQueue(memoryStore(), () => Promise.reject(offline()));
+    await queue.enqueue(submission("key-000000000001"));
+    await queue.enqueue({ ...submission("key-000000000002"), group: "other" });
+    await queue.enqueue(submission("key-000000000003"));
+    expect((await queue.list("assignment:a1")).map((w) => w.key)).toEqual([
+      "key-000000000001",
+      "key-000000000003",
+    ]);
   });
 });

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, openCourse, signOut } from "./nav";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -20,8 +20,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
 test("a timed quiz survives a dropped connection at the deadline", async ({ page, context }) => {
   test.setTimeout(180_000);
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("button", { name: "Quizzes" }).click();
+  await openTeaching(page, "Pastoral Care", "Work");
   await page.getByText(/^Question bank/).click();
 
   const bank = page.locator("form", { hasText: "Add a question" });

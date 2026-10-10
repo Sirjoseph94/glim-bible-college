@@ -9,6 +9,7 @@ import {
 import { meQuery } from "./api/session";
 import { LoginPage } from "./routes/login";
 import { RootLayout } from "./routes/root";
+import { TEACH_TABS, type TeachTab } from "./routes/teach-tabs";
 import { COURSE_TABS, type CourseTab } from "./routes/course-tabs";
 
 interface RouterContext {
@@ -307,14 +308,33 @@ const quizGradingRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/quiz"), "QuizGradingPage"),
 });
 
+/** The old gradebook address now opens the course's Gradebook tab (decision UI-Q5). */
 const gradebookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/teach/offerings/$offeringId/gradebook",
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/teach/$offeringId",
+      params: { offeringId: params.offeringId },
+      search: { tab: "gradebook" },
+    });
+  },
+});
+
+/**
+ * A course for its Lecturers, tabs in the URL (§11.9). Signed in is enough here, as for the
+ * gradebook before it: the API decides who may see each part.
+ */
+const teachCourseRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/teach/$offeringId",
+  validateSearch: (search: Record<string, unknown>): { tab?: TeachTab } =>
+    TEACH_TABS.includes(search.tab as TeachTab) ? { tab: search.tab as TeachTab } : {},
   beforeLoad: async ({ context }) => {
     const me = await context.queryClient.query(meQuery);
     if (me === null) throw redirect({ to: "/login" });
   },
-  component: lazyRouteComponent(() => import("./routes/gradebook"), "GradebookPage"),
+  component: lazyRouteComponent(() => import("./routes/teach"), "TeachCoursePage"),
 });
 
 const courseResultsRoute = createRoute({
@@ -485,6 +505,7 @@ const routeTree = rootRoute.addChildren([
   quizRoute,
   quizGradingRoute,
   gradebookRoute,
+  teachCourseRoute,
   courseResultsRoute,
   resultsCoursesRoute,
   semesterResultsRoute,

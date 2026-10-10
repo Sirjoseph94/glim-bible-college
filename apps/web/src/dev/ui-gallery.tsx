@@ -7,6 +7,14 @@ import { Badge, type BadgeStatus } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import {
+  bodyCell,
+  DataTable,
+  headCell,
+  numericCell,
+  stickyCell,
+} from "../components/ui/data-table";
+import { AttendanceRow } from "../components/teaching/attendance-row";
 import { Checkbox, Radio, Switch } from "../components/ui/choice";
 import { ConfirmDialog, Sheet } from "../components/ui/dialog";
 import { Disclosure } from "../components/ui/disclosure";
@@ -217,6 +225,40 @@ function Specimens({ theme }: { theme: "light" | "dark" }) {
             </div>
           ))}
         </Card>
+        <Card list role="list">
+          <AttendanceRow
+            name={NAMES[0] ?? "Ada"}
+            meta="Online · late · GLIM/DIP/2032/0001"
+            status="partial"
+            edited
+            action={
+              <IconButton
+                icon="chevronRight"
+                label={`Change attendance for ${NAMES[0] ?? "Ada"}`}
+              />
+            }
+          />
+        </Card>
+        <DataTable caption={`Gradebook sample (${theme})`} minWidth="min-w-160">
+          <thead>
+            <tr>
+              <th scope="col" className={`${headCell} ${stickyCell} bg-surface-sunken`}>
+                Student
+              </th>
+              <th scope="col" className={headCell}>
+                Quiz 1<span className="block font-normal">/ 20 · 10 %</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" className={`${bodyCell} ${stickyCell} text-left font-normal`}>
+                {NAMES[1] ?? "Bola"}
+              </th>
+              <td className={`${bodyCell} ${numericCell}`}>17.50</td>
+            </tr>
+          </tbody>
+        </DataTable>
         <Disclosure summary="2025/26 · First semester · GPA 4.20">
           <ProgressBar label="Watched" value={60} thin />
         </Disclosure>

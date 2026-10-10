@@ -18,6 +18,7 @@ export interface DetailBar {
   back: {
     to: Parameters<typeof BackLink>[0]["to"];
     params?: Record<string, string>;
+    search?: Record<string, string>;
     label: string;
   };
   code?: string;
@@ -31,14 +32,22 @@ export const DetailBarContext = createContext<(bar: DetailBar | null) => void>((
  */
 export function useDetailBar(bar: DetailBar): void {
   const setBar = useContext(DetailBarContext);
-  const { to, label, params } = bar.back;
+  const { to, label, params, search } = bar.back;
   const { code } = bar;
   const paramsKey = JSON.stringify(params ?? {});
+  const searchKey = JSON.stringify(search ?? {});
   useEffect(() => {
-    const parsed = JSON.parse(paramsKey) as Record<string, string>;
-    setBar({ back: { to, label, params: parsed }, ...(code === undefined ? {} : { code }) });
+    setBar({
+      back: {
+        to,
+        label,
+        params: JSON.parse(paramsKey) as Record<string, string>,
+        search: JSON.parse(searchKey) as Record<string, string>,
+      },
+      ...(code === undefined ? {} : { code }),
+    });
     return () => {
       setBar(null);
     };
-  }, [setBar, to, label, paramsKey, code]);
+  }, [setBar, to, label, paramsKey, searchKey, code]);
 }

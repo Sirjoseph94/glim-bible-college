@@ -4,23 +4,35 @@ import type { ReactNode } from "react";
 import { cardClass } from "../ui/card";
 
 /**
- * A course the person takes (§9.15): the whole card links to the course page. The band carries
- * the course code and, when there is one, the state of its next Class Meeting. ("Recordings
- * watched" waits on data the API doesn't return yet: .scratch/ui-overhaul/issues/02.)
+ * A course (§9.15): the whole card links to the course page, the student's or, with `teaching`,
+ * the Lecturer's. The band carries the course code and, when there is one, the state of its next
+ * Class Meeting. ("Recordings watched" waits on data the API doesn't return yet:
+ * .scratch/ui-overhaul/issues/02.)
  */
-export function CourseCard({ offering, badge }: { offering: Offering; badge?: ReactNode }) {
+export function CourseCard({
+  offering,
+  badge,
+  teaching = false,
+}: {
+  offering: Offering;
+  badge?: ReactNode;
+  teaching?: boolean;
+}) {
   const lecturers = offering.lecturers
     .filter((l) => l.status === "ACTIVE")
     .map((l) => l.lecturerName)
     .join(", ");
   return (
     <Link
-      to="/courses/$offeringId"
+      to={teaching ? "/teach/$offeringId" : "/courses/$offeringId"}
       params={{ offeringId: offering.id }}
       className={`${cardClass({ interactive: true, list: true })} block`}
     >
       <div className="flex items-center justify-between gap-2 bg-brand-soft px-4 py-3">
-        <span className="font-mono text-code font-semibold text-brand">{offering.courseCode}</span>
+        <span className="font-mono text-code font-semibold text-brand">
+          {offering.courseCode}
+          {teaching ? ` · ${offering.sectionCode}` : ""}
+        </span>
         {badge}
       </div>
       <div className="space-y-1 p-4">

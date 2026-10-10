@@ -1,6 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
-import { openArea } from "./nav";
+import { openTeaching } from "./nav";
 
 const EMAIL = "e2e-lecturer@glim.test";
 const PASSWORD = "lecturer passphrase 2026";
@@ -28,8 +28,8 @@ test("a Lecturer schedules a Class Meeting in a Room and sees it on their schedu
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: /^Welcome/ })).toBeVisible();
 
-  await openArea(page, "Teaching");
-  await expect(page.getByText("No Class Meetings in the next two weeks.")).toBeVisible();
+  await openTeaching(page, "Pastoral Care", "Live");
+  await expect(page.getByText("No Class Meetings are scheduled.")).toBeVisible();
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel("Title").fill("Week 1: Caring for the flock");
   await page.getByLabel(/^Date/).fill(lagosDate());
@@ -39,33 +39,35 @@ test("a Lecturer schedules a Class Meeting in a Room and sees it on their schedu
   await page.getByLabel("Google Meet link (optional)").fill("https://meet.google.com/abc-defg-hij");
   await page.getByRole("button", { name: "Schedule", exact: true }).click();
 
-  const card = page.getByRole("listitem").filter({ hasText: "Week 1: Caring for the flock" });
+  const card = page.getByRole("article", { name: "PAS101 Week 1: Caring for the flock" });
   await expect(card).toBeVisible();
-  await expect(card).toContainText("In Chapel (CHAPEL) and online");
-  await expect(card.getByRole("link", { name: "Online link" })).toHaveAttribute(
-    "href",
-    "https://meet.google.com/abc-defg-hij",
-  );
+  await expect(card).toContainText("On campus: Chapel · Online");
+  // The Meet link is never shown as text (§9.14); the Lecturer gets it when starting the class.
+  await expect(card).not.toContainText("meet.google.com");
 
+  // A Lecturer's Today lists it under Coming up (§11.7).
   await page.getByRole("link", { name: "Home" }).click();
-  await expect(page.getByText("Your Class Meetings in the next two weeks")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Coming up" })).toBeVisible();
   await expect(
-    page.getByRole("listitem").filter({ hasText: "PAS101 · Week 1: Caring for the flock" }),
+    page.getByRole("article", { name: "PAS101 Week 1: Caring for the flock" }),
   ).toBeVisible();
 
   // Move it, then cancel it.
-  await openArea(page, "Teaching");
-  const mine = page.getByRole("listitem").filter({ hasText: "Week 1: Caring for the flock" });
-  await mine.getByRole("button", { name: "Reschedule" }).click();
-  await mine.getByLabel("New date").fill(lagosDate(2));
-  await mine.getByLabel("Starts").fill("14:00");
-  await mine.getByLabel("Ends").fill("15:00");
-  await mine.getByRole("button", { name: "Move class" }).click();
-  await expect(mine).toContainText("14:00");
-  await mine.getByRole("button", { name: "Cancel class" }).click();
-  await mine.getByLabel("Reason (students will see it)").fill("Lecturer unwell");
-  await mine.getByRole("button", { name: "Cancel class" }).click();
-  await expect(mine).toContainText("Cancelled");
+  await openTeaching(page, "Pastoral Care", "Live");
+  await card.getByRole("button", { name: "More actions for Week 1: Caring for the flock" }).click();
+  await page.getByRole("menuitem", { name: "Reschedule" }).click();
+  const move = page.getByRole("dialog", { name: "Move this class" });
+  await move.getByLabel(/^New date/).fill(lagosDate(2));
+  await move.getByLabel("Starts").fill("14:00");
+  await move.getByLabel("Ends").fill("15:00");
+  await move.getByRole("button", { name: "Move class" }).click();
+  await expect(card).toContainText("14:00");
+  await card.getByRole("button", { name: "More actions for Week 1: Caring for the flock" }).click();
+  await page.getByRole("menuitem", { name: "Cancel class" }).click();
+  const cancel = page.getByRole("dialog", { name: "Cancel this class?" });
+  await cancel.getByLabel("Reason (students will see it)").fill("Lecturer unwell");
+  await cancel.getByRole("button", { name: "Cancel class" }).click();
+  await expect(card).toContainText("Cancelled");
 });
 
 test("a Lecturer schedules a weekly series", async ({ page }) => {
@@ -73,7 +75,7 @@ test("a Lecturer schedules a weekly series", async ({ page }) => {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await openArea(page, "Teaching");
+  await openTeaching(page, "Pastoral Care", "Live");
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel(/^Title/).fill("Seminar {n}");
   await page.getByLabel(/^Date/).fill(lagosDate(3));
@@ -83,8 +85,8 @@ test("a Lecturer schedules a weekly series", async ({ page }) => {
   await page.getByLabel(lagosWeekday(3), { exact: true }).check();
   await page.getByLabel("Until (optional)").fill(lagosDate(10));
   await page.getByRole("button", { name: "Schedule", exact: true }).click();
-  await expect(page.getByText("PAS101 · Seminar 1")).toBeVisible();
-  await expect(page.getByText("PAS101 · Seminar 2")).toBeVisible();
+  await expect(page.getByRole("article", { name: "PAS101 Seminar 1" })).toBeVisible();
+  await expect(page.getByRole("article", { name: "PAS101 Seminar 2" })).toBeVisible();
 });
 
 /** The Lagos date and HH:mm of an instant some minutes from now. */
@@ -109,7 +111,7 @@ test("a Lecturer starts a class with the room instructions, then ends it", async
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await openArea(page, "Teaching");
+  await openTeaching(page, "Pastoral Care", "Live");
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel("Title").fill("Starting soon");
   await page.getByLabel(/^Date/).fill(start.date);
@@ -118,7 +120,7 @@ test("a Lecturer starts a class with the room instructions, then ends it", async
   await page.getByLabel("Google Meet link (optional)").fill("https://meet.google.com/xyz-abcd-efg");
   await page.getByRole("button", { name: "Schedule", exact: true }).click();
 
-  const card = page.getByRole("listitem").filter({ hasText: "Starting soon" });
+  const card = page.getByRole("article", { name: "PAS101 Starting soon" });
   await card.getByRole("button", { name: "Start class" }).click();
   await expect(card.getByText("The class has started.")).toBeVisible();
   await expect(card.getByText(/Open this on the room computer, signed in as you/)).toBeVisible();
@@ -128,7 +130,8 @@ test("a Lecturer starts a class with the room instructions, then ends it", async
     "https://meet.google.com/xyz-abcd-efg",
   );
   await card.getByRole("button", { name: "End class" }).click();
-  await expect(card).toContainText("Ended");
+  // An ended class moves to Earlier.
+  await expect(page.getByRole("listitem", { name: "Starting soon" })).toContainText("Ended");
 });
 
 test("a Lecturer adds a YouTube recording to the course", async ({ page }) => {
@@ -136,9 +139,8 @@ test("a Lecturer adds a YouTube recording to the course", async ({ page }) => {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await openArea(page, "Teaching");
-  await page.getByRole("button", { name: "Recordings" }).click();
-  await expect(page.getByText("No recordings yet.")).toBeVisible();
+  await openTeaching(page, "Pastoral Care", "Recordings");
+  await expect(page.getByText("No recordings yet")).toBeVisible();
 
   const link = page.getByLabel(/^YouTube link/);
   await link.fill("https://vimeo.com/12345");
@@ -151,7 +153,8 @@ test("a Lecturer adds a YouTube recording to the course", async ({ page }) => {
     .last()
     .fill("Week 1: Caring for the flock");
   await page.getByRole("button", { name: "Add recording" }).click();
-  await expect(page.getByText("Week 1: Caring for the flock (published)")).toBeVisible();
-  await page.getByRole("button", { name: "Hide", exact: true }).click();
-  await expect(page.getByText("Week 1: Caring for the flock (unpublished)")).toBeVisible();
+  const recording = page.getByRole("listitem", { name: "Week 1: Caring for the flock" });
+  await expect(recording).toContainText("Published");
+  await recording.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(recording).toContainText("Hidden");
 });

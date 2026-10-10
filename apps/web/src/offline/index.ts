@@ -4,7 +4,9 @@ import { reportNetworkSuccess, requestsFailing, subscribeNetwork } from "../api/
 import {
   memoryStore,
   OfflineQueue,
+  sendStep,
   type FlushResult,
+  type Request,
   type QueuedStep,
   type QueuedWork,
   type QueueStore,
@@ -81,14 +83,11 @@ function availableStore(): QueueStore {
   };
 }
 
-const send = async (step: QueuedStep, key: string) => {
-  // The endpoint's type is chosen at runtime here; every queued path is a JSON write.
-  await api(step.method, step.path as never, {
-    ...(step.params ? { params: step.params } : {}),
-    ...(step.body === undefined ? {} : { body: step.body }),
-    headers: { "idempotency-key": key },
-  });
-};
+// The endpoint's type is chosen at runtime here; every queued path is a JSON call.
+const apiRequest: Request = (method, path, init) =>
+  api(method as "GET", path as never, init as never);
+
+const send = (step: QueuedStep, key: string) => sendStep(step, key, apiRequest);
 
 /** The app's one queue of offline work (§9.20). */
 export const offlineQueue = new OfflineQueue(availableStore(), send);
@@ -132,15 +131,19 @@ export async function queueWork(work: QueuedWork): Promise<void> {
   void flushAndRetry();
 }
 
-/** A screen's queued work: how much is waiting, and the outcome of the last send. */
-export function useQueued(group: string): { count: number; last: FlushResult | null } {
-  const [count, setCount] = useState(0);
+/** A screen's queued work: how much is waiting, what it is, and the outcome of the last send. */
+export function useQueued(group: string): {
+  count: number;
+  items: QueuedWork[];
+  last: FlushResult | null;
+} {
+  const [items, setItems] = useState<QueuedWork[]>([]);
   const [last, setLast] = useState<FlushResult | null>(null);
   useEffect(() => {
     let live = true;
     const refresh = (result: FlushResult | null) => {
-      void offlineQueue.count(group).then((n) => {
-        if (live) setCount(n);
+      void offlineQueue.list(group).then((waiting) => {
+        if (live) setItems(waiting);
       });
       if (result && live) {
         const mine = {
@@ -157,5 +160,5 @@ export function useQueued(group: string): { count: number; last: FlushResult | n
       unsubscribe();
     };
   }, [group]);
-  return { count, last };
+  return { count: items.length, items, last };
 }

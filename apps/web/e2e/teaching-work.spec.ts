@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, openCourse, signOut } from "./nav";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -28,8 +28,7 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   page,
 }) => {
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("button", { name: "Assignments" }).click();
+  await openTeaching(page, "Pastoral Care", "Work");
   const form = page.locator("form", { hasText: "New assignment" });
   await form.getByLabel("Title").fill("Essay on John 1");
   await form.getByLabel("Instructions (Markdown)").fill("Write **300 words** on the Word.");
@@ -73,8 +72,7 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await signOut(page);
 
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("button", { name: "Assignments" }).click();
+  await openTeaching(page, "Pastoral Care", "Work");
   await page
     .getByRole("listitem", { name: "Essay on John 1" })
     .getByRole("link", { name: "Grade submissions" })

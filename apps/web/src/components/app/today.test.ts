@@ -61,11 +61,35 @@ describe("planToday (handoff §11.2: now first)", () => {
       "LECTURER",
     );
     const plan = planToday([ended, teaching], NOW, LAGOS);
-    expect(plan).toEqual({ happeningNow: [], laterToday: [], next: null });
+    expect(plan).toEqual({ happeningNow: [], laterToday: [], next: null, comingUp: [] });
   });
 
   it("keeps a class cancelled later today in view, so nobody waits for it", () => {
     const cancelled = meeting("2026-10-13T11:00:00Z", "2026-10-13T12:00:00Z", "CANCELLED");
     expect(planToday([cancelled], NOW, LAGOS).laterToday).toEqual([cancelled]);
+  });
+});
+
+describe("planToday for a Lecturer (handoff §11.7)", () => {
+  it("plans the classes they teach, with everything after today under comingUp", () => {
+    const open = meeting("2026-10-13T08:15:00Z", "2026-10-13T09:15:00Z", "OPEN", "LECTURER");
+    const later = meeting("2026-10-13T13:00:00Z", "2026-10-13T14:00:00Z", "SCHEDULED", "LECTURER");
+    const friday = meeting("2026-10-16T08:00:00Z", "2026-10-16T09:00:00Z", "SCHEDULED", "LECTURER");
+    const thursday = meeting(
+      "2026-10-15T08:00:00Z",
+      "2026-10-15T09:00:00Z",
+      "SCHEDULED",
+      "LECTURER",
+    );
+    const attending = meeting("2026-10-13T10:00:00Z", "2026-10-13T11:00:00Z");
+    const plan = planToday([friday, attending, later, open, thursday], NOW, LAGOS, "LECTURER");
+    expect(plan.happeningNow).toEqual([open]);
+    expect(plan.laterToday).toEqual([later]);
+    expect(plan.comingUp).toEqual([thursday, friday]);
+  });
+
+  it("lists later days under comingUp for a student too", () => {
+    const tomorrow = meeting("2026-10-14T08:00:00Z", "2026-10-14T09:00:00Z");
+    expect(planToday([tomorrow], NOW, LAGOS).comingUp).toEqual([tomorrow]);
   });
 });

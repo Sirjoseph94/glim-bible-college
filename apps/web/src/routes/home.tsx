@@ -11,7 +11,8 @@ import { Time } from "../components/time";
 import { myScheduleQuery, UpcomingMeetings } from "../components/meetings";
 import { Badge } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
-import { Button } from "../components/ui/button";
+import { Button, buttonClass } from "../components/ui/button";
+import { LecturerMeetingActions } from "../components/teaching/class-meetings";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 
@@ -139,11 +140,83 @@ function StudentToday({ me }: { me: Me }) {
   );
 }
 
+/**
+ * A Lecturer's Today (docs/ui-design-handoff.md §11.7, decision UI-Q6): the class to start now,
+ * the rest of today, then what's coming up, each with its actions. "Needs your attention" and
+ * the Meet lobby count wait on data the API doesn't return yet (.scratch/ui-overhaul/issues/02).
+ */
+function LecturerToday({ me }: { me: Me }) {
+  const schedule = useQuery({ ...myScheduleQuery, refetchInterval: 30_000 });
+  const plan = planToday(schedule.data?.items ?? [], new Date(), me.user.timezone, "LECTURER");
+  const started = plan.happeningNow.length > 0;
+  const section = (title: string, items: ScheduledMeeting[]) =>
+    items.length === 0 ? null : (
+      <section className="space-y-3">
+        <h2 className="text-heading">{title}</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {items.map((m) => (
+            <ClassMeetingCard
+              key={m.id}
+              meeting={m}
+              actions={<LecturerMeetingActions meeting={m} />}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  return (
+    <div className="space-y-5">
+      {me.user.googleLinked ? null : (
+        <Banner
+          tone="warning"
+          title="Link your Google account"
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link to="/profile">Link Google account</Link>
+            </Button>
+          }
+        >
+          Link your Google account so you can co-host your classes.
+        </Banner>
+      )}
+      <h1 className="text-greeting">Welcome, {me.user.displayName}</h1>
+      {schedule.isPending ? (
+        <SkeletonGroup label="Loading your classes">
+          <Skeleton className="h-32" />
+        </SkeletonGroup>
+      ) : schedule.isError ? (
+        <LoadFailed what="your classes" onRetry={() => void schedule.refetch()} />
+      ) : (
+        <>
+          {section("Happening now", plan.happeningNow)}
+          {section("Later today", plan.laterToday)}
+          {!started && plan.laterToday.length === 0 ? (
+            <EmptyState icon="calendar" title="No classes today">
+              {plan.next ? (
+                <>
+                  Your next class is <Time value={plan.next.scheduledStart} />.
+                </>
+              ) : (
+                "No Class Meetings in the next two weeks."
+              )}
+            </EmptyState>
+          ) : null}
+          {section("Coming up", plan.comingUp)}
+          <Link to="/teach" className={buttonClass({ variant: "secondary" })}>
+            All your courses
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function HomePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   if (me === null) return null;
   if (me.roles.isStudent) return <StudentToday me={me} />;
-  // Lecturers and staff keep this home until their screens move (WP-UI-09, WP-UI-10).
+  if (me.roles.isLecturer) return <LecturerToday me={me} />;
+  // Staff keep this home until their screens move (WP-UI-10).
   return (
     <section className="space-y-2">
       <h1 className="text-title">Welcome, {me.user.displayName}</h1>

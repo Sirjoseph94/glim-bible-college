@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, signOut } from "./nav";
+import { openArea, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -21,8 +21,8 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("the Registrar computes, approves and publishes semester results", async ({ page }) => {
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("link", { name: "Results" }).click();
+  await openTeaching(page, "Pastoral Care", "Gradebook");
+  await page.getByRole("link", { name: "Finalize results" }).click();
   await page.getByRole("button", { name: "Finalize results" }).click();
   await page.getByRole("button", { name: "Finalize now" }).click();
   await expect(page.getByText("2 of 2 results finalized.", { exact: false })).toBeVisible();

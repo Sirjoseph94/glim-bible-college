@@ -1,244 +1,300 @@
-import type { attendance, MeetingAttendance, RollCall, RollCallMark } from "@glim/contracts";
-import { Time } from "../components/time";
+import type {
+  attendance,
+  ClassMeeting,
+  meetings,
+  MeetingAttendance,
+  RollCall,
+  RollCallMark,
+} from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "@tanstack/react-router";
+import { useEffect, useId, useMemo, useRef, useState, type SubmitEvent } from "react";
 import { api, ApiError } from "../api/client";
-import { Alert, formText } from "../components/form";
+import { describeError, type ErrorCopy } from "../api/error-copy";
+import { PageHeader } from "../components/app/page-header";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { useDetailBar } from "../components/app/shell-parts";
+import { AttendanceRow } from "../components/teaching/attendance-row";
+import { Time } from "../components/time";
+import { Badge, type BadgeStatus, type Tone } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Checkbox, Radio } from "../components/ui/choice";
+import { Sheet } from "../components/ui/dialog";
+import { TextField } from "../components/ui/field";
+import { IconButton } from "../components/ui/icon-button";
+import { OfflineBanner, QueuedPill, useOnline } from "../components/ui/offline";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
+import { cn } from "../design/cn";
+import { queueWork, useQueued, type QueuedWork } from "../offline";
 
 type Mark = Omit<RollCallMark, "studentId">;
-type Status = "idle" | "saving" | "saved" | "retry" | "error";
 
-const RETRY_MS = 4000;
-const storageKey = (meetingId: string) => `glim:roll-call:${meetingId}`;
+/** Taps are gathered this long and sent as one batch. */
+const BATCH_MS = 400;
 
-/** Unsent marks survive a reload (and a dead phone battery) in local storage. */
-function loadPending(meetingId: string): Record<string, Mark> {
+const rollCallPath = "/class-meetings/:id/roll-call";
+
+function useMeeting(meetingId: string) {
+  return useQuery({
+    queryKey: ["class-meeting", meetingId],
+    queryFn: ({ signal }) =>
+      api<typeof meetings.getClassMeeting>("GET", "/class-meetings/:id", {
+        params: { id: meetingId },
+        signal,
+      }),
+  });
+}
+
+/** Back to the course's Class Meetings, with the course code in the bar (§9.10). */
+function useBackToCourse(meeting: ClassMeeting | undefined) {
+  useDetailBar(
+    meeting
+      ? {
+          back: {
+            to: "/teach/$offeringId",
+            params: { offeringId: meeting.courseOfferingId },
+            search: { tab: "live" },
+            label: "Class Meetings",
+          },
+          code: meeting.courseCode,
+        }
+      : { back: { to: "/teach", label: "Teaching" } },
+  );
+}
+
+/** "Kings of Judah, part 2 · Mon 12 Oct, 10:00" under a page's title. */
+function MeetingMeta({ meeting }: { meeting: ClassMeeting | undefined }) {
+  if (meeting === undefined) return null;
+  return (
+    <>
+      {meeting.title} · <Time value={meeting.scheduledStart} />
+    </>
+  );
+}
+
+/**
+ * Marks the previous roll-call page left unsent in local storage: taken over once, so they go
+ * out through the queue. (Remove after every phone has opened roll call since; WP-UI-12.)
+ */
+function takeLegacyMarks(meetingId: string): Record<string, Mark> {
+  const key = `glim:roll-call:${meetingId}`;
   try {
-    const raw = window.localStorage.getItem(storageKey(meetingId));
+    const raw = window.localStorage.getItem(key);
+    window.localStorage.removeItem(key);
     return raw === null ? {} : (JSON.parse(raw) as Record<string, Mark>);
   } catch {
     return {};
   }
 }
 
-function savePending(meetingId: string, pending: Record<string, Mark>): void {
-  try {
-    if (Object.keys(pending).length === 0) window.localStorage.removeItem(storageKey(meetingId));
-    else window.localStorage.setItem(storageKey(meetingId), JSON.stringify(pending));
-  } catch {
-    // Private mode or full storage: marks still go out from memory.
-  }
+/** The marks in queued roll-call batches, oldest first, so the latest tap wins. */
+function queuedMarks(items: QueuedWork[]): Record<string, Mark> {
+  const marks: Record<string, Mark> = {};
+  for (const work of items)
+    for (const step of work.steps)
+      for (const { studentId, ...mark } of (step.body as { marks: RollCallMark[] }).marks)
+        marks[studentId] = mark;
+  return marks;
 }
 
 const same = (a: Mark | null | undefined, b: Mark | null | undefined) =>
   a?.present === b?.present && a?.late === b?.late && a?.mode === b?.mode;
 
-const STATUS_TEXT: Record<Status, string> = {
-  idle: "",
-  saving: "Saving…",
-  saved: "Saved",
-  retry: "Offline — will retry",
-  error: "",
-};
+const CHOICES = [
+  ["IN_PERSON", "In room"],
+  ["ONLINE", "Online"],
+  ["ABSENT", "Absent"],
+] as const;
 
 /**
- * Roll call on a phone (TRD §12.3, §18.4): enrolled students, on-campus first, with photos.
- * Each tap is queued locally and sent in batches with `If-Match`; on a flaky connection the
- * queue is kept and retried, and the header says "Saved" or "will retry".
+ * Roll call on a phone (TRD §12.3, §18.4; decision UI-Q4, composed from §9.18 and §9.20):
+ * enrolled students, on-campus first, with photos. Taps are gathered into batches and go through
+ * the offline queue, so marks made with no signal are kept on the phone and sent on reconnect,
+ * on top of whatever another device saved meanwhile.
  */
 export function RollCallPage() {
   const { meetingId } = useParams({ from: "/teach/meetings/$meetingId/roll-call" });
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => ["roll-call", meetingId], [meetingId]);
+  const meeting = useMeeting(meetingId);
+  useBackToCourse(meeting.data);
   const rollCall = useQuery({
     queryKey,
     queryFn: ({ signal }) =>
-      api<typeof attendance.getRollCall>("GET", "/class-meetings/:id/roll-call", {
+      api<typeof attendance.getRollCall>("GET", rollCallPath, {
         params: { id: meetingId },
         signal,
       }),
   });
-  const [pending, setPending] = useState<Record<string, Mark>>(() => loadPending(meetingId));
-  const [status, setStatus] = useState<Status>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const sending = useRef(false);
-  const pendingRef = useRef(pending);
-  pendingRef.current = pending;
-  const retryTimer = useRef<number | null>(null);
+  const online = useOnline();
+  const group = `roll-call:${meetingId}`;
+  const queued = useQueued(group);
+  const [local, setLocal] = useState<Record<string, Mark>>(() => takeLegacyMarks(meetingId));
+  const [everSaved, setEverSaved] = useState(false);
+  const [refused, setRefused] = useState<ErrorCopy | null>(null);
+  const localRef = useRef(local);
+  localRef.current = local;
+  const version = useRef<number | null>(null);
+  version.current = rollCall.data?.version ?? version.current;
+  const loaded = rollCall.data !== undefined;
 
+  // Gather taps for a moment, then hand them to the queue as one batch.
   useEffect(() => {
-    savePending(meetingId, pending);
-  }, [meetingId, pending]);
-
-  const flush = useCallback(async () => {
-    const view = queryClient.getQueryData<RollCall>(queryKey);
-    if (sending.current || view === undefined) return;
-    const batch = Object.entries(pendingRef.current);
-    if (batch.length === 0) return;
-    sending.current = true;
-    setStatus("saving");
-    try {
-      const saved = await api<typeof attendance.putRollCall>(
-        "PUT",
-        "/class-meetings/:id/roll-call",
-        {
-          params: { id: meetingId },
-          headers: { "if-match": `"${String(view.version)}"` },
-          body: { marks: batch.map(([studentId, mark]) => ({ studentId, ...mark })) },
-        },
-      );
-      queryClient.setQueryData(queryKey, saved);
-      // Keep anything tapped while this batch was in flight.
-      setPending((current) =>
-        Object.fromEntries(
-          Object.entries(current).filter(
-            ([studentId, mark]) =>
-              !batch.some(([id, sent]) => id === studentId && same(mark, sent)),
+    if (Object.keys(local).length === 0 || !loaded) return;
+    const timer = window.setTimeout(() => {
+      const batch = localRef.current;
+      void queueWork({
+        key: crypto.randomUUID(),
+        group,
+        steps: [
+          {
+            method: "PUT",
+            path: rollCallPath,
+            params: { id: meetingId },
+            body: {
+              marks: Object.entries(batch).map(([studentId, mark]) => ({ studentId, ...mark })),
+            },
+            ifMatch: { version: version.current ?? 0, refreshFrom: rollCallPath },
+          },
+        ],
+      }).then(() => {
+        // Keep anything tapped again while the batch was being stored.
+        setLocal((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(([id, mark]) => !same(mark, batch[id])),
           ),
-        ),
-      );
-      setStatus("saved");
-      setError(null);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 412) {
-        // Someone else saved: take their version and send ours again.
-        await queryClient.invalidateQueries({ queryKey });
-        setStatus("retry");
-        retryTimer.current = window.setTimeout(() => void flush(), 200);
-      } else if (e instanceof ApiError) {
-        setStatus("error");
-        setError(e.message);
-      } else {
-        setStatus("retry");
-        retryTimer.current = window.setTimeout(() => void flush(), RETRY_MS);
-      }
-    } finally {
-      sending.current = false;
-    }
-  }, [meetingId, queryClient, queryKey]);
-
-  // Send whenever there's something queued; retry when the connection comes back.
-  useEffect(() => {
-    if (Object.keys(pending).length === 0 || rollCall.data === undefined) return;
-    const timer = window.setTimeout(() => void flush(), 400);
+        );
+      });
+    }, BATCH_MS);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [pending, rollCall.data, flush]);
+  }, [local, loaded, group, meetingId]);
+
+  // After a send, show the server's marks; a refused batch is said once.
   useEffect(() => {
-    const online = () => void flush();
-    window.addEventListener("online", online);
-    return () => {
-      window.removeEventListener("online", online);
-      if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
-    };
-  }, [flush]);
+    if (queued.last === null) return;
+    if (queued.last.sent.length > 0) setEverSaved(true);
+    const rejected = queued.last.rejected[0];
+    setRefused(rejected ? describeError(rejected.error) : null);
+    void queryClient.invalidateQueries({ queryKey });
+  }, [queued.last, queryClient, queryKey]);
 
+  if (rollCall.isPending)
+    return (
+      <SkeletonGroup label="Loading the roll call">
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-60" />
+      </SkeletonGroup>
+    );
+  if (rollCall.isError)
+    return isNotAvailable(rollCall.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="the roll call" onRetry={() => void rollCall.refetch()} />
+    );
+  const view: RollCall = rollCall.data;
+  const waiting = { ...queuedMarks(queued.items), ...local };
+  const shown = (studentId: string, server: Mark | null) => waiting[studentId] ?? server;
+  const waitingCount = Object.keys(waiting).length;
   const mark = (studentId: string, next: Mark) => {
-    setPending((current) => ({ ...current, [studentId]: next }));
+    setRefused(null);
+    setLocal((current) => ({ ...current, [studentId]: next }));
   };
-
-  if (rollCall.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (rollCall.isError) return <Alert tone="error">{rollCall.error.message}</Alert>;
-  const view = rollCall.data;
-  const shown = (studentId: string, server: Mark | null) => pending[studentId] ?? server;
-  const queued = Object.keys(pending).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h1 className="text-title">Roll call</h1>
-        <span
-          role="status"
-          className={status === "retry" ? "text-sm text-amber-800" : "text-sm text-slate-600"}
+      {online ? null : <OfflineBanner />}
+      <PageHeader title="Roll call" meta={<MeetingMeta meeting={meeting.data} />} />
+      {view.open ? null : (
+        <Banner tone="warning" title="Roll call isn't open for this class now">
+          It opens <Time value={view.opensAt} />.
+        </Banner>
+      )}
+      {refused ? (
+        <Banner tone="danger" title="Some marks weren't saved">
+          {refused.title}. {refused.body}
+        </Banner>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="primary"
+          disabled={!view.open}
+          onClick={() => {
+            for (const s of view.students)
+              if (s.studyMode === "ON_CAMPUS") {
+                const current = shown(s.studentId, s.mark);
+                mark(s.studentId, {
+                  present: true,
+                  late: current?.late ?? false,
+                  mode: "IN_PERSON",
+                });
+              }
+          }}
         >
-          {STATUS_TEXT[status]}
-          {queued > 0 && status !== "saving" ? ` (${String(queued)} waiting)` : ""}
+          Mark all on-campus present
+        </Button>
+        <span role="status" aria-label="Marks" className="text-body-sm text-ink-muted">
+          {waitingCount > 0 ? (
+            <QueuedPill count={waitingCount} noun={["mark", "marks"]} />
+          ) : everSaved ? (
+            "Saved"
+          ) : (
+            ""
+          )}
         </span>
       </div>
-      <Link to="/teach" className="text-sm text-brand underline">
-        Back to my offerings
-      </Link>
-      {view.open ? null : <Alert tone="error">Roll call isn't open for this class now.</Alert>}
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <button
-        type="button"
-        disabled={!view.open}
-        className="rounded bg-brand px-3 py-2 text-sm font-medium text-white"
-        onClick={() => {
-          for (const s of view.students)
-            if (s.studyMode === "ON_CAMPUS") {
-              const current = shown(s.studentId, s.mark);
-              mark(s.studentId, { present: true, late: current?.late ?? false, mode: "IN_PERSON" });
-            }
-        }}
-      >
-        Mark all on-campus present
-      </button>
-      <ul className="divide-y divide-slate-200 rounded border border-slate-200 bg-white">
+      <Card list role="list">
         {view.students.map((s) => {
           const current = shown(s.studentId, s.mark);
-          const choose = (choice: "IN_PERSON" | "ONLINE" | "ABSENT") => {
-            mark(
-              s.studentId,
-              choice === "ABSENT"
-                ? { present: false, late: false, mode: current?.mode ?? "IN_PERSON" }
-                : { present: true, late: current?.late ?? false, mode: choice },
-            );
-          };
-          const on = (choice: "IN_PERSON" | "ONLINE" | "ABSENT") =>
+          const on = (choice: (typeof CHOICES)[number][0]) =>
             choice === "ABSENT"
               ? current?.present === false
               : current?.present === true && current.mode === choice;
           return (
-            <li key={s.studentId} aria-label={s.name} className="space-y-2 p-3">
-              <div className="flex items-center gap-3">
-                {s.photoUrl ? (
-                  <img
-                    src={s.photoUrl}
-                    alt=""
-                    className="h-14 w-11 rounded object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="h-14 w-11 rounded bg-slate-200" aria-hidden="true" />
-                )}
-                <div>
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-xs text-slate-600">
-                    {s.matricNumber} · {s.studyMode === "ON_CAMPUS" ? "On campus" : "Online"}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2" role="group" aria-label={`Mark ${s.name}`}>
-                {(
-                  [
-                    ["IN_PERSON", "In room"],
-                    ["ONLINE", "Online"],
-                    ["ABSENT", "Absent"],
-                  ] as const
-                ).map(([choice, label]) => (
-                  <button
-                    key={choice}
-                    type="button"
-                    disabled={!view.open}
-                    aria-pressed={on(choice)}
-                    className={
-                      on(choice)
-                        ? "rounded bg-slate-800 px-3 py-2 text-sm text-white"
-                        : "rounded border border-slate-300 px-3 py-2 text-sm"
-                    }
-                    onClick={() => {
-                      choose(choice);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <label className="flex items-center gap-1 px-2 text-sm">
-                  <input
-                    type="checkbox"
+            <AttendanceRow
+              key={s.studentId}
+              name={s.name}
+              photoUrl={s.photoUrl}
+              meta={`${s.matricNumber} · ${s.studyMode === "ON_CAMPUS" ? "On campus" : "Online"}`}
+              below={
+                <div
+                  role="group"
+                  aria-label={`Mark ${s.name}`}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  {CHOICES.map(([choice, label]) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      disabled={!view.open}
+                      aria-pressed={on(choice)}
+                      className={cn(
+                        "h-control-sm rounded-md border px-3 text-body-sm font-semibold",
+                        "disabled:cursor-not-allowed disabled:opacity-55",
+                        on(choice)
+                          ? choice === "ABSENT"
+                            ? "border-danger bg-danger-soft text-danger"
+                            : "border-brand bg-brand-soft text-brand"
+                          : "border-line-strong bg-surface-raised text-ink",
+                      )}
+                      onClick={() => {
+                        mark(
+                          s.studentId,
+                          choice === "ABSENT"
+                            ? { present: false, late: false, mode: current?.mode ?? "IN_PERSON" }
+                            : { present: true, late: current?.late ?? false, mode: choice },
+                        );
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <Checkbox
+                    label="Late"
+                    className="px-2"
                     disabled={!view.open || current?.present !== true}
                     checked={current?.late === true}
                     onChange={(e) => {
@@ -246,150 +302,219 @@ export function RollCallPage() {
                         mark(s.studentId, { ...current, late: e.currentTarget.checked });
                     }}
                   />
-                  Late
-                </label>
-              </div>
-            </li>
+                </div>
+              }
+            />
           );
         })}
-      </ul>
+      </Card>
     </div>
   );
 }
 
-const RECORD_LABEL: Record<string, string> = {
-  PRESENT: "Present",
-  PARTIAL: "Partly present",
-  ABSENT: "Absent",
-  EXCUSED: "Excused",
+type AttendanceRecord = MeetingAttendance["records"][number];
+type Status = AttendanceRecord["status"];
+
+const STATUS: Record<Status, { badge: BadgeStatus; word: string; tone: Tone }> = {
+  PRESENT: { badge: "present", word: "Present", tone: "success" },
+  PARTIAL: { badge: "partial", word: "Partial", tone: "warning" },
+  ABSENT: { badge: "absent", word: "Absent", tone: "danger" },
+  EXCUSED: { badge: "excused", word: "Excused", tone: "info" },
 };
 
-type AttendanceRecord = MeetingAttendance["records"][number];
+/** §11.8: the ones to look at first. */
+const ORDER: Status[] = ["ABSENT", "PARTIAL", "PRESENT", "EXCUSED"];
+const SUMMARY: Status[] = ["PRESENT", "PARTIAL", "ABSENT", "EXCUSED"];
 
-/** Override a record with a reason, or clear an override (TRD §12.7). */
-function OverrideControl({ meetingId, record }: { meetingId: string; record: AttendanceRecord }) {
+function recordMeta(r: AttendanceRecord): string {
+  return [
+    r.mode === "IN_PERSON" ? "In the room" : r.mode === "ONLINE" ? "Online" : null,
+    r.late ? "late" : null,
+    r.matricNumber,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+interface QueuedOverride {
+  studentId: string;
+  status: Status;
+}
+
+/** Overrides waiting in the queue, by student. */
+function queuedOverrides(items: QueuedWork[]): Record<string, Status> {
+  const out: Record<string, Status> = {};
+  for (const work of items)
+    for (const step of work.steps) {
+      const body = step.body as { status: Status };
+      const studentId = step.params?.studentId;
+      if (studentId !== undefined) out[studentId] = body.status;
+    }
+  return out;
+}
+
+/**
+ * Change one student's attendance (TRD §12.7, §9.18): a status and a reason. With no
+ * connection the change waits on the phone and is sent on reconnect (§10.4).
+ */
+function OverrideSheet({
+  meetingId,
+  record,
+  onClose,
+  onQueued,
+}: {
+  meetingId: string;
+  record: AttendanceRecord | null;
+  onClose: () => void;
+  onQueued: (change: QueuedOverride) => void;
+}) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const formId = useId();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<ErrorCopy | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
   const done = async () => {
     await queryClient.invalidateQueries({ queryKey: ["attendance", meetingId] });
-    setOpen(false);
+    onClose();
   };
   const call = async (action: () => Promise<unknown>) => {
     setBusy(true);
-    setError(null);
+    setProblem(null);
     try {
       await action();
       await done();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "We couldn't reach the server.");
+    } catch (error) {
+      setProblem(describeError(error));
     } finally {
       setBusy(false);
     }
   };
-  if (!open)
-    return (
-      <span className="flex gap-3">
-        <button
-          type="button"
-          className="text-brand underline"
-          onClick={() => {
-            setOpen(true);
-          }}
-        >
-          Change
-        </button>
-        {record.overrideStatus === null ? null : (
-          <button
-            type="button"
-            disabled={busy}
-            className="text-red-700 underline"
-            onClick={() =>
-              void call(() =>
-                api<typeof attendance.clearAttendanceOverride>(
-                  "DELETE",
-                  "/class-meetings/:id/attendance/:studentId/override",
-                  { params: { id: meetingId, studentId: record.studentId } },
-                ),
-              )
-            }
-          >
-            Undo change
-          </button>
-        )}
-      </span>
-    );
-  return (
-    <form
-      className="mt-2 w-full space-y-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        void call(() =>
-          api<typeof attendance.overrideAttendance>(
-            "POST",
-            "/class-meetings/:id/attendance/:studentId/override",
+
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (record === null) return;
+    const form = new FormData(event.currentTarget);
+    const status = form.get("status") as Status;
+    const reason = (form.get("reason") as string).trim();
+    if (reason.length < 5) {
+      setReasonError("Write at least 5 characters.");
+      return;
+    }
+    setReasonError(null);
+    const params = { id: meetingId, studentId: record.studentId };
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api<typeof attendance.overrideAttendance>(
+        "POST",
+        "/class-meetings/:id/attendance/:studentId/override",
+        { params, body: { status, reason } },
+      );
+      await done();
+    } catch (error) {
+      if (error instanceof ApiError) setProblem(describeError(error));
+      else {
+        // No connection: keep the change on the phone and send it on reconnect.
+        await queueWork({
+          key: crypto.randomUUID(),
+          group: `attendance:${meetingId}`,
+          steps: [
             {
-              params: { id: meetingId, studentId: record.studentId },
-              body: {
-                status: formText(form, "status") as AttendanceRecord["status"],
-                reason: formText(form, "reason"),
-              },
+              method: "POST",
+              path: "/class-meetings/:id/attendance/:studentId/override",
+              params,
+              body: { status, reason },
             },
-          ),
-        );
+          ],
+        });
+        onQueued({ studentId: record.studentId, status });
+        onClose();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet
+      open={record !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setProblem(null);
+          setReasonError(null);
+          onClose();
+        }
       }}
+      title={record ? `Change attendance for ${record.name}` : "Change attendance"}
+      description="Your change stays even when attendance is worked out again."
+      footer={
+        <>
+          <Button type="submit" form={formId} variant="primary" block loading={busy}>
+            Save change
+          </Button>
+          {record?.overrideStatus != null ? (
+            <Button
+              variant="secondary"
+              block
+              disabled={busy}
+              onClick={() =>
+                void call(() =>
+                  api<typeof attendance.clearAttendanceOverride>(
+                    "DELETE",
+                    "/class-meetings/:id/attendance/:studentId/override",
+                    { params: { id: meetingId, studentId: record.studentId } },
+                  ),
+                )
+              }
+            >
+              Undo change
+            </Button>
+          ) : null}
+        </>
+      }
     >
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <label className="block text-sm">
-        <span className="font-medium">Status</span>
-        <select
-          name="status"
-          defaultValue="EXCUSED"
-          className="block w-full rounded border border-slate-300 bg-white px-2 py-2"
-        >
-          {Object.entries(RECORD_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block text-sm">
-        <span className="font-medium">Reason (at least 5 characters)</span>
-        <input
-          name="reason"
-          required
-          minLength={5}
-          className="block w-full rounded border border-slate-300 px-2 py-2"
-        />
-      </label>
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded bg-brand px-3 py-1.5 text-sm text-white"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          className="text-sm underline"
-          onClick={() => {
-            setOpen(false);
-          }}
-        >
-          Back
-        </button>
-      </div>
-    </form>
+      {record ? (
+        <form id={formId} onSubmit={(event) => void submit(event)} className="space-y-4">
+          {problem ? (
+            <Banner tone="danger" title={problem.title}>
+              {problem.body}
+            </Banner>
+          ) : null}
+          <fieldset>
+            <legend className="text-label">Status</legend>
+            {(Object.keys(STATUS) as Status[]).map((status) => (
+              <Radio
+                key={status}
+                name="status"
+                value={status}
+                label={STATUS[status].word}
+                defaultChecked={status === (record.overrideStatus ?? "EXCUSED")}
+              />
+            ))}
+          </fieldset>
+          <TextField
+            name="reason"
+            label="Reason"
+            hint="At least 5 characters. Kept with the record."
+            required
+            maxLength={500}
+            error={reasonError ?? undefined}
+          />
+        </form>
+      ) : null}
+    </Sheet>
   );
 }
 
-/** A Class Meeting's attendance records, for its Lecturers (TRD §12.5). */
+/**
+ * A Class Meeting's attendance, for its Lecturers (TRD §12.5; handoff §11.8): the counts, then
+ * every student, the ones to look at first. ("Participants we couldn't match" and the policy's
+ * thresholds wait on the API: .scratch/ui-overhaul/issues/02.)
+ */
 export function MeetingAttendancePage() {
   const { meetingId } = useParams({ from: "/teach/meetings/$meetingId/attendance" });
+  const meeting = useMeeting(meetingId);
+  useBackToCourse(meeting.data);
   const records = useQuery({
     queryKey: ["attendance", meetingId],
     queryFn: ({ signal }) =>
@@ -398,25 +523,52 @@ export function MeetingAttendancePage() {
         signal,
       }),
   });
-  if (records.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (records.isError) return <Alert tone="error">{records.error.message}</Alert>;
+  const online = useOnline();
+  const group = `attendance:${meetingId}`;
+  const queued = useQueued(group);
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<AttendanceRecord | null>(null);
+  const [lastQueued, setLastQueued] = useState<QueuedOverride | null>(null);
+  const [refused, setRefused] = useState<ErrorCopy | null>(null);
+
+  useEffect(() => {
+    if (queued.last === null) return;
+    const rejected = queued.last.rejected[0];
+    setRefused(rejected ? describeError(rejected.error) : null);
+    void queryClient.invalidateQueries({ queryKey: ["attendance", meetingId] });
+  }, [queued.last, queryClient, meetingId]);
+
+  if (records.isPending)
+    return (
+      <SkeletonGroup label="Loading attendance">
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-60" />
+      </SkeletonGroup>
+    );
+  if (records.isError)
+    return isNotAvailable(records.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="the attendance" onRetry={() => void records.refetch()} />
+    );
   const view = records.data;
+  const pending = queuedOverrides(queued.items);
+  const statusOf = (r: AttendanceRecord): Status => pending[r.studentId] ?? r.status;
+  const sorted = [...view.records].sort(
+    (a, b) =>
+      ORDER.indexOf(statusOf(a)) - ORDER.indexOf(statusOf(b)) || a.name.localeCompare(b.name),
+  );
+  // "21 Present · 3 Partial · 2 Absent · 1 Excused": every record counted once (§11.8).
+  const counts = SUMMARY.map((status) => ({
+    status,
+    count: view.records.filter((r) => statusOf(r) === status).length,
+  }));
+
   return (
     <div className="space-y-4">
-      <h1 className="text-title">Attendance</h1>
-      <div className="flex gap-4 text-sm">
-        <Link to="/teach" className="text-brand underline">
-          Back to my offerings
-        </Link>
-        <Link
-          to="/teach/meetings/$meetingId/roll-call"
-          params={{ meetingId }}
-          className="text-brand underline"
-        >
-          Roll call
-        </Link>
-      </div>
-      <p className="text-sm text-slate-700">
+      {online ? null : <OfflineBanner />}
+      <PageHeader title="Attendance" meta={<MeetingMeta meeting={meeting.data} />} />
+      <p className="text-body-sm text-ink">
         {view.attendanceState === "FINAL" ? (
           <>
             Final. Roll call can still change it until <Time value={view.lockedAt} />.
@@ -427,26 +579,68 @@ export function MeetingAttendancePage() {
           "Provisional: it becomes final shortly after the class ends."
         )}
       </p>
+      {refused ? (
+        <Banner tone="danger" title="A change wasn't saved">
+          {refused.title}. {refused.body}
+        </Banner>
+      ) : null}
       {view.records.length === 0 ? (
-        <p className="text-slate-600">No attendance yet. Take roll call to record it.</p>
+        <p className="text-body-sm text-ink-muted">
+          No attendance yet. Take roll call to record it.
+        </p>
       ) : (
-        <ul className="divide-y divide-slate-200 rounded border border-slate-200 bg-white text-sm">
-          {view.records.map((r) => (
-            <li key={r.studentId} className="flex flex-wrap justify-between gap-2 p-3">
-              <span>
-                {r.name} <span className="text-slate-500">{r.matricNumber}</span>
-              </span>
-              <span>
-                {RECORD_LABEL[r.status] ?? r.status}
-                {r.mode === "IN_PERSON" ? " in the room" : r.mode === "ONLINE" ? " online" : ""}
-                {r.late ? ", late" : ""}
-                {r.overrideStatus === null ? "" : " (changed by staff)"}
-              </span>
-              <OverrideControl meetingId={meetingId} record={r} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul aria-label="Summary" className="flex flex-wrap gap-2">
+            {counts.map(({ status, count }) => (
+              <li key={status}>
+                <Badge tone={STATUS[status].tone}>
+                  {count} {STATUS[status].word}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+          <QueuedPill count={queued.count} noun={["change", "changes"]} />
+          {lastQueued && queued.count > 0 ? (
+            <p className="sr-only" role="status">
+              Change saved on this phone. It will send when you reconnect.
+            </p>
+          ) : null}
+          <Card list role="list">
+            {sorted.map((r) => {
+              const status = statusOf(r);
+              return (
+                <AttendanceRow
+                  key={r.studentId}
+                  name={r.name}
+                  meta={pending[r.studentId] ? `${recordMeta(r)} · waiting to send` : recordMeta(r)}
+                  status={STATUS[status].badge}
+                  edited={r.overrideStatus !== null || pending[r.studentId] !== undefined}
+                  action={
+                    <IconButton
+                      icon="chevronRight"
+                      label={`Change attendance for ${r.name}`}
+                      onClick={() => {
+                        setEditing(r);
+                      }}
+                    />
+                  }
+                />
+              );
+            })}
+          </Card>
+          <p className="text-body-sm text-ink-muted">
+            Tap a student to change their status; a reason is required.
+          </p>
+        </>
       )}
+      <OverrideSheet
+        meetingId={meetingId}
+        record={editing}
+        onClose={() => {
+          setEditing(null);
+        }}
+        onQueued={setLastQueued}
+      />
     </div>
   );
 }

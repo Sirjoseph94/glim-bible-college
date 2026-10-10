@@ -9,6 +9,8 @@ export interface TodayPlan {
   laterToday: ScheduledMeeting[];
   /** When nothing is on today: the next class on a later day. */
   next: ScheduledMeeting | null;
+  /** Classes on later days, in time order (a Lecturer's "Coming up", §11.7). */
+  comingUp: ScheduledMeeting[];
 }
 
 /** The calendar day of an instant in a timezone, as YYYY-MM-DD. */
@@ -22,13 +24,19 @@ function dayIn(instant: Date, zone: string): string {
 }
 
 /**
- * A student's day, most urgent first (handoff §1.3 "Now first", §11.2): classes to join now,
- * then the rest of today, and otherwise the next class. "Today" is the viewer's own day.
+ * The day, most urgent first (handoff §1.3 "Now first", §11.2, §11.7): classes open or live now,
+ * then the rest of today, and otherwise the next class. `as` picks the classes the person
+ * attends (a student) or teaches (a Lecturer). "Today" is the viewer's own day.
  */
-export function planToday(meetings: ScheduledMeeting[], now: Date, zone: string): TodayPlan {
+export function planToday(
+  meetings: ScheduledMeeting[],
+  now: Date,
+  zone: string,
+  as: ScheduledMeeting["as"] = "STUDENT",
+): TodayPlan {
   const today = dayIn(now, zone);
   const mine = meetings
-    .filter((m) => m.as === "STUDENT")
+    .filter((m) => m.as === as)
     .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
   const happeningNow = mine.filter((m) => m.state === "OPEN" || m.state === "LIVE");
   const laterToday = mine.filter(
@@ -37,11 +45,9 @@ export function planToday(meetings: ScheduledMeeting[], now: Date, zone: string)
       dayIn(new Date(m.scheduledStart), zone) === today &&
       new Date(m.scheduledEnd) > now,
   );
-  const next =
-    happeningNow.length === 0 && laterToday.length === 0
-      ? (mine.find(
-          (m) => m.state === "SCHEDULED" && dayIn(new Date(m.scheduledStart), zone) > today,
-        ) ?? null)
-      : null;
-  return { happeningNow, laterToday, next };
+  const comingUp = mine.filter(
+    (m) => m.state === "SCHEDULED" && dayIn(new Date(m.scheduledStart), zone) > today,
+  );
+  const next = happeningNow.length === 0 && laterToday.length === 0 ? (comingUp[0] ?? null) : null;
+  return { happeningNow, laterToday, next, comingUp };
 }

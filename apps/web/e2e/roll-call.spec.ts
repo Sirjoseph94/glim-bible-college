@@ -1,6 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
-import { openArea } from "./nav";
+import { openTeaching } from "./nav";
 
 const EMAIL = "e2e-rollcall@glim.test";
 const PASSWORD = "roll call passphrase 2026";
@@ -33,7 +33,7 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();
-  await openArea(page, "Teaching");
+  await openTeaching(page, "Pastoral Care", "Live");
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel("Title").fill("Roll call practice");
   await page.getByLabel(/^Date/).fill(start.date);
@@ -41,32 +41,33 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
   await page.getByLabel("Ends").fill(end.time);
   await page.getByRole("button", { name: "Schedule", exact: true }).click();
   await page
-    .getByRole("listitem")
-    .filter({ hasText: "Roll call practice" })
+    .getByRole("article", { name: "PAS101 Roll call practice" })
     .getByRole("link", { name: "Roll call" })
     .click();
 
   // On-campus students come first.
   await expect(page.getByRole("heading", { name: "Roll call" })).toBeVisible();
-  const names = page.getByRole("listitem").locator("div.font-medium");
-  await expect(names).toHaveText(["Ada Campus", "Bola Online"]);
+  await expect(page.getByRole("listitem")).toHaveText([/^Ada Campus/, /^Bola Online/]);
 
   await page.getByRole("button", { name: "Mark all on-campus present" }).click();
-  await expect(page.getByRole("status")).toHaveText("Saved");
+  await expect(page.getByRole("status", { name: "Marks" })).toHaveText("Saved");
   const ada = page.getByRole("group", { name: "Mark Ada Campus" });
   await expect(ada.getByRole("button", { name: "In room" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
 
-  // The Wi-Fi drops: the mark is kept and retried.
+  // The Wi-Fi drops: the marks wait on the phone (§9.20) and go when it's back.
   await context.setOffline(true);
   const bola = page.getByRole("group", { name: "Mark Bola Online" });
   await bola.getByRole("button", { name: "Online" }).click();
   await bola.getByLabel("Late").check();
-  await expect(page.getByRole("status")).toContainText("will retry");
+  await expect(page.getByRole("status", { name: "Marks" })).toHaveText("1 mark waiting to send");
+  await expect(page.getByText("You are offline")).toBeVisible();
   await context.setOffline(false);
-  await expect(page.getByRole("status")).toHaveText("Saved", { timeout: 15_000 });
+  await expect(page.getByRole("status", { name: "Marks" })).toHaveText("Saved", {
+    timeout: 40_000,
+  });
 
   // The marks are on the server.
   await page.reload();
@@ -79,23 +80,28 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
   // The worker recomputes attendance from the roll call.
   await page.goto(page.url().replace(/roll-call$/, "attendance"));
   await expect(page.getByRole("heading", { name: "Attendance" })).toBeVisible();
+  const bolaRow = page.getByRole("listitem", { name: "Bola Online" });
   await expect(async () => {
     await page.reload();
-    await expect(page.getByRole("listitem").filter({ hasText: "Bola Online" })).toContainText(
-      "Present online, late",
-      { timeout: 1000 },
-    );
+    await expect(bolaRow).toContainText("Online · late", { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(page.getByRole("listitem").filter({ hasText: "Ada Campus" })).toContainText(
-    "Present in the room",
-  );
+  await expect(bolaRow).toContainText("Present");
+  const adaRow = page.getByRole("listitem", { name: "Ada Campus" });
+  await expect(adaRow).toContainText("In the room");
+  await expect(adaRow).toContainText("Present");
+  await expect(page.getByRole("list", { name: "Summary" })).toContainText("2 Present");
   await expect(page.getByText(/Provisional/)).toBeVisible();
 
   // Excuse Ada with a reason; the change shows on the record.
-  const adaRow = page.getByRole("listitem").filter({ hasText: "Ada Campus" });
-  await adaRow.getByRole("button", { name: "Change" }).click();
-  await adaRow.getByLabel("Status").selectOption("EXCUSED");
-  await adaRow.getByLabel("Reason (at least 5 characters)").fill("Hospital appointment");
-  await adaRow.getByRole("button", { name: "Save" }).click();
-  await expect(adaRow).toContainText("Excused in the room (changed by staff)");
+  await adaRow.getByRole("button", { name: "Change attendance for Ada Campus" }).click();
+  const sheet = page.getByRole("dialog", { name: "Change attendance for Ada Campus" });
+  await sheet.getByRole("radio", { name: "Excused" }).check();
+  await sheet.getByLabel("Reason").fill("Ill");
+  await sheet.getByRole("button", { name: "Save change" }).click();
+  await expect(sheet.getByText("Write at least 5 characters.")).toBeVisible();
+  await sheet.getByLabel("Reason").fill("Hospital appointment");
+  await sheet.getByRole("button", { name: "Save change" }).click();
+  await expect(adaRow).toContainText("Excused");
+  await expect(adaRow).toContainText("Edited");
+  await expect(page.getByRole("list", { name: "Summary" })).toContainText("1 Excused");
 });

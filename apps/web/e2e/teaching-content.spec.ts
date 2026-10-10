@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, openCourse, signOut } from "./nav";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -18,8 +18,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("a Lecturer shares materials and an announcement with the class", async ({ page }) => {
   await signIn(page, LECTURER);
-  await openArea(page, "Teaching");
-  await page.getByRole("button", { name: "Materials and announcements" }).click();
+  await openTeaching(page, "Pastoral Care", "Overview");
 
   await page.getByLabel("Title").first().fill("Welcome to the course");
   await page.getByLabel("Message (Markdown)").fill("Read **John 1** before *Monday*.");
@@ -29,6 +28,7 @@ test("a Lecturer shares materials and an announcement with the class", async ({ 
     "Read John 1 before Monday.",
   );
 
+  await page.getByRole("tab", { name: "Materials" }).click();
   const add = page.locator("form", { hasText: "Add material" });
   await add.getByRole("radio", { name: "Text" }).check();
   await add.getByLabel("Title").fill("Study questions");
