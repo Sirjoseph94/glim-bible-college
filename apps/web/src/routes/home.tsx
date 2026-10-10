@@ -10,6 +10,7 @@ import { planToday, type ScheduledMeeting } from "../components/app/today";
 import { Time } from "../components/time";
 import { myScheduleQuery } from "../components/meetings";
 import { navItems } from "../components/app/nav";
+import { homeView, useStoredView } from "../components/app/view";
 import { STAFF_ROLE_LABELS } from "../api/users";
 import { cardClass } from "../components/ui/card";
 import { Icon } from "../design/icons";
@@ -272,8 +273,10 @@ function AreasHome({ me }: { me: Me }) {
 
 export function HomePage() {
   const { data: me } = useSuspenseQuery(meQuery);
+  const stored = useStoredView();
   if (me === null) return null;
-  if (me.roles.isStudent) return <StudentToday me={me} />;
-  if (me.roles.isLecturer) return <LecturerToday me={me} />;
+  const view = homeView(me.roles, stored);
+  if (view === "student") return <StudentToday me={me} />;
+  if (view === "lecturer") return <LecturerToday me={me} />;
   return <AreasHome me={me} />;
 }

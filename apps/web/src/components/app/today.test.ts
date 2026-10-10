@@ -1,6 +1,6 @@
 import type { ClassMeeting } from "@glim/contracts";
 import { describe, expect, it } from "vitest";
-import { planToday, type ScheduledMeeting } from "./today";
+import { byDay, planToday, type ScheduledMeeting } from "./today";
 
 let n = 0;
 function meeting(
@@ -91,5 +91,28 @@ describe("planToday for a Lecturer (handoff §11.7)", () => {
   it("lists later days under comingUp for a student too", () => {
     const tomorrow = meeting("2026-10-14T08:00:00Z", "2026-10-14T09:00:00Z");
     expect(planToday([tomorrow], NOW, LAGOS).comingUp).toEqual([tomorrow]);
+  });
+});
+
+describe("byDay (handoff §11.11 Schedule: a week list grouped by day)", () => {
+  it("groups both roles' classes by the viewer's day, in time order", () => {
+    const late = meeting("2026-10-13T22:30:00Z", "2026-10-13T23:30:00Z"); // 23:30 Tue in Lagos
+    const morning = meeting("2026-10-13T08:00:00Z", "2026-10-13T09:00:00Z");
+    const teaching = meeting(
+      "2026-10-14T09:00:00Z",
+      "2026-10-14T10:00:00Z",
+      "SCHEDULED",
+      "LECTURER",
+    );
+    const days = byDay([teaching, late, morning], LAGOS);
+    expect(days.map((d) => [d.day, d.meetings.map((m) => m.id)])).toEqual([
+      ["2026-10-13", [morning.id, late.id]],
+      ["2026-10-14", [teaching.id]],
+    ]);
+  });
+
+  it("puts a class past midnight in the viewer's zone on the next day", () => {
+    const m = meeting("2026-10-13T23:30:00Z", "2026-10-14T00:30:00Z"); // 00:30 Wed in Lagos
+    expect(byDay([m], LAGOS)[0]?.day).toBe("2026-10-14");
   });
 });

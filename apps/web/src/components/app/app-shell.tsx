@@ -12,6 +12,7 @@ import { NotificationDot } from "../ui/notification-dot";
 import { BackLink } from "./back-link";
 import { DetailBarContext, InstitutionName, type DetailBar } from "./shell-parts";
 import { activeItem, navItems, sectionLinks, type NavItem } from "./nav";
+import { isAlternateView, useStoredView } from "./view";
 
 function CourseCode({ code }: { code: string }) {
   return <span className="shrink-0 font-mono text-code text-brand">{code}</span>;
@@ -214,6 +215,8 @@ export function AppShell({
 }) {
   const { pathname } = useLocation();
   const [detail, setDetail] = useState<DetailBar | null>(null);
+  // §6.3: "Lecturer view" in the top bar when a student who teaches chose it in Profile.
+  const alternate = isAlternateView(me.roles, useStoredView());
   const items = navItems(me.roles);
   const current = activeItem(pathname, items);
   const actions = (
@@ -247,7 +250,14 @@ export function AppShell({
                 <>
                   <Link to="/" className="flex min-w-0 items-center gap-2">
                     <Crest size={28} />
-                    <InstitutionName name={institutionName} testId="institution-name" />
+                    <span className="min-w-0">
+                      <InstitutionName name={institutionName} testId="institution-name" />
+                      {alternate ? (
+                        <span className="block text-meta font-semibold text-ink-muted">
+                          Lecturer view
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                   {actions}
                 </>
@@ -265,7 +275,14 @@ export function AppShell({
                     search={detail.back.search}
                   />
                 ) : (
-                  <InstitutionName name={institutionName} />
+                  <span>
+                    <InstitutionName name={institutionName} />
+                    {alternate ? (
+                      <span className="block text-meta font-semibold text-ink-muted">
+                        Lecturer view
+                      </span>
+                    ) : null}
+                  </span>
                 )}
                 {actions}
               </div>

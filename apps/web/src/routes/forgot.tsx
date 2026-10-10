@@ -44,7 +44,7 @@ export function ForgotPage() {
           <SubmitButton busy={busy}>Email me a link</SubmitButton>
         </form>
       )}
-      <p className="mt-4 text-center text-sm">
+      <p className="mt-4 text-center text-body-sm">
         <Link to="/login" className="text-brand underline">
           Back to sign in
         </Link>

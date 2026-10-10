@@ -13,12 +13,23 @@ const none: Roles = {
 const labels = (roles: Roles) => navItems(roles).map((i) => i.label);
 
 describe("navItems (handoff §6.3, decision D-UI-01)", () => {
-  it("gives a student Home, Courses, Results and Profile", () => {
-    expect(labels({ ...none, isStudent: true })).toEqual(["Home", "Courses", "Results", "Profile"]);
+  it("gives a student Home, Courses, Schedule, Results and Profile (§6.3)", () => {
+    expect(labels({ ...none, isStudent: true })).toEqual([
+      "Home",
+      "Courses",
+      "Schedule",
+      "Results",
+      "Profile",
+    ]);
   });
 
-  it("gives a Lecturer Home, Teaching and Profile", () => {
-    expect(labels({ ...none, isLecturer: true })).toEqual(["Home", "Teaching", "Profile"]);
+  it("gives a Lecturer Home, Teaching, Schedule and Profile (§6.3)", () => {
+    expect(labels({ ...none, isLecturer: true })).toEqual([
+      "Home",
+      "Teaching",
+      "Schedule",
+      "Profile",
+    ]);
   });
 
   it("gives a graduate their results, and an applicant their application", () => {
@@ -49,6 +60,7 @@ describe("navItems (handoff §6.3, decision D-UI-01)", () => {
     expect(labels({ ...none, isLecturer: true, staff: ["ACADEMIC_ADMIN", "REGISTRAR"] })).toEqual([
       "Home",
       "Teaching",
+      "Schedule",
       "Academic",
       "Results",
       "Profile",
@@ -70,6 +82,17 @@ describe("activeItem", () => {
 
   it("marks nothing on a page outside every area", () => {
     expect(activeItem("/notifications", admin)).toBeUndefined();
+  });
+
+  it("gives a student who teaches one Schedule, between Teaching and Results", () => {
+    expect(labels({ ...none, isStudent: true, isLecturer: true })).toEqual([
+      "Home",
+      "Courses",
+      "Teaching",
+      "Schedule",
+      "Results",
+      "Profile",
+    ]);
   });
 
   it("puts a student's course pages under Courses and transcripts under Results", () => {

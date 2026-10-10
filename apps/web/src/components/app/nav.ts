@@ -44,9 +44,10 @@ const staff =
 
 /**
  * The main navigation (docs/ui-design-handoff.md §6.3, decisions UI-Q6 and D-UI-01): an area
- * for each role a person holds, in this order, Home first and Profile last. An area with
- * several pages shows them as links on each (`sectionLinks`), so every page stays reachable
- * without crowding the bottom bar.
+ * for each role a person holds, in this order, Home first and Profile last. A student gets Home ·
+ * Courses · Schedule · Results · Profile and a Lecturer Home · Teaching · Schedule · Profile, as
+ * §6.3 lists them; one Schedule serves both roles. An area with several pages shows them as
+ * links on each (`sectionLinks`), so every page stays reachable without crowding the bottom bar.
  */
 const AREAS: Area[] = [
   { label: "Home", to: "/", icon: "home", shows: () => true, covers: [], exactly: ["/"] },
@@ -60,6 +61,14 @@ const AREAS: Area[] = [
       { label: "My courses", to: "/courses" },
       { label: "Registration", to: "/registration" },
     ],
+  },
+  { label: "Teaching", to: "/teach", icon: "book", shows: (r) => r.isLecturer, covers: ["/teach"] },
+  {
+    label: "Schedule",
+    to: "/schedule",
+    icon: "calendar",
+    shows: (r) => r.isStudent || r.isLecturer,
+    covers: ["/schedule"],
   },
   {
     label: "Results",
@@ -77,7 +86,6 @@ const AREAS: Area[] = [
     shows: (r) => r.isApplicant,
     covers: ["/application"],
   },
-  { label: "Teaching", to: "/teach", icon: "book", shows: (r) => r.isLecturer, covers: ["/teach"] },
   {
     label: "Admissions",
     to: "/admissions",

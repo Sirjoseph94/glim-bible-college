@@ -1,58 +1,72 @@
 import type { privacy } from "@glim/contracts";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { api } from "../api/client";
-import { useSearch } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
-import { meQuery, updateMe } from "../api/session";
-import { Alert, formText, SubmitButton } from "../components/form";
+import { meQuery, signOut, updateMe } from "../api/session";
+import { PageHeader } from "../components/app/page-header";
+import { chooseView, homeView, useStoredView, type HomeView } from "../components/app/view";
+import { formText } from "../components/form";
+import { GOOGLE_ERRORS, GoogleButton } from "../components/google";
 import { Time } from "../components/time";
 import { useSubmit } from "../components/use-submit";
-import { GOOGLE_ERRORS, GoogleButton } from "../components/google";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Radio } from "../components/ui/choice";
+import { TextField } from "../components/ui/field";
+import { useTheme, type ThemePreference } from "../design/theme";
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <section aria-label={title} className="space-y-3">
+        <h2 className="text-heading">{title}</h2>
+        {children}
+      </section>
+    </Card>
+  );
+}
+
+/**
+ * The person's profile (docs/ui-design-handoff.md §11.11, composed): their account, which Home
+ * they see when they are both a student and a Lecturer (§6.3), the theme, Google, their
+ * timezone, notifications, their data, and signing out.
+ */
 export function ProfilePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: institution } = useSuspenseQuery(institutionQuery);
   const search = useSearch({ from: "/profile" });
   if (me === null) return null;
+  const bothRoles = me.roles.isStudent && me.roles.isLecturer;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-title">Your profile</h1>
+    <div className="space-y-5">
+      <PageHeader title="Profile" meta={`${me.user.displayName} · ${me.user.email}`} />
       {search.linked === "google" ? (
-        <Alert tone="success">Your Google account is now linked.</Alert>
+        <Banner tone="success">Your Google account is now linked.</Banner>
       ) : null}
       {search.error ? (
-        <Alert tone="error">{GOOGLE_ERRORS[search.error] ?? "Something went wrong."}</Alert>
+        <Banner tone="danger">{GOOGLE_ERRORS[search.error] ?? "Something went wrong."}</Banner>
       ) : null}
-      {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width */}
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 rounded border border-slate-200 bg-white p-4">
-        <dt className="text-slate-600">Name</dt>
-        <dd>{me.user.displayName}</dd>
-        <dt className="text-slate-600">Email</dt>
-        <dd>{me.user.email}</dd>
-        {me.user.referralCode === null ? null : (
-          <>
-            <dt className="text-slate-600">Referral code</dt>
-            <dd>
-              <strong className="font-mono tracking-wider">{me.user.referralCode}</strong>
-              <p className="text-sm text-slate-600">
-                Share it with people you encourage to apply, so the college knows who referred them.
-              </p>
-            </dd>
-          </>
-        )}
-      </dl>
-      <TimezoneForm current={me.user.timezone} />
-      <DataExport />
-      <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
-        <h3 className="font-semibold">Google account</h3>
+      {me.user.referralCode === null ? null : (
+        <Section title="Referral code">
+          <p className="font-mono text-heading tracking-wider">{me.user.referralCode}</p>
+          <p className="text-body-sm text-ink-muted">
+            Share it with people you encourage to apply, so the college knows who referred them.
+          </p>
+        </Section>
+      )}
+      {bothRoles ? <ViewChoice roles={me.roles} /> : null}
+      <ThemeChoice />
+      <Section title="Google account">
         {me.user.googleLinked ? (
-          <p className="text-slate-700">
+          <p className="text-body-sm">
             A Google account is linked. You can use it to sign in and to join online classes.
           </p>
         ) : institution.googleSignIn ? (
           <>
-            <p className="text-slate-700">
+            <p className="text-body-sm">
               Link a Google account to sign in with it and to join online classes.
             </p>
             <GoogleButton
@@ -61,10 +75,86 @@ export function ProfilePage() {
             />
           </>
         ) : (
-          <p className="text-slate-700">Linking a Google account isn't available yet.</p>
+          <p className="text-body-sm text-ink-muted">
+            Linking a Google account isn't available yet.
+          </p>
         )}
-      </section>
+      </Section>
+      <TimezoneForm current={me.user.timezone} />
+      <Section title="Notifications">
+        <p className="text-body-sm">Choose which notifications also come by email.</p>
+        <Link to="/notifications" className={buttonClass({ variant: "secondary" })}>
+          Notification settings
+        </Link>
+      </Section>
+      <DataExport />
+      <SignOut />
     </div>
+  );
+}
+
+/** §6.3: a person who is both a student and a Lecturer picks the Home they see first. */
+function ViewChoice({ roles }: { roles: { isStudent: boolean; isLecturer: boolean } }) {
+  const view = homeView(roles, useStoredView());
+  const options: [HomeView, string, string][] = [
+    ["student", "Student", "Your classes to join and your courses."],
+    ["lecturer", "Lecturer", "The classes you teach, with Start class and roll call."],
+  ];
+  return (
+    <Section title="Home shows">
+      <fieldset>
+        <legend className="sr-only">Home shows</legend>
+        {options.map(([value, label, hint]) => (
+          <Radio
+            key={value}
+            name="view"
+            value={value}
+            checked={view === value}
+            onChange={() => {
+              chooseView(value);
+            }}
+            label={
+              <>
+                <span className="block">{label}</span>
+                <span className="block text-body-sm text-ink-muted">{hint}</span>
+              </>
+            }
+          />
+        ))}
+      </fieldset>
+      <p className="text-body-sm text-ink-muted">
+        Both areas stay in the menu either way. This phone remembers your choice.
+      </p>
+    </Section>
+  );
+}
+
+const THEMES: [ThemePreference, string][] = [
+  ["system", "Same as this device"],
+  ["light", "Light"],
+  ["dark", "Dark"],
+];
+
+function ThemeChoice() {
+  const { preference, setPreference } = useTheme();
+  return (
+    <Section title="Appearance">
+      <fieldset>
+        <legend className="sr-only">Theme</legend>
+        {THEMES.map(([value, label]) => (
+          <Radio
+            key={value}
+            name="theme"
+            value={value}
+            checked={preference === value}
+            onChange={() => {
+              setPreference(value);
+            }}
+            label={label}
+          />
+        ))}
+      </fieldset>
+    </Section>
   );
 }
 
@@ -79,56 +169,68 @@ function knownZones(): string[] {
 
 function TimezoneForm({ current }: { current: string }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   return (
-    <form
-      className="space-y-2 rounded border border-slate-200 bg-white p-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const timezone = formText(new FormData(event.currentTarget), "timezone");
-        void run(() => updateMe(queryClient, { timezone }));
-      }}
-    >
-      <label htmlFor="timezone" className="block font-semibold">
-        Your timezone
-      </label>
-      <p className="text-sm text-slate-600">
-        Times are shown in this zone, with Lagos time alongside when it differs. Right now it's{" "}
-        <Time value={new Date().toISOString()} withDate={false} />.
-      </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <input
-        id="timezone"
-        name="timezone"
-        list="timezones"
-        defaultValue={current}
-        className="block w-full rounded border border-slate-300 px-3 py-2"
-        required
-      />
-      <datalist id="timezones">
-        {knownZones().map((zone) => (
-          <option key={zone} value={zone} />
-        ))}
-      </datalist>
-      <SubmitButton busy={busy}>Save timezone</SubmitButton>
-    </form>
+    <Card>
+      <form
+        aria-label="Timezone"
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const timezone = formText(new FormData(event.currentTarget), "timezone");
+          void run(() => updateMe(queryClient, { timezone }));
+        }}
+      >
+        <h2 className="text-heading">Timezone</h2>
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        <TextField
+          id="timezone"
+          name="timezone"
+          label="Your timezone"
+          list="timezones"
+          defaultValue={current}
+          required
+          hint={
+            <>
+              Times are shown in this zone, with Lagos time alongside when it differs. Right now
+              it's <Time value={new Date().toISOString()} withDate={false} />.
+            </>
+          }
+        />
+        <datalist id="timezones">
+          {knownZones().map((zone) => (
+            <option key={zone} value={zone} />
+          ))}
+        </datalist>
+        <Button type="submit" variant="primary" loading={busy}>
+          Save timezone
+        </Button>
+      </form>
+    </Card>
   );
 }
 
 /** Data subject access (TRD §19.4): everything GLIM holds about you, as a JSON file. */
 function DataExport() {
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   return (
-    <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
-      <h3 className="font-semibold">Your data</h3>
-      <p className="text-sm text-slate-600">
+    <Section title="Your data">
+      <p className="text-body-sm">
         Download everything the college holds about you, as a file you can keep.
       </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <button
-        type="button"
-        disabled={busy}
-        className="rounded border border-slate-300 px-3 py-2 text-sm disabled:opacity-60"
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      <Button
+        variant="secondary"
+        icon="download"
+        loading={busy}
         onClick={() => {
           void run(async () => {
             const data = await api<typeof privacy.getDataExport>("GET", "/me/data-export", {});
@@ -143,8 +245,29 @@ function DataExport() {
           });
         }}
       >
-        {busy ? "Preparing…" : "Download my data"}
-      </button>
-    </section>
+        Download my data
+      </Button>
+    </Section>
+  );
+}
+
+function SignOut() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { busy, run } = useSubmit();
+  return (
+    <Button
+      variant="danger"
+      block
+      loading={busy}
+      onClick={() => {
+        void run(async () => {
+          await signOut(queryClient);
+          await navigate({ to: "/login" });
+        });
+      }}
+    >
+      Sign out
+    </Button>
   );
 }
