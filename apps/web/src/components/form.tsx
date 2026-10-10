@@ -1,55 +1,27 @@
 import type { InputHTMLAttributes, ReactNode } from "react";
+import { Banner } from "./ui/banner";
+import { Button } from "./ui/button";
+import { TextField } from "./ui/field";
 
+/** Thin wrapper over the design system's TextField (§9.5); new code uses TextField directly. */
 export function Field(
   props: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string | undefined },
 ) {
-  const { label, error, id, ...input } = props;
-  return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
-        {label}
-      </label>
-      <input
-        id={id}
-        className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id ?? ""}-error` : undefined}
-        {...input}
-      />
-      {error ? (
-        <p id={`${id ?? ""}-error`} className="text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
+  return <TextField {...props} />;
 }
 
+/** A form's primary submit button; new code uses Button (§9.1) directly. */
 export function SubmitButton({ busy, children }: { busy: boolean; children: ReactNode }) {
   return (
-    <button
-      type="submit"
-      disabled={busy}
-      className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
-    >
-      {busy ? "Please wait…" : children}
-    </button>
+    <Button type="submit" variant="primary" block loading={busy}>
+      {children}
+    </Button>
   );
 }
 
+/** Thin wrapper over Banner (§9.4); new code uses Banner directly. */
 export function Alert({ tone, children }: { tone: "error" | "success"; children: ReactNode }) {
-  const colours =
-    tone === "error"
-      ? "border-red-200 bg-red-50 text-red-800"
-      : "border-green-200 bg-green-50 text-green-800";
-  return (
-    <div
-      role={tone === "error" ? "alert" : "status"}
-      className={`rounded border px-3 py-2 text-sm ${colours}`}
-    >
-      {children}
-    </div>
-  );
+  return <Banner tone={tone === "error" ? "danger" : "success"}>{children}</Banner>;
 }
 
 export function Card({ title, children }: { title: string; children: ReactNode }) {

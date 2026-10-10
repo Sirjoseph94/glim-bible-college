@@ -6,7 +6,9 @@
 
 const RAW_COLOUR = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/;
 const RAW_PX = /\b\d+(?:\.\d+)?px\b/;
-const ARBITRARY = /[\w-]-\[/;
+// An arbitrary value (`w-[149px]`), not an arbitrary variant (`data-[state=checked]:`), which
+// selects on an attribute and carries no design value.
+const ARBITRARY = /[\w-]-\[[^\]]*\](?!:)/;
 
 /** @type {import("eslint").Rule.RuleModule} */
 export const designTokens = {

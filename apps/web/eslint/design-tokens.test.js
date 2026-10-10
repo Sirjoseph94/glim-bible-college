@@ -14,6 +14,7 @@ new RuleTester({
     `const c = "#main-content";`,
     `const d = \`gap-\${size}\`;`,
     `const e = 48;`,
+    `const f = "data-[state=checked]:bg-brand aria-[current=page]:text-brand";`,
   ],
   invalid: [
     { code: `const a = "#1e3a5f";`, errors: [{ messageId: "colour" }] },
@@ -22,6 +23,7 @@ new RuleTester({
     { code: `const a = { fontSize: "13px" };`, errors: [{ messageId: "px" }] },
     { code: `const a = "w-[149px] rounded";`, errors: [{ messageId: "px" }] },
     { code: `const a = "grid-cols-[1fr_2fr]";`, errors: [{ messageId: "arbitrary" }] },
+    { code: `const a = "hover:bg-[var(--x)]";`, errors: [{ messageId: "arbitrary" }] },
     { code: "const a = `text-[13px] ${b}`;", errors: [{ messageId: "px" }] },
   ],
 });
