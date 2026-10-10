@@ -51,7 +51,7 @@ test("a sheet traps focus, closes on Escape and gives focus back", async ({ page
 
 test("a confirmation that needs a reason won't go ahead without one", async ({ page }) => {
   await page.goto("/dev/ui");
-  await page.getByRole("button", { name: "Change attendance" }).click();
+  await page.getByRole("button", { name: "Change attendance", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Change attendance for Tunde Bakare?" });
   await dialog.getByRole("button", { name: "Mark as Excused" }).click();
   await expect(dialog.getByText("Give a reason.")).toBeVisible();
