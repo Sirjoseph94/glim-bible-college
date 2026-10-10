@@ -2,7 +2,7 @@ import type { attendance, meetings, offerings, video } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { api } from "../api/client";
-import { useDetailBar } from "../components/app/app-shell";
+import { useDetailBar } from "../components/app/shell-parts";
 import { ClassMeetingCard } from "../components/app/class-meeting-card";
 import { PageHeader } from "../components/app/page-header";
 import { CourseAssignments } from "../components/assignments";

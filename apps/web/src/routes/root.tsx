@@ -3,9 +3,17 @@ import { Outlet, useNavigate } from "@tanstack/react-router";
 import type { notifications } from "@glim/contracts";
 import { api } from "../api/client";
 import { institutionQuery } from "../api/institution";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { meQuery, signOut, updateMe } from "../api/session";
-import { AppShell, SignedOutShell } from "../components/app/app-shell";
+import { SignedOutShell } from "../components/app/signed-out-shell";
+
+/**
+ * The signed-in shell, with its menus and sheets, loads after sign-in, so the sign-in page's
+ * first download stays small (§14).
+ */
+const AppShell = lazy(() =>
+  import("../components/app/app-shell").then((m) => ({ default: m.AppShell })),
+);
 import { browserTimeZone } from "../components/time";
 
 export function RootLayout() {
@@ -44,13 +52,15 @@ export function RootLayout() {
       </SignedOutShell>
     );
   return (
-    <AppShell
-      me={me.data}
-      institutionName={institution.data?.name}
-      unread={(unread.data?.unread ?? 0) > 0}
-      onSignOut={signOutAndLeave}
-    >
-      <Outlet />
-    </AppShell>
+    <Suspense fallback={<div className="h-dvh bg-surface" />}>
+      <AppShell
+        me={me.data}
+        institutionName={institution.data?.name}
+        unread={(unread.data?.unread ?? 0) > 0}
+        onSignOut={signOutAndLeave}
+      >
+        <Outlet />
+      </AppShell>
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 import type { Me } from "@glim/contracts";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../design/cn";
 import { Crest } from "../../design/crest";
 import { Icon, type IconName } from "../../design/icons";
@@ -10,31 +10,8 @@ import { Sheet } from "../ui/dialog";
 import { Menu } from "../ui/menu";
 import { NotificationDot } from "../ui/notification-dot";
 import { BackLink } from "./back-link";
+import { DetailBarContext, InstitutionName, type DetailBar } from "./shell-parts";
 import { activeItem, navItems, sectionLinks, type NavItem } from "./nav";
-
-/** A detail page's top bar (§6.2): back to the parent by name, and the course code. */
-export interface DetailBar {
-  back: { to: Parameters<typeof BackLink>[0]["to"]; label: string };
-  code?: string;
-}
-
-const DetailBarContext = createContext<(bar: DetailBar | null) => void>(() => undefined);
-
-/**
- * Turns the top bar into a detail bar while the calling page is shown: the back link replaces
- * the crest and name, and the course code sits on the right.
- */
-export function useDetailBar(bar: DetailBar): void {
-  const setBar = useContext(DetailBarContext);
-  const { to, label } = bar.back;
-  const { code } = bar;
-  useEffect(() => {
-    setBar({ back: { to, label }, ...(code === undefined ? {} : { code }) });
-    return () => {
-      setBar(null);
-    };
-  }, [setBar, to, label, code]);
-}
 
 function CourseCode({ code }: { code: string }) {
   return <span className="shrink-0 font-mono text-code text-brand">{code}</span>;
@@ -42,18 +19,6 @@ function CourseCode({ code }: { code: string }) {
 
 /** The bottom bar holds this many items; beyond it the rest go under "More". */
 const BOTTOM_NAV_MAX = 5;
-
-function InstitutionName({ name, testId }: { name: string | undefined; testId?: string }) {
-  return name === undefined ? (
-    <span className="block h-6 w-40 rounded-sm bg-surface-sunken">
-      <span className="sr-only">Loading</span>
-    </span>
-  ) : (
-    <span data-testid={testId} className="truncate text-wordmark text-ink">
-      {name}
-    </span>
-  );
-}
 
 function NotificationsLink({ unread }: { unread: boolean }) {
   return (
@@ -303,42 +268,5 @@ export function AppShell({
         </div>
       </div>
     </DetailBarContext.Provider>
-  );
-}
-
-/** Pages that draw the crest and name themselves (AuthLayout), so they need no top bar. */
-const AUTH_PAGES = ["/login", "/forgot", "/reset/", "/invite/"];
-
-/**
- * Pages for people who aren't signed in: the crest and name over a centred column. The sign-in
- * pages show a larger crest of their own instead of the top bar.
- */
-export function SignedOutShell({
-  institutionName,
-  children,
-}: {
-  institutionName: string | undefined;
-  children: ReactNode;
-}) {
-  const { pathname } = useLocation();
-  const authPage = AUTH_PAGES.some((page) =>
-    page.endsWith("/") ? pathname.startsWith(page) : pathname === page,
-  );
-  return (
-    <div className="min-h-dvh bg-surface text-ink">
-      {authPage ? null : (
-        <header className="glim-safe-top flex h-14 items-center gap-2 border-b border-line bg-surface-raised px-4">
-          <Crest size={28} />
-          <InstitutionName name={institutionName} testId="institution-name" />
-        </header>
-      )}
-      <main
-        className={
-          authPage ? "glim-gutter glim-safe-top py-8" : "glim-gutter mx-auto w-full max-w-3xl py-6"
-        }
-      >
-        {children}
-      </main>
-    </div>
   );
 }

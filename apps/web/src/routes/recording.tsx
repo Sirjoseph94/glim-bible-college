@@ -4,7 +4,7 @@ import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { meQuery } from "../api/session";
-import { useDetailBar } from "../components/app/app-shell";
+import { useDetailBar } from "../components/app/shell-parts";
 import { Banner } from "../components/ui/banner";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
