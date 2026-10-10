@@ -43,7 +43,9 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await expect(page.getByRole("heading", { name: "Curriculum v1" })).toBeVisible();
   await page.getByRole("button", { name: "Add a course" }).click();
   await page.getByRole("button", { name: "Add a course" }).click();
-  await page.getByLabel("Course 2").selectOption({ label: "MIN101 Introduction to Ministry" });
+  await page
+    .getByLabel("Course 2", { exact: true })
+    .selectOption({ label: "MIN101 Introduction to Ministry" });
   await page.getByLabel("Type 2").selectOption("ELECTIVE");
   await page.getByRole("button", { name: "Save placements" }).click();
   await expect(page.getByText("Draft", { exact: true })).toBeVisible();
@@ -59,12 +61,12 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await sessionSheet.getByLabel("Code (e.g. 2027/2028)").fill("2026/2027");
   await sessionSheet.getByLabel("Starts (September)").fill("2026-09-01");
   await sessionSheet.getByLabel("Ends (June)").fill("2027-06-30");
-  await sessionSheet.getByRole("button", { name: "Plan session" }).click();
+  await sessionSheet.getByRole("button", { name: "Plan Academic Session" }).click();
   // Scoped to this session: other specs plan sessions of their own.
   const session = page.getByRole("region", { name: "2026/2027 Session" });
   await expect(session.getByRole("heading", { name: "2026/2027 Session" })).toBeVisible();
   await expect(session.getByText("Planned", { exact: true })).toBeVisible();
-  await session.getByRole("button", { name: "Activate session" }).click();
+  await session.getByRole("button", { name: "Activate Academic Session" }).click();
   await expect(session.getByText("Active", { exact: true })).toBeVisible();
 
   await session.getByRole("button", { name: "Add semester 1" }).click();

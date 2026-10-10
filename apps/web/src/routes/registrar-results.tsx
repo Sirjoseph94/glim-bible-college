@@ -33,6 +33,7 @@ import { ConfirmDialog } from "../components/ui/dialog";
 import { Select } from "../components/ui/field";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
+import { cohortState, summarize, type CohortSummary } from "../components/app/cohorts";
 import { cn } from "../design/cn";
 import { credits, hundredths } from "../design/format";
 
@@ -79,6 +80,8 @@ export function CourseResultsPage() {
   const { offeringId } = useParams({ from: "/course-results/$offeringId" });
   const queryClient = useQueryClient();
   const isRegistrar = useHolds("REGISTRAR", "SYSTEM_ADMIN");
+  // Results staff (the Academic Admin too) come from the course list; Lecturers from the gradebook.
+  const fromCourseList = useHolds("REGISTRAR", "SYSTEM_ADMIN", "ACADEMIC_ADMIN");
   const offering = useQuery({
     queryKey: ["offering", offeringId],
     queryFn: ({ signal }) =>
@@ -97,7 +100,7 @@ export function CourseResultsPage() {
   });
   // Back to where the person came from: the Registrar's course list, or the Lecturer's gradebook.
   useDetailBar(
-    isRegistrar
+    fromCourseList
       ? { back: { to: "/results/courses", label: "Course results" } }
       : {
           back: {
@@ -335,27 +338,28 @@ export function ResultsCoursesPage() {
 }
 
 interface Cohort {
-  programmeId: string | undefined;
+  /** Null until the programme list has loaded: no action can be scoped to it yet. */
+  programmeId: string | null;
   code: string;
   rows: SemesterResultRow[];
+  summary: CohortSummary;
 }
 
-/** Where a cohort is in compute → approve → publish (§11.10), as a word and the next step. */
-function cohortState(c: Cohort): {
-  tone: Tone;
-  word: string;
-  next: "approve" | "publish" | null;
-  blocked: boolean;
-} {
-  const drafts = c.rows.filter((r) => r.status === "DRAFT");
-  const blocked = drafts.some((r) => r.draftCourseResults > 0);
-  if (drafts.length > 0)
-    return blocked
-      ? { tone: "warning", word: "Provisional", next: null, blocked }
-      : { tone: "brand", word: "Ready to approve", next: "approve", blocked };
-  if (c.rows.some((r) => r.status === "APPROVED"))
-    return { tone: "info", word: "Approved, not published", next: "publish", blocked: false };
-  return { tone: "success", word: "Published", next: null, blocked: false };
+const STUDENT_STATUS: Record<SemesterResultRow["status"], { tone: Tone; word: string }> = {
+  DRAFT: { tone: "warning", word: "Provisional" },
+  APPROVED: { tone: "info", word: "Approved, not published" },
+  PUBLISHED: { tone: "success", word: "Published" },
+};
+
+const students = (n: number) => `${String(n)} ${n === 1 ? "student's" : "students'"}`;
+
+/** What confirming does, and to whom (§10.5): only the students it changes are counted. */
+function confirmText(s: CohortSummary, action: "approve" | "publish"): string {
+  const waiting =
+    s.blocked > 0 ? ` ${String(s.blocked)} with a reopened course result stay provisional.` : "";
+  return action === "approve"
+    ? `${students(s.ready + s.approved)} GPA and CGPA become official and they are told; official transcripts can include this semester.${waiting}`
+    : `${students(s.approved)} approved results are published and they are told.${waiting}`;
 }
 
 /**
@@ -394,7 +398,9 @@ export function SemesterResultsPage() {
   });
   const { busy, problem, run } = useSubmit();
   const [message, setMessage] = useState<string | null>(null);
-  const [approving, setApproving] = useState<Cohort | null>(null);
+  const [confirm, setConfirm] = useState<{ cohort: Cohort; action: "approve" | "publish" } | null>(
+    null,
+  );
   const sessionCode = (id: string) => sessions.data?.items.find((x) => x.id === id)?.code ?? "";
   const options = [...(semesters.data?.items ?? [])].sort((a, b) =>
     b.startsOn.localeCompare(a.startsOn),
@@ -402,14 +408,15 @@ export function SemesterResultsPage() {
   const semester = options.find((s) => s.id === semesterId);
   const all = list.data?.items ?? [];
   const programmeIdOf = (code: string) => programmes.data?.items.find((p) => p.code === code)?.id;
-  const cohorts: Cohort[] = [...new Set(all.map((r) => r.programmeCode))].sort().map((code) => ({
-    code,
-    programmeId: programmeIdOf(code),
-    rows: all.filter((r) => r.programmeCode === code),
-  }));
-  const ready = cohorts.filter((c) => cohortState(c).next === "approve").length;
+  // The programme filter applies to everything on the page: cohorts, students, Compute, CSV.
   const shown =
     programmeId === "" ? all : all.filter((r) => programmeIdOf(r.programmeCode) === programmeId);
+  const cohorts: Cohort[] = [...new Set(shown.map((r) => r.programmeCode))].sort().map((code) => {
+    const rows = shown.filter((r) => r.programmeCode === code);
+    return { code, programmeId: programmeIdOf(code) ?? null, rows, summary: summarize(rows) };
+  });
+  const ready = cohorts.filter((c) => cohortState(c.summary).next === "approve").length;
+  const scope = { semesterId, ...(programmeId === "" ? {} : { programmeId }) };
   const headers = () => ({ "idempotency-key": crypto.randomUUID() });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["semester-results"] });
   const broadsheet = `/api/v1/reports/results?${new URLSearchParams({ semesterId, ...(programmeId === "" ? {} : { programmeId }), format: "csv" }).toString()}`;
@@ -420,28 +427,12 @@ export function SemesterResultsPage() {
       const r = await api<typeof results.computeSemesterResults>(
         "POST",
         "/results/semesters/compute",
-        { body: { semesterId }, headers: headers() },
+        { body: scope, headers: headers() },
       );
       setMessage(`Computed ${String(r.computed)}; ${String(r.changed)} changed.`);
       await refresh();
     });
   };
-  const publish = (c: Cohort) => {
-    void run(async () => {
-      setMessage(null);
-      const r = await api<typeof results.publishSemesterResults>(
-        "POST",
-        "/results/semesters/publish",
-        {
-          body: { semesterId, ...(c.programmeId ? { programmeId: c.programmeId } : {}) },
-          headers: headers(),
-        },
-      );
-      setMessage(`Published ${String(r.published)}. Students have been told.`);
-      await refresh();
-    });
-  };
-
   return (
     <div className="space-y-5">
       <PageHeader
@@ -547,7 +538,7 @@ export function SemesterResultsPage() {
                     </thead>
                     <tbody>
                       {cohorts.map((c) => {
-                        const state = cohortState(c);
+                        const state = cohortState(c.summary);
                         return (
                           <tr key={c.code}>
                             <th
@@ -560,36 +551,27 @@ export function SemesterResultsPage() {
                             >
                               {c.code}
                             </th>
-                            <td className={cn(bodyCell, numericCell)}>{c.rows.length}</td>
+                            <td className={cn(bodyCell, numericCell)}>{c.summary.total}</td>
                             <td className={bodyCell}>
                               <Badge tone={state.tone}>{state.word}</Badge>
+                              {state.note ? (
+                                <span className="block pt-1 text-meta text-ink-muted">
+                                  {state.note}
+                                </span>
+                              ) : null}
                             </td>
                             <td className={bodyCell}>
-                              {state.next === "approve" ? (
+                              {state.next !== null && c.programmeId !== null ? (
                                 <Button
                                   size="sm"
                                   variant="primary"
                                   onClick={() => {
-                                    setApproving(c);
+                                    if (state.next !== null)
+                                      setConfirm({ cohort: c, action: state.next });
                                   }}
                                 >
-                                  Approve and publish
+                                  {state.next === "approve" ? "Approve and publish" : "Publish"}
                                 </Button>
-                              ) : state.next === "publish" ? (
-                                <Button
-                                  size="sm"
-                                  variant="primary"
-                                  loading={busy}
-                                  onClick={() => {
-                                    publish(c);
-                                  }}
-                                >
-                                  Publish
-                                </Button>
-                              ) : state.blocked ? (
-                                <span className="text-body-sm text-ink-muted">
-                                  Waiting on a reopened course result
-                                </span>
                               ) : null}
                             </td>
                           </tr>
@@ -644,20 +626,8 @@ export function SemesterResultsPage() {
                           <td className={cn(bodyCell, numericCell)}>{hundredths(x.cgpaX100)}</td>
                           <td className={bodyCell}>{STANDING_LABELS[x.standing] || "–"}</td>
                           <td className={bodyCell}>
-                            <Badge
-                              tone={
-                                x.status === "PUBLISHED"
-                                  ? "success"
-                                  : x.status === "APPROVED"
-                                    ? "info"
-                                    : "warning"
-                              }
-                            >
-                              {x.status === "PUBLISHED"
-                                ? "Published"
-                                : x.status === "APPROVED"
-                                  ? "Approved"
-                                  : "Draft"}
+                            <Badge tone={STUDENT_STATUS[x.status].tone}>
+                              {STUDENT_STATUS[x.status].word}
                             </Badge>
                             {x.draftCourseResults > 0 ? (
                               <span className="ml-2 text-meta text-ink-muted">
@@ -677,36 +647,48 @@ export function SemesterResultsPage() {
         {canTranscripts ? <TranscriptRequests /> : null}
       </div>
       <ConfirmDialog
-        open={approving !== null}
+        open={confirm !== null}
         onOpenChange={(open) => {
-          if (!open) setApproving(null);
+          if (!open) setConfirm(null);
         }}
-        title={`Approve ${approving?.code ?? ""}?`}
-        confirmLabel="Approve and publish"
+        title={
+          confirm?.action === "publish"
+            ? `Publish ${confirm.cohort.code}?`
+            : `Approve ${confirm?.cohort.code ?? ""}?`
+        }
+        confirmLabel={confirm?.action === "publish" ? "Publish" : "Approve and publish"}
         onConfirm={async () => {
-          const c = approving;
-          if (c === null) return;
-          const scope = { semesterId, ...(c.programmeId ? { programmeId: c.programmeId } : {}) };
-          const approved = await api<typeof results.approveSemesterResults>(
-            "POST",
-            "/results/semesters/approve",
-            { body: scope, headers: headers() },
-          );
+          if (confirm === null || confirm.cohort.programmeId === null) return;
+          const body = { semesterId, programmeId: confirm.cohort.programmeId };
+          const approved =
+            confirm.action === "approve"
+              ? await api<typeof results.approveSemesterResults>(
+                  "POST",
+                  "/results/semesters/approve",
+                  { body, headers: headers() },
+                )
+              : null;
           const published = await api<typeof results.publishSemesterResults>(
             "POST",
             "/results/semesters/publish",
-            { body: scope, headers: headers() },
+            { body, headers: headers() },
           );
-          setApproving(null);
+          setConfirm(null);
           setMessage(
-            `Approved ${String(approved.approved)} and published ${String(published.published)}. Students have been told.${approved.skipped > 0 ? ` ${String(approved.skipped)} wait for a reopened course result.` : ""}`,
+            [
+              approved ? `Approved ${String(approved.approved)} and published` : "Published",
+              `${String(published.published)}. Students have been told.`,
+              approved && approved.skipped > 0
+                ? `${String(approved.skipped)} wait for a reopened course result.`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" "),
           );
           await refresh();
         }}
       >
-        {approving
-          ? `${String(approving.rows.length)} ${approving.rows.length === 1 ? "student's" : "students'"} GPA and CGPA become official, they are told, and official transcripts can include this semester.`
-          : ""}
+        {confirm ? confirmText(confirm.cohort.summary, confirm.action) : ""}
       </ConfirmDialog>
     </div>
   );
@@ -861,6 +843,14 @@ function TranscriptRequests() {
                   >
                     Decline
                   </Button>
+                ) : null}
+                {r.status === "ISSUED" && r.transcript !== null ? (
+                  <a
+                    href={`/api/v1/transcripts/${r.transcript.id}/download`}
+                    className={buttonClass({ variant: "secondary", size: "sm" })}
+                  >
+                    PDF
+                  </a>
                 ) : null}
                 {r.transcript === null ? null : (
                   <Link

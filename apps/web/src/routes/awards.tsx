@@ -29,7 +29,7 @@ const awardsKey = ["awards"];
 
 /**
  * The Registrar's awards (TRD §14.6): propose an award to see the final CGPA, award class and the
- * requirements checklist, then confer it, which numbers the certificate and graduates the student.
+ * requirements checklist, then confer it, which numbers the certificate (and graduates the student unless they have another active programme).
  */
 export function AwardsPage() {
   const candidates = useQuery({
@@ -235,7 +235,7 @@ function Candidate({
 
 /**
  * The proposed award and its requirements. Conferring is consequential (it numbers the
- * certificate and graduates the student), so it asks first and says who it affects.
+ * certificate and may graduate the student), so it asks first and says who it affects.
  */
 function Proposal({ award: a, onDone }: { award: Award; onDone: (a: Award) => void }) {
   const queryClient = useQueryClient();
@@ -305,7 +305,7 @@ function Proposal({ award: a, onDone }: { award: Award; onDone: (a: Award) => vo
               onDone(done);
             }}
           >
-            {a.studentName} ({a.matricNumber}) graduates with {a.awardClass}, final CGPA{" "}
+            {a.studentName} ({a.matricNumber}) is awarded {a.awardClass}, final CGPA{" "}
             {hundredths(a.cgpaX100)}. The certificate is numbered now and the student leaves the
             list of students on {a.programmeCode}.
           </ConfirmDialog>

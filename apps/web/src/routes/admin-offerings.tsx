@@ -82,10 +82,6 @@ const coursesQuery = queryOptions({
     }),
 });
 
-function OfferingBadge({ status }: { status: Offering["status"] }) {
-  return <OfferingStatusBadge status={status} />;
-}
-
 /** Course Offerings per semester (TRD §9.2). */
 export function AdminOfferingsPage() {
   const semesters = useQuery(semestersQuery);
@@ -187,7 +183,7 @@ export function AdminOfferingsPage() {
                       )}
                     </td>
                     <td className={bodyCell}>
-                      <OfferingBadge status={o.status} />
+                      <OfferingStatusBadge status={o.status} />
                     </td>
                   </tr>
                 ))}
@@ -352,7 +348,7 @@ function OfferingDetail({ offering: o }: { offering: Offering }) {
         title={o.title}
         meta={
           <span className="inline-flex flex-wrap items-center gap-2">
-            <OfferingBadge status={o.status} />
+            <OfferingStatusBadge status={o.status} />
             <span>
               {o.semesterName}, {o.sessionCode} · {o.credits} credits
             </span>

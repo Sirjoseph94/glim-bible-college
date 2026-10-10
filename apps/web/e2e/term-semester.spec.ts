@@ -40,7 +40,7 @@ test("the Registrar computes, approves and publishes semester results", async ({
   await page.getByRole("button", { name: "Compute" }).click();
   await expect(page.getByText("Computed 2; 2 changed.")).toBeVisible();
   const bola = page.getByRole("row", { name: /Bola Online/ });
-  await expect(bola).toContainText("Draft");
+  await expect(bola).toContainText("Provisional");
   // §11.10: the cohort is ready; approving publishes too, after a Dialog saying what it does.
   await expect(page.getByText("1 cohort is ready to approve")).toBeVisible();
   await page.getByRole("button", { name: "Approve and publish" }).click();

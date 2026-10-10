@@ -24,7 +24,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 
 const SIZES: Record<ButtonSize, string> = {
   md: "h-control px-5 text-body",
-  sm: "h-control-sm px-3 text-body-sm",
+  // §9.1: sm is for desktop toolbars and tables; below 1024px it keeps the 44px target (UI-5).
+  sm: "h-tap px-3 text-body-sm lg:h-control-sm",
 };
 
 /** The class list for a button-styled element; Button uses it, and so can a plain link. */

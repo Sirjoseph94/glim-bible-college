@@ -170,7 +170,7 @@ export function AdminCalendarPage() {
         title={
           closing?.kind === "session" ? "Close this Academic Session?" : "Close this semester?"
         }
-        confirmLabel={closing?.kind === "session" ? "Close session" : "Close semester"}
+        confirmLabel={closing?.kind === "session" ? "Close Academic Session" : "Close semester"}
         tone="danger"
         onConfirm={async () => {
           if (closing === null) return;
@@ -230,7 +230,7 @@ function SessionCard(props: {
                 props.onSessionAction("activate");
               }}
             >
-              Activate session
+              Activate Academic Session
             </Button>
           ) : null}
           {session.status === "ACTIVE" ? (
@@ -341,10 +341,10 @@ function NewSession({
       open={open}
       onOpenChange={onOpenChange}
       title="Plan an Academic Session"
-      description="A session runs from September to June and holds two semesters."
+      description="An Academic Session holds up to two semesters."
       footer={
         <Button type="submit" form={formId} variant="primary" block loading={busy}>
-          Plan session
+          Plan Academic Session
         </Button>
       }
     >

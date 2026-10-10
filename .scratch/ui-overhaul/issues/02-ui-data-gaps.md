@@ -26,6 +26,8 @@
 | "26 students · you are the primary Lecturer" | §11.9 | The viewer's own role on the offering (`lecturers[].lecturerId` is a Lecturer id, not the user id in `/me`) | The gradebook footer counts the students it shows. |
 | "To grade" in gradebook cells | §11.9 | Which students submitted work that has no score yet | Empty cells show "–". |
 | Cohort level and "Courses finalized 8 of 8" on the Registrar's cohorts table | §11.10 | Per programme and level in a semester: the cohort's level, and how many of its Course Offerings have finalized results | Cohorts are grouped by programme from `GET /results/semesters` rows. |
+| The reopened course behind a waiting cohort ("Waiting on GRK 301") | §11.10 | The course codes of a student's reopened course results, not only `draftCourseResults` (a count) | The cohort row says how many students wait. |
+| Verification code on the Registrar's request list | §11.10 | `verificationCode` in the transcript summary on `GET /transcript-requests` | The code is on the transcript's own page. |
 | Late-submission warning before confirm | §11.5 | Due date vs. cutoff | Probably available on the assignment; confirm in WP-UI-07. |
 
 Rows marked "check" or "confirm" may already be possible. The WP that reaches them verifies against the contracts and builds them if the data exists.

@@ -117,7 +117,8 @@ export function ConfirmDialog({
   children: ReactNode;
   confirmLabel: string;
   tone?: "primary" | "danger";
-  reason?: { label: string; minLength?: number };
+  /** `maxLength` defaults to 500, the API's limit for every reason. */
+  reason?: { label: string; minLength?: number; maxLength?: number };
   onConfirm: (reason: string) => Promise<void> | void;
 }) {
   const reasonId = useId();
@@ -191,6 +192,7 @@ export function ConfirmDialog({
                 multiline
                 rows={3}
                 value={text}
+                maxLength={reason.maxLength ?? 500}
                 error={problem ?? undefined}
                 onChange={(event) => {
                   setText(event.target.value);

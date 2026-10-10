@@ -318,8 +318,7 @@ function RegistrarActions({ transcript: d }: { transcript: Transcript }) {
           await queryClient.invalidateQueries({ queryKey: ["transcript", d.id] });
         }}
       >
-        Anyone who checks its code will see that it was revoked, with your reason. This can't be
-        undone.
+        Anyone who checks its code will see that it was revoked. This can't be undone.
       </ConfirmDialog>
     </section>
   );

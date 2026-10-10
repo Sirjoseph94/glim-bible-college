@@ -10,6 +10,7 @@ import { planToday, type ScheduledMeeting } from "../components/app/today";
 import { Time } from "../components/time";
 import { myScheduleQuery } from "../components/meetings";
 import { navItems } from "../components/app/nav";
+import { STAFF_ROLE_LABELS } from "../api/users";
 import { cardClass } from "../components/ui/card";
 import { Icon } from "../design/icons";
 import { Badge } from "../components/ui/badge";
@@ -241,8 +242,7 @@ function AreasHome({ me }: { me: Me }) {
         <h1 className="text-greeting">Welcome, {me.user.displayName}</h1>
         {me.roles.staff.length > 0 ? (
           <p className="text-body-sm text-ink-muted">
-            Signed in as{" "}
-            {me.roles.staff.map((r) => r.replaceAll("_", " ").toLowerCase()).join(", ")}.
+            Signed in as {me.roles.staff.map((r) => STAFF_ROLE_LABELS[r].toLowerCase()).join(", ")}.
           </p>
         ) : null}
       </div>

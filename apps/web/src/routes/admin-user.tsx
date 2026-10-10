@@ -28,6 +28,8 @@ interface PendingChange {
   confirmLabel: string;
   tone: "primary" | "danger";
   reasonLabel: string;
+  /** The API's minimum: 3 for role and account changes, 1 for erasure. */
+  reasonMin?: number;
   action: (reason: string) => Promise<unknown>;
 }
 
@@ -295,6 +297,7 @@ export function AdminUserPage() {
                     confirmLabel: "Erase personal data",
                     tone: "danger",
                     reasonLabel: "Why erase them?",
+                    reasonMin: 1,
                     action: (reason) =>
                       api<typeof privacy.eraseUser>("POST", "/users/:id/erase", {
                         params: { id: u.id },
@@ -320,7 +323,10 @@ export function AdminUserPage() {
         title={pending?.title ?? ""}
         confirmLabel={pending?.confirmLabel ?? ""}
         tone={pending?.tone ?? "primary"}
-        reason={{ label: pending?.reasonLabel ?? "Reason", minLength: REASON_MIN }}
+        reason={{
+          label: pending?.reasonLabel ?? "Reason",
+          minLength: pending?.reasonMin ?? REASON_MIN,
+        }}
         onConfirm={async (reason) => {
           if (pending === null) return;
           // A failure throws, and the dialog stays open saying what happened.
