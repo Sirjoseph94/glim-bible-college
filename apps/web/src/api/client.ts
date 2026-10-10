@@ -1,4 +1,5 @@
 import type { EndpointSpec, ErrorEnvelope, ResponseOf } from "@glim/contracts";
+import { reportNetworkFailure, reportNetworkSuccess } from "./network";
 
 /** A failed API call, carrying the error envelope (TRD §5.4). */
 export class ApiError extends Error {
@@ -58,14 +59,22 @@ export async function api<E extends EndpointSpec>(
     if (v !== undefined && v !== "") search.set(k, String(v));
   const qs = search.toString();
   if (qs !== "") url += `?${qs}`;
-  const res = await fetch(`/api/v1${url}`, {
-    method,
-    credentials: "same-origin",
-    headers,
-    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-    ...(init.signal ? { signal: init.signal } : {}),
-    ...(init.keepalive === true ? { keepalive: true } : {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/v1${url}`, {
+      method,
+      credentials: "same-origin",
+      headers,
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      ...(init.signal ? { signal: init.signal } : {}),
+      ...(init.keepalive === true ? { keepalive: true } : {}),
+    });
+  } catch (error) {
+    // No answer at all (not an abort): the device or the network is offline (§9.20).
+    if (!(error instanceof DOMException && error.name === "AbortError")) reportNetworkFailure();
+    throw error;
+  }
+  reportNetworkSuccess();
   if (!res.ok) {
     const envelope = (await res.json().catch(() => null)) as ErrorEnvelope | null;
     throw new ApiError(res.status, envelope);

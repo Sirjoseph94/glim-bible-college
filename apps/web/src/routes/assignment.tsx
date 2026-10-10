@@ -2,36 +2,84 @@ import type { assessment, Submission, SubmissionForGrading } from "@glim/contrac
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
+import { describeError } from "../api/error-copy";
+import { meQuery } from "../api/session";
+import { PageHeader } from "../components/app/page-header";
+import { useDetailBar } from "../components/app/shell-parts";
 import { Alert, formText } from "../components/form";
 import { Time } from "../components/time";
+import { Badge } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { EmptyState } from "../components/ui/empty-state";
+import { TextField } from "../components/ui/field";
+import { OfflineBanner, QueuedPill, useOnline } from "../components/ui/offline";
+import { ProgressBar } from "../components/ui/progress-bar";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { uploadFile } from "../components/upload";
 import { useSubmit } from "../components/use-submit";
+import { dueState, fileSize, wordCount } from "../design/format";
+import { Icon } from "../design/icons";
+import { offlineQueue, useQueued } from "../offline";
 
 const AUTOSAVE_MS = 2000;
 
 function SubmissionFiles({ submission }: { submission: Submission }) {
   if (submission.files.length === 0) return null;
   return (
-    <ul className="list-disc pl-5">
+    <ul className="space-y-1">
       {submission.files.map((f) => (
-        <li key={f.id}>
-          <a href={f.downloadPath} className="text-blue-700 underline">
+        <li key={f.id} className="flex items-center gap-2 text-body-sm">
+          <Icon name="file" size={16} />
+          <a href={f.downloadPath} className="text-brand underline">
             {f.name}
           </a>
+          <span className="text-ink-muted">{fileSize(f.sizeBytes)}</span>
         </li>
       ))}
     </ul>
   );
 }
 
+/** The draft's text, kept on this phone too, so nothing typed offline is lost (§10.3). */
+function localDraftKey(assignmentId: string) {
+  return `glim.draft.assignment.${assignmentId}`;
+}
+
+function readLocalDraft(assignmentId: string): string | null {
+  try {
+    return window.localStorage.getItem(localDraftKey(assignmentId));
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalDraft(assignmentId: string, text: string | null) {
+  try {
+    if (text === null) window.localStorage.removeItem(localDraftKey(assignmentId));
+    else window.localStorage.setItem(localDraftKey(assignmentId), text);
+  } catch {
+    // Storage blocked (private mode): the server copy is the only copy.
+  }
+}
+
+const clockTime = (iso: string, zone: string) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit" }).format(
+    new Date(iso),
+  );
+
 /**
- * An assignment for a student (TRD §14.2): the instructions, their attempts, and a draft that
- * saves itself as they type, with files, until they submit.
+ * An assignment for a student (docs/ui-design-handoff.md §11.5, TRD §14.2): the instructions,
+ * their attempts, and a draft that saves itself (on the server and on this phone). Submitting
+ * works offline: the submission waits on the phone and sends when the connection returns
+ * (§9.20, §10.4).
  */
 export function AssignmentPage() {
   const { assignmentId } = useParams({ strict: false });
   const id = assignmentId ?? "";
+  const online = useOnline();
   const assignment = useQuery({
     queryKey: ["assignment", id],
     queryFn: ({ signal }) =>
@@ -45,64 +93,129 @@ export function AssignmentPage() {
         signal,
       }),
   });
-  if (assignment.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
+  useDetailBar({ back: { to: "/courses", label: "My courses" } });
+  const queryClient = useQueryClient();
+  const me = useQuery(meQuery);
+  const zone = me.data?.user.timezone ?? "Africa/Lagos";
+  const queued = useQueued(`assignment:${id}`);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  // A fresh editor after a queued submission is sent, so the next attempt starts empty.
+  const [editorKey, setEditorKey] = useState(0);
+
+  // When queued work for this assignment is sent (or refused), say so and refresh (§9.20). This
+  // lives on the page: the editor goes away once no attempts are left.
+  const { last } = queued;
+  useEffect(() => {
+    if (last === null) return undefined;
+    const refused = last.rejected[0];
+    if (last.sent.length > 0) {
+      writeLocalDraft(id, null);
+      setEditorKey((k) => k + 1);
+      setNotice({
+        tone: "success",
+        text: `Sent. Your assignment was submitted at ${clockTime(new Date().toISOString(), zone)}.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["assignment", id, "mine"] });
+      const timer = window.setTimeout(() => {
+        setNotice(null);
+      }, 4000);
+      return () => {
+        window.clearTimeout(timer);
+      };
+    }
+    if (refused) {
+      const copy = describeError(refused.error);
+      setNotice({ tone: "danger", text: copy.body ? `${copy.title}. ${copy.body}` : copy.title });
+    }
+    return undefined;
+  }, [last, id, zone, queryClient]);
+
+  if (assignment.isPending)
+    return (
+      <SkeletonGroup label="Loading the assignment">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-40" />
+      </SkeletonGroup>
+    );
   if (assignment.isError)
-    return <Alert tone="error">This assignment isn't available to you.</Alert>;
+    return <EmptyState icon="file" title="This assignment isn't available to you" />;
   const a = assignment.data;
   const attempts = mine.data?.attempts ?? [];
   const submitted = attempts.filter((s) => s.status !== "DRAFT");
   const draft = attempts.find((s) => s.status === "DRAFT") ?? null;
+  const due = dueState(a.dueAt, a.closesAt, new Date());
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">{a.title}</h1>
-      <div className="text-sm text-slate-600">
-        <p>
-          Due <Time value={a.dueAt} />
-          {a.closesAt !== null && a.closesAt !== a.dueAt ? (
-            <>
-              {" "}
-              · late work until <Time value={a.closesAt} />
-            </>
-          ) : null}
-        </p>
-        <p>
-          {a.maxScore} marks ·{" "}
-          {a.maxAttempts === 1 ? "1 attempt" : `${String(a.maxAttempts)} attempts`}
-        </p>
-      </div>
+    <div className="space-y-5">
+      {online ? null : <OfflineBanner />}
+      {notice ? <Banner tone={notice.tone}>{notice.text}</Banner> : null}
+      <PageHeader
+        title={a.title}
+        meta={
+          <>
+            Due <Time value={a.dueAt} />
+            {a.closesAt !== null && a.closesAt !== a.dueAt ? (
+              <>
+                {" "}
+                · late work until <Time value={a.closesAt} />
+              </>
+            ) : null}
+            {" · "}
+            {a.maxScore} marks ·{" "}
+            {a.maxAttempts === 1 ? "1 attempt" : `${String(a.maxAttempts)} attempts`}
+          </>
+        }
+        actions={
+          due === "soon" ? (
+            <Badge tone="warning">Due soon</Badge>
+          ) : due === "late" || due === "closed" ? (
+            <Badge tone="danger">Overdue</Badge>
+          ) : undefined
+        }
+      />
       <div
-        className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+        className="max-w-prose space-y-2 text-body [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
         // Rendered from Markdown and sanitized on the server.
         dangerouslySetInnerHTML={{ __html: a.instructionsHtml }}
       />
       {submitted.length > 0 ? (
         <section className="space-y-2">
-          <h3 className="font-medium">Your submissions</h3>
-          <ul className="space-y-2 text-sm">
+          <h2 className="text-heading">Your submissions</h2>
+          <Card list>
             {submitted.map((s) => (
-              <li key={s.id} className="rounded border border-slate-200 bg-white p-2">
-                Attempt {s.attemptNo}, submitted <Time value={s.submittedAt} />
-                {s.isLate ? <span className="text-amber-700"> (late)</span> : null}
+              <div key={s.id} className="space-y-2 px-4 py-3.5">
+                <p className="text-subhead">
+                  Attempt {s.attemptNo} of {a.maxAttempts} · Submitted{" "}
+                  <Time value={s.submittedAt} />
+                  {s.isLate ? (
+                    <>
+                      {" "}
+                      <Badge tone="warning">Late</Badge>
+                    </>
+                  ) : null}
+                </p>
                 {s.textBody === null ? null : (
-                  <p className="mt-1 whitespace-pre-wrap text-slate-700">{s.textBody}</p>
+                  <p className="text-body-sm whitespace-pre-wrap text-ink-muted">{s.textBody}</p>
                 )}
                 <SubmissionFiles submission={s} />
-              </li>
+              </div>
             ))}
-          </ul>
+          </Card>
         </section>
       ) : null}
       {mine.data?.open === true ? (
         <DraftEditor
+          key={editorKey}
           assignmentId={id}
+          queuedCount={queued.count}
           draft={draft}
+          late={due === "late"}
           acceptsText={a.submissionTypes.includes("TEXT")}
           acceptsFiles={a.submissionTypes.includes("FILE")}
           maxFileMb={a.maxFileMb}
           attemptsLeft={mine.data.attemptsLeft}
         />
       ) : mine.isSuccess ? (
-        <p className="text-sm text-slate-600">
+        <p className="text-body-sm text-ink-muted">
           {mine.data.attemptsLeft === 0 && submitted.length > 0
             ? "You've used all your attempts."
             : "Submissions are closed."}
@@ -114,31 +227,38 @@ export function AssignmentPage() {
 
 function DraftEditor({
   assignmentId,
+  queuedCount,
   draft,
+  late,
   acceptsText,
   acceptsFiles,
   maxFileMb,
   attemptsLeft,
 }: {
   assignmentId: string;
+  /** Submissions for this assignment waiting on the phone to send. */
+  queuedCount: number;
   draft: Submission | null;
+  late: boolean;
   acceptsText: boolean;
   acceptsFiles: boolean;
   maxFileMb: number;
   attemptsLeft: number;
 }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
-  const [text, setText] = useState(draft?.textBody ?? "");
-  const [saved, setSaved] = useState<"saved" | "saving" | "unsaved" | null>(null);
+  const online = useOnline();
+  const { busy, problem, run } = useSubmit();
+  const group = `assignment:${assignmentId}`;
+  const [text, setText] = useState(() => readLocalDraft(assignmentId) ?? draft?.textBody ?? "");
+  const [saved, setSaved] = useState<"saved" | "saving" | "phone" | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const lastSaved = useRef(draft?.textBody ?? "");
   const mineKey = ["assignment", assignmentId, "mine"];
 
-  // Autosave: two seconds after the student stops typing.
+  // Autosave two seconds after the student stops typing: on this phone at once, then the server.
   useEffect(() => {
     if (text === lastSaved.current) return;
-    setSaved("unsaved");
+    writeLocalDraft(assignmentId, text);
     const timer = window.setTimeout(() => {
       setSaved("saving");
       api<typeof assessment.saveDraft>("PUT", "/assignments/:id/my-submissions/draft", {
@@ -150,7 +270,7 @@ function DraftEditor({
           setSaved("saved");
         })
         .catch(() => {
-          setSaved("unsaved");
+          setSaved("phone");
         });
     }, AUTOSAVE_MS);
     return () => {
@@ -158,130 +278,192 @@ function DraftEditor({
     };
   }, [text, assignmentId]);
 
+  // One key per submission, so a retry or a queued replay is applied once.
+  const key = useRef(crypto.randomUUID());
+
+  const submitNow = async () => {
+    if (acceptsText && text !== lastSaved.current) {
+      await api<typeof assessment.saveDraft>("PUT", "/assignments/:id/my-submissions/draft", {
+        params: { id: assignmentId },
+        body: { textBody: text },
+      });
+      lastSaved.current = text;
+    }
+    await api<typeof assessment.submitDraft>("POST", "/assignments/:id/my-submissions/submit", {
+      params: { id: assignmentId },
+      headers: { "idempotency-key": key.current },
+    });
+    writeLocalDraft(assignmentId, null);
+    setText("");
+    lastSaved.current = "";
+    setSaved(null);
+    key.current = crypto.randomUUID();
+    await queryClient.invalidateQueries({ queryKey: mineKey });
+  };
+  const queue = async () => {
+    await offlineQueue.enqueue({
+      key: key.current,
+      group,
+      steps: [
+        ...(acceptsText
+          ? [
+              {
+                method: "PUT" as const,
+                path: "/assignments/:id/my-submissions/draft",
+                params: { id: assignmentId },
+                body: { textBody: text },
+              },
+            ]
+          : []),
+        {
+          method: "POST" as const,
+          path: "/assignments/:id/my-submissions/submit",
+          params: { id: assignmentId },
+        },
+      ],
+    });
+    key.current = crypto.randomUUID();
+  };
+
   const files = draft?.files ?? [];
+  const words = wordCount(text);
+  const status =
+    queuedCount > 0
+      ? "Your submission is saved on this phone and will send when you reconnect."
+      : saved === "saving"
+        ? "Saving…"
+        : saved === "saved"
+          ? "Draft saved"
+          : saved === "phone"
+            ? "Saved on this phone. It will save to the college when you reconnect."
+            : null;
   return (
-    <section className="space-y-2 rounded border border-slate-200 bg-white p-3">
-      <h3 className="font-medium">
-        {draft === null ? "Your answer" : `Attempt ${String(draft.attemptNo)} (draft)`}
-      </h3>
-      <p className="text-xs text-slate-500">
-        {attemptsLeft === 1 ? "1 attempt left" : `${String(attemptsLeft)} attempts left`}
-      </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
+    <section className="space-y-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-heading">
+          {draft === null ? "Your answer" : `Attempt ${String(draft.attemptNo)} (draft)`}
+        </h2>
+        <p className="text-meta text-ink-muted">
+          {attemptsLeft === 1 ? "1 attempt left" : `${String(attemptsLeft)} attempts left`}
+        </p>
+      </div>
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      {late ? (
+        <Banner tone="warning" title="Submitting late">
+          Your Lecturer may deduct marks.
+        </Banner>
+      ) : null}
       {acceptsText ? (
-        <>
-          <label htmlFor="answer" className="block text-sm font-medium text-slate-700">
-            Answer
-          </label>
-          <textarea
-            id="answer"
-            rows={8}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-            }}
-            className="block w-full rounded border border-slate-300 px-3 py-2"
-          />
-          <p className="text-xs text-slate-500" aria-live="polite">
-            {saved === "saving"
-              ? "Saving…"
-              : saved === "saved"
-                ? "Draft saved"
-                : saved === "unsaved"
-                  ? "Not saved yet"
-                  : null}
-          </p>
-        </>
+        <TextField
+          id="answer"
+          label="Answer"
+          multiline
+          rows={8}
+          value={text}
+          hint={words === 1 ? "1 word" : `${String(words)} words`}
+          onChange={(e) => {
+            setText(e.target.value);
+          }}
+        />
       ) : null}
       {acceptsFiles ? (
-        <form
-          className="space-y-1 text-sm"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const file = new FormData(e.currentTarget).get("file");
-            const form = e.currentTarget;
+        <div className="space-y-2">
+          {files.length > 0 ? (
+            <Card list>
+              {files.map((f) => (
+                <div key={f.id} className="flex items-center gap-3 px-4 py-3">
+                  <Icon name="file" />
+                  <span className="min-w-0 flex-1 truncate text-body-sm">{f.name}</span>
+                  <span className="text-meta text-ink-muted">{fileSize(f.sizeBytes)}</span>
+                  <Badge tone="success">Uploaded</Badge>
+                </div>
+              ))}
+            </Card>
+          ) : null}
+          <label
+            htmlFor="file"
+            className={`${buttonClass({ variant: "secondary" })} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus`}
+          >
+            <Icon name="upload" />
+            Attach a file (up to {maxFileMb} MB)
+            <input
+              id="file"
+              name="file"
+              type="file"
+              className="sr-only"
+              onChange={(e) => {
+                const input = e.currentTarget;
+                const file = input.files?.[0];
+                if (!file) return;
+                void run(async () => {
+                  if (file.size > maxFileMb * 1024 * 1024)
+                    throw new Error(`Each file must be at most ${String(maxFileMb)} MB.`);
+                  setProgress(0);
+                  const fileId = await uploadFile(
+                    file,
+                    {
+                      name: file.name,
+                      mime: file.type || "application/octet-stream",
+                      purpose: "SUBMISSION",
+                    },
+                    setProgress,
+                  );
+                  await api<typeof assessment.saveDraft>(
+                    "PUT",
+                    "/assignments/:id/my-submissions/draft",
+                    {
+                      params: { id: assignmentId },
+                      body: { fileIds: [...files.map((f) => f.id), fileId] },
+                    },
+                  );
+                  input.value = "";
+                  await queryClient.invalidateQueries({ queryKey: mineKey });
+                }).finally(() => {
+                  setProgress(null);
+                });
+              }}
+            />
+          </label>
+          {online ? null : (
+            <p className="text-body-sm text-ink-muted">Files upload once you're back online.</p>
+          )}
+          {progress !== null ? <ProgressBar label="Uploading" value={progress * 100} /> : null}
+        </div>
+      ) : null}
+      <div className="sticky bottom-0 z-nav -mx-4 space-y-2 border-t border-line bg-surface-raised px-4 pt-3 pb-5 shadow-sheet md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+        <p className="text-body-sm text-ink-muted" aria-live="polite">
+          {status}
+        </p>
+        <QueuedPill count={queuedCount} noun={["submission", "submissions"]} />
+        <Button
+          variant="primary"
+          icon="upload"
+          block
+          loading={busy}
+          onClick={() => {
+            if (queuedCount > 0) return; // already waiting to send
             void run(async () => {
-              if (!(file instanceof File) || file.size === 0) throw new Error("Choose a file.");
-              if (file.size > maxFileMb * 1024 * 1024)
-                throw new Error(`Each file must be at most ${String(maxFileMb)} MB.`);
-              setProgress(0);
-              const fileId = await uploadFile(
-                file,
-                {
-                  name: file.name,
-                  mime: file.type || "application/octet-stream",
-                  purpose: "SUBMISSION",
-                },
-                setProgress,
-              );
-              await api<typeof assessment.saveDraft>(
-                "PUT",
-                "/assignments/:id/my-submissions/draft",
-                {
-                  params: { id: assignmentId },
-                  body: { fileIds: [...files.map((f) => f.id), fileId] },
-                },
-              );
-              form.reset();
-              await queryClient.invalidateQueries({ queryKey: mineKey });
-            }).finally(() => {
-              setProgress(null);
+              if (!online) {
+                await queue();
+                return;
+              }
+              try {
+                await submitNow();
+              } catch (error) {
+                // No answer from the server: keep the submission and send it later (§10.4).
+                if (error instanceof ApiError) throw error;
+                await queue();
+              }
             });
           }}
         >
-          {files.length > 0 ? (
-            <ul className="list-disc pl-5">
-              {files.map((f) => (
-                <li key={f.id}>{f.name}</li>
-              ))}
-            </ul>
-          ) : null}
-          <label htmlFor="file" className="block font-medium text-slate-700">
-            Add a file (up to {maxFileMb} MB)
-          </label>
-          <input id="file" name="file" type="file" />
-          {progress !== null ? (
-            <progress className="w-full" value={progress} max={1} aria-label="Upload progress" />
-          ) : null}
-          <button type="submit" disabled={busy} className="underline">
-            Upload file
-          </button>
-        </form>
-      ) : null}
-      <button
-        type="button"
-        disabled={busy}
-        className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
-        onClick={() =>
-          void run(async () => {
-            if (acceptsText && text !== lastSaved.current) {
-              await api<typeof assessment.saveDraft>(
-                "PUT",
-                "/assignments/:id/my-submissions/draft",
-                {
-                  params: { id: assignmentId },
-                  body: { textBody: text },
-                },
-              );
-              lastSaved.current = text;
-            }
-            await api<typeof assessment.submitDraft>(
-              "POST",
-              "/assignments/:id/my-submissions/submit",
-              {
-                params: { id: assignmentId },
-                headers: { "idempotency-key": crypto.randomUUID() },
-              },
-            );
-            setText("");
-            lastSaved.current = "";
-            setSaved(null);
-            await queryClient.invalidateQueries({ queryKey: mineKey });
-          })
-        }
-      >
-        Submit
-      </button>
+          Submit assignment
+        </Button>
+      </div>
     </section>
   );
 }

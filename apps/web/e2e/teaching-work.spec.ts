@@ -21,7 +21,8 @@ function localInput(daysAhead: number): string {
 
 /**
  * TRD §14.2: a Lecturer sets and publishes an assignment; a student writes (autosaved), attaches
- * a file and submits on a phone; the Lecturer grades it with feedback.
+ * a file and submits on a phone, through a dropped connection; the Lecturer grades it with
+ * feedback.
  */
 test("a Lecturer sets an assignment, a student submits, the Lecturer grades it", async ({
   page,
@@ -48,15 +49,25 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await expect(page.getByText("300 words")).toBeVisible();
   await page.getByLabel("Answer").fill("In the beginning was the Word.");
   await expect(page.getByText("Draft saved")).toBeVisible();
-  await page.getByLabel(/Add a file/).setInputFiles({
+  await page.getByLabel(/Attach a file/).setInputFiles({
     name: "essay.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4 my essay"),
   });
-  await page.getByRole("button", { name: "Upload file" }).click();
-  await expect(page.getByRole("listitem").filter({ hasText: "essay.pdf" })).toBeVisible();
-  await page.getByRole("button", { name: "Submit" }).click();
-  await expect(page.getByText(/Attempt 1, submitted/)).toBeVisible();
+  await expect(page.getByText("essay.pdf")).toBeVisible();
+
+  // The signal drops (§9.20, §10.4): the button still works, and the submission waits on the
+  // phone until the connection returns, then is sent once.
+  await page.context().setOffline(true);
+  await expect(page.getByRole("status").filter({ hasText: "You are offline" })).toBeVisible();
+  await page.getByLabel("Answer").fill("In the beginning was the Word, and the Word was God.");
+  await page.getByRole("button", { name: "Submit assignment" }).click();
+  await expect(page.getByText("1 submission waiting to send")).toBeVisible();
+  await page.context().setOffline(false);
+  await expect(
+    page.getByText(/^Sent\. Your assignment was submitted at \d\d:\d\d\.$/),
+  ).toBeVisible();
+  await expect(page.getByText(/Attempt 1 of 1 · Submitted/)).toHaveCount(1);
   await expect(page.getByText("You've used all your attempts.")).toBeVisible();
   await signOut(page);
 
@@ -68,7 +79,7 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
     .getByRole("link", { name: "Grade submissions" })
     .click();
   const row = page.getByRole("listitem", { name: "Bola Online" });
-  await expect(row).toContainText("In the beginning was the Word.");
+  await expect(row).toContainText("In the beginning was the Word, and the Word was God.");
   await expect(row.getByRole("link", { name: "essay.pdf" })).toBeVisible();
   await row.getByLabel(/Score/).fill("18.5");
   await row.getByLabel("Feedback").fill("Clear and well argued.");

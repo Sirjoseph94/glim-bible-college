@@ -13,9 +13,11 @@ export async function openArea(page: Page, label: string): Promise<void> {
   await page.getByRole("link", { name: label, exact: true }).click();
 }
 
-/** Signs out from the account menu. */
+/** Signs out from the account menu (a detail page's bar has none, so from Home). */
 export async function signOut(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Account" }).click();
+  const account = page.getByRole("button", { name: "Account" });
+  if (!(await account.isVisible())) await page.goto("/");
+  await account.click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
 }
 

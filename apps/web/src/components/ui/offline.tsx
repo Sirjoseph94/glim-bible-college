@@ -1,24 +1,27 @@
 import { useSyncExternalStore } from "react";
+import { requestsFailing, subscribeNetwork } from "../../api/network";
 import { Icon } from "../../design/icons";
 import { Banner } from "./banner";
 
 function subscribe(onChange: () => void) {
   window.addEventListener("online", onChange);
   window.addEventListener("offline", onChange);
+  const unsubscribe = subscribeNetwork(onChange);
   return () => {
     window.removeEventListener("online", onChange);
     window.removeEventListener("offline", onChange);
+    unsubscribe();
   };
 }
 
 /**
- * Whether the browser thinks it is online. §9.20 also counts requests that fail with a network
- * error; that signal comes with the offline queue (WP-UI-07).
+ * Whether the app can reach the server (§9.20): the browser says it is online and requests are
+ * getting answers.
  */
 export function useOnline(): boolean {
   return useSyncExternalStore(
     subscribe,
-    () => navigator.onLine,
+    () => navigator.onLine && !requestsFailing(),
     () => true,
   );
 }
