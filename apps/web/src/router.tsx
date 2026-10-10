@@ -355,11 +355,13 @@ const myResultsRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/results"), "MyResultsPage"),
 });
 
+/** Transcripts moved onto the Results page (decision UI-Q8); old links still land there. */
 const myTranscriptsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/transcripts",
-  beforeLoad: requireStudentOrAlumnus,
-  component: lazyRouteComponent(() => import("./routes/transcripts"), "MyTranscriptsPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/results" });
+  },
 });
 
 const transcriptRoute = createRoute({

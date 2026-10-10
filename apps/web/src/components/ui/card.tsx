@@ -22,10 +22,17 @@ export function Card({
   children,
   list = false,
   className,
+  role,
 }: {
   children: ReactNode;
   list?: boolean;
   className?: string;
+  /** "list" when the rows are list items (`role="listitem"`). */
+  role?: "list";
 }) {
-  return <div className={cn(cardClass({ list }), className)}>{children}</div>;
+  return (
+    <div role={role} className={cn(cardClass({ list }), className)}>
+      {children}
+    </div>
+  );
 }

@@ -15,6 +15,7 @@
 | Per-recording data estimate ("≈ 92 MB at 240p") | §11.3 | Duration is known; the YouTube size per quality is not | TRD §18.4: measured in spike S-11 and shown as a fixed tip. |
 | Results-published notice for 24 h | §11.2 | Publication timestamp on the student's semester result | Check `GET /me/results` before building; may already be derivable. |
 | The recording page's course (BackLink "Recordings" and course code) | §11.4 | `courseOfferingId` and course code in `GET /videos/:id/play` | The player goes back to My courses until then. |
+| Class of degree on the GPA summary ("Second Class Upper") | §9.17 | The class band for the current CGPA under the programme's grading scheme | `GET /me/results` has GPA/CGPA and standing, not the class; awards carry it only once proposed. |
 | Late-submission warning before confirm | §11.5 | Due date vs. cutoff | Probably available on the assignment; confirm in WP-UI-07. |
 
 Rows marked "check" or "confirm" may already be possible. The WP that reaches them verifies against the contracts and builds them if the data exists.

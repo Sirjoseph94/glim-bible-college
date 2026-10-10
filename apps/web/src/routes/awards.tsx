@@ -4,12 +4,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
 import { useSubmit } from "../components/use-submit";
-
-/** Hundredths as a decimal with two places, e.g. 460 → "4.60". */
-function x100(v: number | null): string {
-  if (v === null) return "–";
-  return `${String(Math.trunc(v / 100))}.${String(v % 100).padStart(2, "0")}`;
-}
+import { hundredths } from "../design/format";
 
 const candidatesKey = ["award-candidates"];
 const awardsKey = ["awards"];
@@ -68,7 +63,7 @@ export function AwardsPage() {
           {(conferred.data?.items ?? []).map((a) => (
             <li key={a.id} className="rounded border border-slate-200 bg-white p-2">
               <span className="font-medium">{a.studentName}</span> · {a.programmeCode} ·{" "}
-              {a.awardClass} · CGPA {x100(a.cgpaX100)} · {a.certificateNo} · {a.awardedOn}
+              {a.awardClass} · CGPA {hundredths(a.cgpaX100)} · {a.certificateNo} · {a.awardedOn}
             </li>
           ))}
         </ul>
@@ -94,7 +89,7 @@ function Candidate({
             {c.matricNumber} · {c.programmeCode}
           </span>
         </span>
-        <span>CGPA {x100(c.cgpaX100)}</span>
+        <span>CGPA {hundredths(c.cgpaX100)}</span>
       </div>
       {error ? <Alert tone="error">{error}</Alert> : null}
       <button
@@ -132,7 +127,7 @@ function Proposal({ award: a, onDone }: { award: Award; onDone: (a: Award) => vo
         {a.studentName} · {a.programmeName}
       </h3>
       <p>
-        Final CGPA {x100(a.cgpaX100)} ·{" "}
+        Final CGPA {hundredths(a.cgpaX100)} ·{" "}
         {a.awardClass === null ? (
           <strong>No award (below the minimum CGPA)</strong>
         ) : (

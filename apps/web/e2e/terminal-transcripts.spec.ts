@@ -23,7 +23,6 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
 }) => {
   await signIn(page, STUDENT);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Transcripts" }).click();
   await page.getByRole("button", { name: "Get an unofficial transcript" }).click();
   const unofficial = page.getByRole("listitem", { name: /^GLIM\/TR\/\d{4}\/00001$/ });
   await expect(unofficial).toContainText("Unofficial · Diploma in Ministry");

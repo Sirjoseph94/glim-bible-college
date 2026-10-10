@@ -63,11 +63,13 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
 
   await signIn(page, STUDENT);
   await openArea(page, "Results");
-  const semester = page.locator('[aria-label*="2032/2033"]');
-  await expect(semester).toContainText("Provisional");
-  await expect(semester).toContainText("PAS101 Pastoral Care");
+  const gpa = page.getByRole("region", { name: "Grade point average" });
+  await expect(gpa).toContainText("Provisional");
+  await expect(gpa).toContainText(/This semester\d\.\d\dCGPA\d\.\d\d/);
+  const semester = page.getByRole("region", { name: /2032\/2033/ });
+  await expect(semester).toContainText("PAS101");
+  await expect(semester).toContainText("Pastoral Care");
   await expect(semester.locator("strong")).toHaveText(letter ?? "");
-  await expect(semester).toContainText(/GPA \d\.\d\d · CGPA \d\.\d\d/);
   await signOut(page);
 
   await signIn(page, REGISTRAR);

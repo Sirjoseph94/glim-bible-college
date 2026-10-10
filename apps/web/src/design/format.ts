@@ -27,3 +27,16 @@ export function dueState(dueAt: string, closesAt: string | null, now: Date): Due
   if (closesAt !== null && t <= new Date(closesAt).getTime()) return "late";
   return "closed";
 }
+
+/** Hundredths as two decimals, e.g. 420 → "4.20" (GPA, CGPA, percentages; §10.6, §16.1). */
+export function hundredths(value: number | null): string {
+  if (value === null) return "—";
+  return `${String(Math.trunc(value / 100))}.${String(value % 100).padStart(2, "0")}`;
+}
+
+/** Tenths of a credit, e.g. 30 → "3", 25 → "2.5". */
+export function credits(tenths: number): string {
+  return tenths % 10 === 0
+    ? String(tenths / 10)
+    : `${String(Math.trunc(tenths / 10))}.${String(tenths % 10)}`;
+}

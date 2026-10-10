@@ -66,12 +66,9 @@ const AREAS: Area[] = [
     to: "/results",
     icon: "award",
     shows: (r) => r.isStudent || r.isAlumnus,
+    // Transcripts are on the Results page (decision UI-Q8); a transcript opens under it.
     covers: ["/transcripts", "/course-results"],
     exactly: ["/results"],
-    pages: [
-      { label: "My results", to: "/results" },
-      { label: "Transcripts", to: "/transcripts" },
-    ],
   },
   {
     label: "Application",

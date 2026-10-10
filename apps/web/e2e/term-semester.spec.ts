@@ -30,7 +30,7 @@ test("the Registrar computes, approves and publishes semester results", async ({
 
   await signIn(page, STUDENT);
   await openArea(page, "Results");
-  await expect(page.getByText("Provisional")).toBeVisible();
+  await expect(page.getByText("Provisional", { exact: true })).toBeVisible();
   await signOut(page);
 
   await signIn(page, REGISTRAR);
@@ -54,6 +54,8 @@ test("the Registrar computes, approves and publishes semester results", async ({
 
   await signIn(page, STUDENT);
   await openArea(page, "Results");
-  await expect(page.getByText(/GPA \d\.\d\d · CGPA \d\.\d\d/)).toBeVisible();
-  await expect(page.getByText("Provisional")).toHaveCount(0);
+  const gpa = page.getByRole("region", { name: "Grade point average" });
+  await expect(gpa).toContainText(/This semester\d\.\d\dCGPA\d\.\d\d/);
+  await expect(gpa).toContainText("Approved");
+  await expect(page.getByText(/provisional/i)).toHaveCount(0);
 });

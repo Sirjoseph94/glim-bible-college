@@ -14,17 +14,15 @@ import { api } from "../api/client";
 import { meQuery } from "../api/session";
 import { Alert, formText } from "../components/form";
 import { useSubmit } from "../components/use-submit";
-
-/** Hundredths as a decimal with two places, e.g. 7200 → "72.00", 339 → "3.39". */
-function x100(v: number | null): string {
-  if (v === null) return "–";
-  return `${String(Math.trunc(v / 100))}.${String(v % 100).padStart(2, "0")}`;
-}
-
-/** Tenths of a credit, e.g. 30 → "3", 25 → "2.5". */
-function credits(v: number): string {
-  return v % 10 === 0 ? String(v / 10) : `${String(Math.trunc(v / 10))}.${String(v % 10)}`;
-}
+import { credits, hundredths } from "../design/format";
+import { PageHeader } from "../components/app/page-header";
+import { GpaSummary, ResultRow } from "../components/app/results";
+import { Banner } from "../components/ui/banner";
+import { Card } from "../components/ui/card";
+import { Disclosure } from "../components/ui/disclosure";
+import { EmptyState } from "../components/ui/empty-state";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
+import { TranscriptsSection } from "./transcripts";
 
 const KIND_LABELS: Record<CourseResultRow["resultKind"], string> = {
   GRADED: "",
@@ -157,7 +155,7 @@ function ResultItem({
           {item.studentName} <span className="font-normal text-slate-500">{item.matricNumber}</span>
         </span>
         <span>
-          {x100(item.finalPctX100)} % · {item.letter ?? "–"}
+          {hundredths(item.finalPctX100)} % · {item.letter ?? "–"}
           {KIND_LABELS[item.resultKind] === "" ? "" : ` · ${KIND_LABELS[item.resultKind]}`}
         </span>
       </div>
@@ -259,25 +257,54 @@ export function ResultsCoursesPage() {
  * A student's results (TRD §14.3, §14.5): each course as soon as it's finalized, and semester
  * GPA and CGPA, marked Provisional until the Registrar publishes the semester.
  */
+/**
+ * A student's (or graduate's) results (docs/ui-design-handoff.md §11.6): the latest semester's
+ * GPA and CGPA first, its course results, earlier semesters folded away, then transcripts
+ * (decision UI-Q8).
+ */
 export function MyResultsPage() {
   const mine = useQuery({
     queryKey: ["my-results"],
     queryFn: ({ signal }) => api<typeof results.getMyResults>("GET", "/me/results", { signal }),
   });
-  if (mine.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (mine.isError) return <Alert tone="error">We couldn't load your results.</Alert>;
+  if (mine.isPending)
+    return (
+      <SkeletonGroup label="Loading your results">
+        <Skeleton className="h-8 w-1/3" />
+        <Skeleton className="h-36" />
+        <Skeleton className="h-48" />
+      </SkeletonGroup>
+    );
+  if (mine.isError)
+    return (
+      <Banner tone="danger" title="We couldn't load your results">
+        Check your connection and try again.
+      </Banner>
+    );
   const programmes = mine.data.programmes;
+  const matric = programmes.length === 1 ? programmes[0]?.matricNumber : undefined;
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">My results</h1>
+    <div className="space-y-5">
+      <PageHeader
+        title="Results"
+        actions={
+          matric ? <span className="font-mono text-code text-ink-muted">{matric}</span> : undefined
+        }
+      />
       {programmes.every((p) => p.semesters.length === 0) ? (
-        <p className="text-sm text-slate-600">
-          No results yet. They appear here as soon as your Lecturers finalize them.
-        </p>
-      ) : null}
-      {programmes.map((p) => (
-        <ProgrammeResults key={p.programmeEnrollmentId} programme={p} />
-      ))}
+        <EmptyState icon="award" title="No results yet">
+          Results appear here as soon as your Lecturers finalize them.
+        </EmptyState>
+      ) : (
+        programmes.map((p) => (
+          <ProgrammeResults
+            key={p.programmeEnrollmentId}
+            programme={p}
+            showName={programmes.length > 1}
+          />
+        ))
+      )}
+      <TranscriptsSection programmes={programmes} />
     </div>
   );
 }
@@ -289,50 +316,82 @@ const STANDING_LABELS: Record<string, string> = {
   UNKNOWN: "",
 };
 
-function ProgrammeResults({ programme: p }: { programme: MyResults["programmes"][number] }) {
-  if (p.semesters.length === 0) return null;
+type MySemester = MyResults["programmes"][number]["semesters"][number];
+
+function SemesterRows({ semester }: { semester: MySemester }) {
   return (
-    <section className="space-y-3">
-      <h3 className="font-medium">
-        {p.programmeName} <span className="font-normal text-slate-500">{p.matricNumber}</span>
-      </h3>
-      {p.semesters.map((s) => (
-        <div
-          key={s.semesterId}
-          className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm"
-          aria-label={`${s.semesterName} ${s.sessionCode}`}
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-medium">
-              {s.semesterName}, {s.sessionCode}
-            </span>
-            {s.provisional ? (
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-900">Provisional</span>
-            ) : null}
-          </div>
-          <ul className="divide-y divide-slate-100">
-            {s.results.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1">
-                <span>
-                  {c.courseCode} {c.courseTitle}{" "}
-                  <span className="text-slate-500">({credits(c.creditsX10)} credits)</span>
-                </span>
-                <span>
-                  {x100(c.finalPctX100)} % ·{" "}
-                  <strong>{c.letter ?? KIND_LABELS[c.resultKind]}</strong>
-                  {c.attemptNo > 1 ? " · repeat" : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p>
-            GPA {x100(s.gpaX100)} · CGPA {x100(s.cgpaX100)} · {credits(s.creditsEarnedX10)} of{" "}
-            {credits(s.creditsAttemptedX10)} credits earned
-            {STANDING_LABELS[s.standing] === "" ? "" : ` · ${STANDING_LABELS[s.standing] ?? ""}`}
-          </p>
-        </div>
+    <Card list>
+      {semester.results.map((c) => (
+        <ResultRow
+          key={c.id}
+          code={c.courseCode}
+          title={c.courseTitle}
+          creditsX10={c.creditsX10}
+          letter={c.letter}
+          pctX100={c.finalPctX100}
+          pending={c.resultKind === "GRADED" && c.letter === null && c.finalPctX100 === null}
+          note={
+            c.attemptNo > 1
+              ? "Repeat · your best attempt counts"
+              : KIND_LABELS[c.resultKind] === ""
+                ? undefined
+                : KIND_LABELS[c.resultKind]
+          }
+        />
       ))}
-    </section>
+    </Card>
+  );
+}
+
+function ProgrammeResults({
+  programme: p,
+  showName,
+}: {
+  programme: MyResults["programmes"][number];
+  showName: boolean;
+}) {
+  const latest = p.semesters.at(-1);
+  if (latest === undefined) return null;
+  const earlier = p.semesters.slice(0, -1).reverse();
+  const standing = STANDING_LABELS[latest.standing] ?? "";
+  return (
+    <div className="space-y-4">
+      {showName ? (
+        <h2 className="text-heading">
+          {p.programmeName}{" "}
+          <span className="font-mono text-code text-ink-muted">{p.matricNumber}</span>
+        </h2>
+      ) : null}
+      <GpaSummary
+        gpaX100={latest.gpaX100}
+        cgpaX100={latest.cgpaX100}
+        provisional={latest.provisional}
+        earnedX10={latest.creditsEarnedX10}
+        attemptedX10={latest.creditsAttemptedX10}
+      />
+      {latest.provisional ? (
+        <Banner tone="info" title="These results are provisional">
+          They become official when the Registrar approves and publishes the semester.
+        </Banner>
+      ) : null}
+      <section className="space-y-2" aria-label={`${latest.semesterName} ${latest.sessionCode}`}>
+        <h2 className="text-heading">
+          This semester · {latest.semesterName}, {latest.sessionCode}
+        </h2>
+        <SemesterRows semester={latest} />
+        {standing === "" ? null : <p className="text-body-sm text-ink-muted">{standing}</p>}
+      </section>
+      {earlier.map((s) => (
+        <Disclosure
+          key={s.semesterId}
+          summary={`${s.semesterName}, ${s.sessionCode} · GPA ${hundredths(s.gpaX100)}`}
+        >
+          <div aria-label={`${s.semesterName} ${s.sessionCode}`}>
+            <SemesterRows semester={s} />
+          </div>
+        </Disclosure>
+      ))}
+    </div>
   );
 }
 
@@ -525,8 +584,8 @@ export function SemesterResultsPage() {
                     <td className="p-2">
                       {credits(x.creditsEarnedX10)}/{credits(x.creditsAttemptedX10)}
                     </td>
-                    <td className="p-2">{x100(x.gpaX100)}</td>
-                    <td className="p-2">{x100(x.cgpaX100)}</td>
+                    <td className="p-2">{hundredths(x.gpaX100)}</td>
+                    <td className="p-2">{hundredths(x.cgpaX100)}</td>
                     <td className="p-2">{STANDING_LABELS[x.standing] || "–"}</td>
                     <td className="p-2">
                       {STATUS_LABELS[x.status]}
