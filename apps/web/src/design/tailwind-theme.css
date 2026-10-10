@@ -91,6 +91,16 @@
   --text-code: 14px;
   --text-code--line-height: 20px;
   --text-code--font-weight: 500;
+  /* Proposed steps the handoff's component specs use without naming (WP-UI-03; see
+     docs/implementation-notes.md): 15/22 row titles, 13/18 metadata, 20/28 the greeting. */
+  --text-subhead: 15px;
+  --text-subhead--line-height: 22px;
+  --text-subhead--font-weight: 600;
+  --text-meta: 13px;
+  --text-meta--line-height: 18px;
+  --text-greeting: 20px;
+  --text-greeting--line-height: 28px;
+  --text-greeting--font-weight: 700;
   --text-figure: 32px;
   --text-figure--line-height: 36px;
   --text-figure--font-weight: 600;

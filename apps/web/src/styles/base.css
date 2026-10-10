@@ -48,3 +48,28 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* §8 motion that carries meaning: the button spinner and the live dot. */
+@keyframes glim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes glim-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.glim-spinner {
+  animation: glim-spin 800ms linear infinite;
+}
+.glim-live-dot {
+  animation: glim-pulse 1600ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Still turning, so "busy" stays visible, but slowly. The live dot stays still. */
+  .glim-spinner {
+    animation-duration: 2400ms !important;
+    animation-iteration-count: infinite !important;
+  }
+}
