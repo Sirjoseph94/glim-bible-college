@@ -2,15 +2,16 @@ import type { auth } from "@glim/contracts";
 import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
-import { Alert, Card } from "../components/form";
+import { Alert } from "../components/form";
 import { PasswordForm } from "../components/password-form";
+import { AuthLayout } from "../components/app/auth-layout";
 
 export function ResetPage() {
   const { token } = useParams({ from: "/reset/$token" });
   const [done, setDone] = useState(false);
 
   return (
-    <Card title="Choose a new password">
+    <AuthLayout title="Choose a new password">
       {done ? (
         <Alert tone="success">
           Your password has been changed and you've been signed out everywhere.{" "}
@@ -29,6 +30,6 @@ export function ResetPage() {
           }}
         />
       )}
-    </Card>
+    </AuthLayout>
   );
 }

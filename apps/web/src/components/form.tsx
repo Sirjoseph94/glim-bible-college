@@ -24,15 +24,6 @@ export function Alert({ tone, children }: { tone: "error" | "success"; children:
   return <Banner tone={tone === "error" ? "danger" : "success"}>{children}</Banner>;
 }
 
-export function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="mx-auto max-w-sm rounded-md border border-line bg-surface-raised p-5">
-      <h1 className="mb-4 text-title">{title}</h1>
-      {children}
-    </section>
-  );
-}
-
 /** A text field's value from a submitted form ("" when absent). */
 export function formText(form: FormData, name: string): string {
   const value = form.get(name);

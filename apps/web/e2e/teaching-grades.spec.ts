@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, signOut } from "./nav";
+import { openArea, openCourse, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -84,8 +84,7 @@ test("a Lecturer enters, imports and releases grades; the student sees only rele
   await signOut(page);
 
   await signIn(page, STUDENT);
-  await openArea(page, "Courses");
-  await page.getByText("Grades", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Grades");
   const released = page.getByRole("listitem", { name: "Memory verse test" });
   await expect(released).toContainText("8.00 / 10.00");
   await expect(released.locator("strong")).toHaveText("Word-perfect");

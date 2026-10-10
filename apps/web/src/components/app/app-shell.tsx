@@ -294,7 +294,8 @@ export function AppShell({
                 )}
                 {actions}
               </div>
-              <SectionNav pathname={pathname} me={me} />
+              {/* A detail page has its back link instead of its area's section links. */}
+              {detail ? null : <SectionNav pathname={pathname} me={me} />}
               {children}
             </div>
           </main>
@@ -305,7 +306,13 @@ export function AppShell({
   );
 }
 
-/** Pages for people who aren't signed in: the crest and name over a centred column. */
+/** Pages that draw the crest and name themselves (AuthLayout), so they need no top bar. */
+const AUTH_PAGES = ["/login", "/forgot", "/reset/", "/invite/"];
+
+/**
+ * Pages for people who aren't signed in: the crest and name over a centred column. The sign-in
+ * pages show a larger crest of their own instead of the top bar.
+ */
 export function SignedOutShell({
   institutionName,
   children,
@@ -313,13 +320,25 @@ export function SignedOutShell({
   institutionName: string | undefined;
   children: ReactNode;
 }) {
+  const { pathname } = useLocation();
+  const authPage = AUTH_PAGES.some((page) =>
+    page.endsWith("/") ? pathname.startsWith(page) : pathname === page,
+  );
   return (
     <div className="min-h-dvh bg-surface text-ink">
-      <header className="glim-safe-top flex h-14 items-center gap-2 border-b border-line bg-surface-raised px-4">
-        <Crest size={28} />
-        <InstitutionName name={institutionName} testId="institution-name" />
-      </header>
-      <main className="glim-gutter mx-auto w-full max-w-3xl py-6">{children}</main>
+      {authPage ? null : (
+        <header className="glim-safe-top flex h-14 items-center gap-2 border-b border-line bg-surface-raised px-4">
+          <Crest size={28} />
+          <InstitutionName name={institutionName} testId="institution-name" />
+        </header>
+      )}
+      <main
+        className={
+          authPage ? "glim-gutter glim-safe-top py-8" : "glim-gutter mx-auto w-full max-w-3xl py-6"
+        }
+      >
+        {children}
+      </main>
     </div>
   );
 }

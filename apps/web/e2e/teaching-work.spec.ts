@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, signOut } from "./nav";
+import { openArea, openCourse, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -43,8 +43,7 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await signOut(page);
 
   await signIn(page, STUDENT);
-  await openArea(page, "Courses");
-  await page.getByText("Assignments", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Work");
   await page.getByRole("link", { name: "Essay on John 1" }).click();
   await expect(page.getByText("300 words")).toBeVisible();
   await page.getByLabel("Answer").fill("In the beginning was the Word.");

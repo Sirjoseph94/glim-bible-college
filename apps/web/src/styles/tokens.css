@@ -1,5 +1,6 @@
 /* GLIM LMS — generated from tokens.json */
-:root, [data-theme="light"] {
+:root,
+[data-theme="light"] {
   --surface: #f5f7f5;
   --surface-raised: #ffffff;
   --surface-sunken: #e9eeeb;
@@ -25,8 +26,8 @@
   --info: #2c55a0;
   --info-soft: #e5ecf8;
   --focus: #2563c9;
-  --shadow-sheet: 0 -4px 16px rgba(24,32,28,0.10);
-  --shadow-pop: 0 6px 20px rgba(24,32,28,0.14);
+  --shadow-sheet: 0 -4px 16px rgba(24, 32, 28, 0.1);
+  --shadow-pop: 0 6px 20px rgba(24, 32, 28, 0.14);
 }
 [data-theme="dark"] {
   --surface: #101513;
@@ -52,8 +53,8 @@
   --info: #9dbcf2;
   --info-soft: #162544;
   --focus: #8ab4f8;
-  --shadow-sheet: 0 -4px 16px rgba(0,0,0,0.45);
-  --shadow-pop: 0 6px 20px rgba(0,0,0,0.5);
+  --shadow-sheet: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 :root {
   --space-1: 4px;
@@ -74,7 +75,8 @@
   --content-max: 1120px;
   --bp-md: 640px;
   --bp-lg: 1024px;
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --z-sticky: 10;
   --z-nav: 20;
   --z-overlay: 40;

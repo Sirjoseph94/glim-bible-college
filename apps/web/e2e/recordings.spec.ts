@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "./test";
 import { testPhoto } from "./images";
-import { openArea, signOut } from "./nav";
+import { openArea, openCourse, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -74,8 +74,7 @@ test("a student watches a recording on a phone and resumes where they stopped", 
   await signIn(page, STUDENT);
 
   const youtube = await stubYouTube(page);
-  await openArea(page, "Courses");
-  await page.getByText(/^Recordings \(/).click();
+  await openCourse(page, "Pastoral Care", "Recordings");
   await page.getByRole("link", { name: "Week 2: Prayer" }).click();
 
   // Only the thumbnail until the student taps play.

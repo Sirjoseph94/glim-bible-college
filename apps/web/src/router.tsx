@@ -9,6 +9,7 @@ import {
 import { meQuery } from "./api/session";
 import { LoginPage } from "./routes/login";
 import { RootLayout } from "./routes/root";
+import { COURSE_TABS, type CourseTab } from "./routes/course-tabs";
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -213,6 +214,16 @@ const coursesRoute = createRoute({
   path: "/courses",
   beforeLoad: requireStudent,
   component: lazyRouteComponent(() => import("./routes/student"), "CoursesPage"),
+});
+
+/** A course's sections as tabs; the tab is in the URL so back and refresh keep it (§9.7). */
+const courseRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$offeringId",
+  validateSearch: (search: Record<string, unknown>): { tab?: CourseTab } =>
+    COURSE_TABS.includes(search.tab as CourseTab) ? { tab: search.tab as CourseTab } : {},
+  beforeLoad: requireStudent,
+  component: lazyRouteComponent(() => import("./routes/course"), "CoursePage"),
 });
 
 const teachRoute = createRoute({
@@ -503,6 +514,7 @@ const routeTree = rootRoute.addChildren([
   teachRoute,
   registrationRoute,
   coursesRoute,
+  courseRoute,
   applyRoute,
   applicationRoute,
   applicationEditRoute,

@@ -12,11 +12,16 @@ export const GOOGLE_ERRORS: Record<string, string> = {
     "That Google account is already linked to another GLIM account, or yours already has one.",
 };
 
+/**
+ * Google's own sign-in button (decision UI-Q11): Google's light theme in light mode and its dark
+ * theme in dark mode, with the standard four-colour "G". Google's branding rules don't allow a
+ * brand-coloured fill, so this is a documented exception to the design system (glim-google-button).
+ */
 export function GoogleButton({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
-      className="flex w-full items-center justify-center gap-2 rounded border border-slate-300 bg-white px-4 py-2 font-medium text-slate-800"
+      className="glim-google-button flex h-control w-full items-center justify-center gap-3 rounded-md px-4 text-body font-medium"
     >
       <svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 48">
         <path

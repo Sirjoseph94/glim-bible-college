@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, signOut } from "./nav";
+import { openArea, openCourse, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -54,8 +54,7 @@ test("a timed quiz survives a dropped connection at the deadline", async ({ page
   await signOut(page);
 
   await signIn(page, STUDENT);
-  await openArea(page, "Courses");
-  await page.getByText("Quizzes", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Work");
   await page.getByRole("link", { name: "Quick check" }).click();
   await page.getByRole("button", { name: /^Start/ }).click();
   await expect(page.getByRole("timer")).toHaveText(/^[01]:\d\d$/);

@@ -18,3 +18,10 @@ export async function signOut(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
 }
+
+/** Opens one of the student's courses from My courses, at the given tab (§11.3). */
+export async function openCourse(page: Page, title: string, tab: string): Promise<void> {
+  await openArea(page, "Courses");
+  await page.getByRole("link", { name: new RegExp(title) }).click();
+  await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
+}

@@ -186,3 +186,24 @@
 .glim-safe-top {
   padding-top: env(safe-area-inset-top);
 }
+
+/*
+ * Google's sign-in button themes (decision UI-Q11), exact as Google's branding guidelines give
+ * them: light in light mode, dark in dark mode. A documented exception to tokens-only.
+ */
+.glim-google-button {
+  background: #ffffff;
+  border: 1px solid #747775;
+  color: #1f1f1f;
+}
+[data-theme="dark"] .glim-google-button {
+  background: #131314;
+  border-color: #8e918f;
+  color: #e3e3e3;
+}
+
+/* The GLIM-green identity band (§4.1, §11.1): text on it is ink's light value in both themes. */
+.glim-identity-band {
+  background: var(--glim-green);
+  color: #14201a;
+}

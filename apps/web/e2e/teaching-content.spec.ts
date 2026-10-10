@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { openArea, signOut } from "./nav";
+import { openArea, openCourse, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -58,12 +58,11 @@ test("a Lecturer shares materials and an announcement with the class", async ({ 
   await signOut(page);
 
   await signIn(page, STUDENT);
-  await openArea(page, "Courses");
-  await page.getByText("Announcements", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Overview");
   await expect(page.getByRole("listitem", { name: "Welcome to the course" })).toContainText(
     "Read John 1 before Monday.",
   );
-  await page.getByText("Materials", { exact: true }).click();
+  await page.getByRole("tab", { name: "Materials" }).click();
   const questions = page.getByRole("listitem", { name: "Study questions" });
   await expect(questions).toContainText("Who is the Word?");
   await expect(questions.locator("script")).toHaveCount(0);
