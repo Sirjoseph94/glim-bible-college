@@ -83,7 +83,7 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Course results" }).click();
+  await page.getByRole("link", { name: "Course results", exact: true }).click();
   await page.getByRole("link", { name: "PAS101 Pastoral Care" }).click();
   const row = page.getByRole("row", { name: /Bola Online/ });
   await row.getByRole("button", { name: "Reopen Bola Online's result" }).click();

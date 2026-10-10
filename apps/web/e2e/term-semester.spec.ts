@@ -35,7 +35,7 @@ test("the Registrar computes, approves and publishes semester results", async ({
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Semester results" }).click();
+  await page.getByRole("link", { name: "Semester results", exact: true }).click();
   await page.getByLabel("Semester").selectOption({ label: "First Semester, 2032/2033" });
   await page.getByRole("button", { name: "Compute" }).click();
   await expect(page.getByText("Computed 2; 2 changed.")).toBeVisible();

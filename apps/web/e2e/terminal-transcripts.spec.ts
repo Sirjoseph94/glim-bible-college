@@ -45,7 +45,7 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Semester results" }).click();
+  await page.getByRole("link", { name: "Semester results", exact: true }).click();
   await page
     .getByRole("listitem", { name: "Bola Online" })
     .getByRole("button", { name: "Approve" })

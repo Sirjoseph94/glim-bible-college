@@ -19,7 +19,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
 test("the Registrar proposes and confers an award", async ({ page }) => {
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Awards" }).click();
+  await page.getByRole("link", { name: "Awards", exact: true }).click();
   const bola = page
     .getByRole("region", { name: "Students" })
     .getByRole("row", { name: /^Bola Online / });
