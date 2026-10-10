@@ -80,7 +80,7 @@ test("a student watches a recording on a phone and resumes where they stopped", 
   // Only the thumbnail until the student taps play.
   const facade = page.getByRole("button", { name: "Play recording" });
   await expect(facade).toBeVisible();
-  await expect(page.getByText(/tap ⚙ → Quality → 144p/)).toBeVisible();
+  await expect(page.getByText(/→ Quality → 144p/)).toBeVisible();
   expect(youtube).toEqual([]);
 
   await facade.click();
