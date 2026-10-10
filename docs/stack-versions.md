@@ -57,6 +57,7 @@ lockfile is authoritative. When you add or upgrade a dependency, update this tab
 | vite | 8.3.3 | SPA build |
 | @vitejs/plugin-react | 6.1.2 | SPA build |
 | tailwindcss, @tailwindcss/vite | 4.3.3 | styling |
+| @radix-ui/react-dialog 1.1.23, -dropdown-menu 2.1.24, -tabs 1.1.21, -radio-group 1.4.7, -checkbox 1.3.11, -switch 1.3.7, -tooltip 1.2.16 | (see left) | accessible UI primitives (UI-Q10) |
 | testcontainers, @testcontainers/postgresql | 12.2.0 | integration tests |
 
 ## Services (local compose and Testcontainers)

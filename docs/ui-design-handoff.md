@@ -8,7 +8,7 @@
 
 > If this file and the artifacts disagree, **this file wins** for implementation and the disagreement is a bug to report. If the existing code contradicts this file, the existing code changes — unless doing so would break an invariant in §0.2, in which case stop and ask.
 
-> **Repository note (added when this handoff was committed):** in this repository the build spec is `docs/TRD.md` v3.0 (v2.1 is archived at `docs/archive/TRD-v2.1.md`), and its frontend section is §18, not §17. Where this handoff and the TRD, `GLOSSARY.md` or `CLAUDE.md` disagree (e.g. "Teacher" vs Lecturer, "session" vs Class Meeting, the HLS player vs YouTube embeds), the conflicts are listed in `docs/ui-audit.md` § Questions and must be resolved before the affected work package starts.
+> **Repository note (added when this handoff was committed):** in this repository the build spec is `docs/TRD.md` v3.0 (v2.1 is archived at `docs/archive/TRD-v2.1.md`), and its frontend section is §18, not §17. Where this handoff and the TRD, `GLOSSARY.md` or `CLAUDE.md` disagree (e.g. "Teacher" vs Lecturer, "session" vs Class Meeting, the HLS player vs YouTube embeds), the conflicts are listed in `docs/ui-audit.md` § Questions and were resolved on 10 Oct 2026; the answers in `docs/decisions.md` (UI-Q1–UI-Q16) override this file where they differ.
 
 ---
 

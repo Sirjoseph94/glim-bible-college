@@ -1,7 +1,7 @@
 # UI audit — existing `apps/web` frontend (WP-UI-00)
 
 **Date:** 10 Oct 2026 · **Commit audited:** `be2c386` · **Procedure:** `docs/ui-design-handoff.md` §2.1
-**Status:** baseline recorded. **Blocked on the questions at the end** before WP-UI-04+ (user-facing `UNMAPPED` items and several conflicts with the TRD). WP-UI-01..03 (tokens, icons, primitives) can start once Q1, Q10, Q11 and Q16 are answered.
+**Status:** baseline recorded; all 16 questions answered on 10 Oct 2026 (see `docs/decisions.md`, UI-Q1–UI-Q16). WP-UI-01 onward may proceed.
 
 > Source-of-truth order used here: `docs/TRD.md` v3.0 and `GLOSSARY.md` win on behaviour, data and vocabulary (CLAUDE.md); the handoff wins on visual and interaction design. Where they collide the item is listed under **Questions** instead of being decided here.
 
@@ -281,7 +281,9 @@ The existing `e2e/wcag.spec.ts` also passes (0 violations on `/login`, `/apply`,
 
 ---
 
-## 8. Questions (answers go in `docs/decisions.md`; WP-UI-04+ waits on the user-facing ones)
+## 8. Questions
+
+> **Answered 10 Oct 2026.** The answers are recorded in `docs/decisions.md` (UI-Q1 to UI-Q16, numbered as below). In short: 1 GLOSSARY wins · 2 keep the YouTube embed · 3 API change raised (`.scratch/ui-overhaul/issues/01`) · 4 compose roll call from §9.18 + §9.20 · 5 add `/courses/$offeringId` and `/teach/$offeringId`; Announcements go in Overview · 6 a Lecturer's `/` is §11.7 · 7 compose admissions and registration in WP-UI-11 · 8 merge transcripts into results · 9 data gaps skipped, documented in `.scratch/ui-overhaul/issues/02` · 10 install Radix · 11 design exception for the G mark, with the button in Google's light/dark theme (not brand fill) · 12 add Disclosure · 13 institution name stays editable and is used everywhere · 14 budget-check gains brotli plus a font/image check in WP-UI-01 · 15 TRD v3.0 sections · 16 tokens alongside the defaults until WP-UI-12.
 
 **Conflicts between the handoff and the TRD / GLOSSARY / CLAUDE.md**
 
