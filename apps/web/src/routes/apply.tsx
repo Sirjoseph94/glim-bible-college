@@ -37,7 +37,7 @@ export function ApplyPage() {
         <Alert tone="error">{GOOGLE_ERRORS[error] ?? GOOGLE_ERRORS.GOOGLE_SIGN_IN_FAILED}</Alert>
       ) : null}
       <section className="space-y-2">
-        <h2 className="text-2xl font-semibold">Apply to study with us</h2>
+        <h1 className="text-display">Apply to study with us</h1>
         <p className="text-slate-700">
           Study theology on campus or online. Choose the programme that fits you.
         </p>

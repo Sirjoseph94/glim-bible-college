@@ -27,7 +27,7 @@ export function Alert({ tone, children }: { tone: "error" | "success"; children:
 export function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mx-auto max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-4 text-xl font-semibold">{title}</h2>
+      <h1 className="mb-4 text-title">{title}</h1>
       {children}
     </section>
   );

@@ -16,7 +16,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("a student reads notifications and chooses what comes by email", async ({ page }) => {
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: /^Notifications \(\d+\)$/ }).click();
+  await page.getByRole("link", { name: "Notifications, something new" }).click();
   await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await expect(
     page.getByRole("listitem", { name: /your grade for .* is out/ }).first(),

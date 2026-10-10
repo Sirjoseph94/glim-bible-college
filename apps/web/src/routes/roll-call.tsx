@@ -148,7 +148,7 @@ export function RollCallPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Roll call</h2>
+        <h1 className="text-title">Roll call</h1>
         <span
           role="status"
           className={status === "retry" ? "text-sm text-amber-800" : "text-sm text-slate-600"}
@@ -403,7 +403,7 @@ export function MeetingAttendancePage() {
   const view = records.data;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Attendance</h2>
+      <h1 className="text-title">Attendance</h1>
       <div className="flex gap-4 text-sm">
         <Link to="/teach" className="text-brand underline">
           Back to my offerings

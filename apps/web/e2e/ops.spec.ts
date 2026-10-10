@@ -1,5 +1,6 @@
 import { linkToken } from "./mailbox";
 import { expect, test } from "./test";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-opspage@glim.test";
 const PASSWORD = "ops passphrase 2026";
@@ -13,7 +14,7 @@ test("the System Admin checks YouTube and the job queues", async ({ page }) => {
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();
-  await page.getByRole("link", { name: "Ops" }).click();
+  await openArea(page, "Ops");
 
   const youtube = page.getByRole("region", { name: "YouTube" });
   await expect(youtube).toContainText("Not checked yet.");

@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate } from "@tanstack/react-router";
 import type { notifications } from "@glim/contracts";
 import { api } from "../api/client";
 import { institutionQuery } from "../api/institution";
 import { useEffect } from "react";
 import { meQuery, signOut, updateMe } from "../api/session";
+import { AppShell, SignedOutShell } from "../components/app/app-shell";
 import { browserTimeZone } from "../components/time";
 
 export function RootLayout() {
@@ -32,140 +33,24 @@ export function RootLayout() {
       void updateMe(queryClient, { timezone: zone }).catch(() => undefined);
   }, [needsTimezone, queryClient]);
 
-  return (
-    <div className="min-h-dvh bg-slate-50 font-sans text-slate-900">
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-brand px-4 py-3 text-white">
-        {institution.data ? (
-          <h1 className="text-lg font-semibold" data-testid="institution-name">
-            {institution.data.name}
-          </h1>
-        ) : (
-          <div className="h-7 w-56 animate-pulse rounded bg-white/20" aria-label="Loading" />
-        )}
-        {me.data ? (
-          <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <Link to="/" className="underline">
-              Home
-            </Link>
-            {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "ADMISSIONS_OFFICER") ? (
-              <Link to="/admissions" className="underline">
-                Admissions
-              </Link>
-            ) : null}
-            {me.data.roles.isApplicant ? (
-              <Link to="/application" className="underline">
-                My application
-              </Link>
-            ) : null}
-            {me.data.roles.isStudent ? (
-              <>
-                <Link to="/courses" className="underline">
-                  My courses
-                </Link>
-                <Link to="/registration" className="underline">
-                  Registration
-                </Link>
-                <Link to="/results" className="underline">
-                  My results
-                </Link>
-                <Link to="/transcripts" className="underline">
-                  Transcripts
-                </Link>
-              </>
-            ) : me.data.roles.isAlumnus ? (
-              <>
-                <Link to="/results" className="underline">
-                  My results
-                </Link>
-                <Link to="/transcripts" className="underline">
-                  Transcripts
-                </Link>
-              </>
-            ) : null}
-            {me.data.roles.isLecturer ? (
-              <Link to="/teach" className="underline">
-                My offerings
-              </Link>
-            ) : null}
-            <Link to="/notifications" className="underline">
-              Notifications
-              {(unread.data?.unread ?? 0) > 0 ? ` (${String(unread.data?.unread ?? 0)})` : ""}
-            </Link>
-            <Link to="/profile" className="underline">
-              Profile
-            </Link>
-            {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "ACADEMIC_ADMIN") ? (
-              <>
-                <Link to="/admin/academic" className="underline">
-                  Academic
-                </Link>
-                <Link to="/admin/calendar" className="underline">
-                  Calendar
-                </Link>
-                <Link to="/admin/offerings" className="underline">
-                  Offerings
-                </Link>
-                <Link to="/admin/lecturers" className="underline">
-                  Lecturers
-                </Link>
-                <Link to="/admin/imports" className="underline">
-                  Imports
-                </Link>
-              </>
-            ) : null}
-            {me.data.roles.staff.some((r) => r === "SYSTEM_ADMIN" || r === "REGISTRAR") ? (
-              <>
-                <Link to="/results/courses" className="underline">
-                  Course results
-                </Link>
-                <Link to="/results/semesters" className="underline">
-                  Semester results
-                </Link>
-                <Link to="/results/awards" className="underline">
-                  Awards
-                </Link>
-                <Link to="/results/transcripts" className="underline">
-                  Transcript requests
-                </Link>
-                <Link to="/admin/grading-schemes" className="underline">
-                  Grading schemes
-                </Link>
-              </>
-            ) : null}
-            {me.data.roles.staff.includes("SYSTEM_ADMIN") ? (
-              <>
-                <Link to="/admin/users" className="underline">
-                  Users
-                </Link>
-                <Link to="/admin/videos" className="underline">
-                  Videos
-                </Link>
-                <Link to="/admin/audit" className="underline">
-                  Audit log
-                </Link>
-                <Link to="/admin/ops" className="underline">
-                  Ops
-                </Link>
-                <Link to="/admin/settings" className="underline">
-                  Settings
-                </Link>
-              </>
-            ) : null}
-            <button
-              type="button"
-              className="rounded border border-white/40 px-3 py-1 text-sm"
-              onClick={() => {
-                void signOut(queryClient).then(() => navigate({ to: "/login" }));
-              }}
-            >
-              Sign out
-            </button>
-          </nav>
-        ) : null}
-      </header>
-      <main className="mx-auto max-w-3xl px-4 py-6">
+  const signOutAndLeave = () => {
+    void signOut(queryClient).then(() => navigate({ to: "/login" }));
+  };
+
+  if (!me.data)
+    return (
+      <SignedOutShell institutionName={institution.data?.name}>
         <Outlet />
-      </main>
-    </div>
+      </SignedOutShell>
+    );
+  return (
+    <AppShell
+      me={me.data}
+      institutionName={institution.data?.name}
+      unread={(unread.data?.unread ?? 0) > 0}
+      onSignOut={signOutAndLeave}
+    >
+      <Outlet />
+    </AppShell>
   );
 }

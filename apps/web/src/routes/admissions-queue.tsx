@@ -46,17 +46,7 @@ export function AdmissionsQueuePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Applications</h2>
-        <div className="flex gap-4 text-sm">
-          <Link to="/admissions/reports" className="underline">
-            Reports
-          </Link>
-          <Link to="/admissions/intakes" className="underline">
-            Intakes
-          </Link>
-        </div>
-      </div>
+      <h1 className="text-title">Applications</h1>
 
       <div className="grid gap-2 sm:grid-cols-4">
         <input

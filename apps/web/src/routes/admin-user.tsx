@@ -34,7 +34,7 @@ export function AdminUserPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">{u.displayName}</h2>
+        <h1 className="text-title">{u.displayName}</h1>
         <p className="text-slate-600">
           {u.email} · {u.status.toLowerCase()} · last signed in <Time value={u.lastLoginAt} />
         </p>

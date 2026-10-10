@@ -77,7 +77,7 @@ export function QuizPage() {
   const running = mine.data?.attempts.find((a) => a.status === "IN_PROGRESS");
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">{z.title}</h2>
+      <h1 className="text-title">{z.title}</h1>
       <p className="text-sm text-slate-600">
         {z.questionCount} questions · {z.maxScore} marks
         {z.timeLimitMinutes === null ? "" : ` · ${String(z.timeLimitMinutes)} minutes`} ·{" "}
@@ -437,7 +437,7 @@ export function QuizGradingPage() {
   if (list.isError) return <Alert tone="error">We couldn't load the attempts.</Alert>;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Quiz attempts</h2>
+      <h1 className="text-title">Quiz attempts</h1>
       <OnlineGrants quizId={id} />
       {list.data.items.length === 0 ? <p className="text-slate-600">No attempts yet.</p> : null}
       <ul className="space-y-2 text-sm">

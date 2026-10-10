@@ -154,3 +154,8 @@
 .glim-stage-chip {
   background: rgb(255 255 255 / 0.18);
 }
+
+/* Bars at the bottom edge clear the phone's home indicator (§6.2). */
+.glim-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

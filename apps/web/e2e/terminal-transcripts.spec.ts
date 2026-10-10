@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
 /** Set in the grading-schemes spec. */
@@ -21,6 +22,7 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
   page,
 }) => {
   await signIn(page, STUDENT);
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Transcripts" }).click();
   await page.getByRole("button", { name: "Get an unofficial transcript" }).click();
   const unofficial = page.getByRole("listitem", { name: /^GLIM\/TR\/\d{4}\/00001$/ });
@@ -40,9 +42,10 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
   await expect(
     page.getByText(/Waiting for the Registrar · for Registrar, Lagos Seminary/),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, REGISTRAR);
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Transcript requests" }).click();
   await page
     .getByRole("listitem", { name: "Bola Online" })
@@ -88,7 +91,7 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
   await expect(
     page.getByText("This transcript was revoked: Issued against the wrong record."),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await page.goto(`/verify/${unofficialCode}`);
   await expect(page.getByText(/This transcript was revoked and is no longer valid/)).toBeVisible();

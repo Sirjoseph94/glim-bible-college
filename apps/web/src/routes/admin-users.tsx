@@ -18,7 +18,7 @@ export function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Users</h2>
+      <h1 className="text-title">Users</h1>
       <InviteForm />
       <div className="flex flex-wrap gap-2">
         <input

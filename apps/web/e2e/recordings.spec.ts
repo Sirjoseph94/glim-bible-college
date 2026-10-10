@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "./test";
 import { testPhoto } from "./images";
+import { openArea, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -58,7 +59,7 @@ test("a student watches a recording on a phone and resumes where they stopped", 
 }) => {
   // The Lecturer (signed up in the meetings spec) adds a published recording.
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Recordings" }).click();
   await page.getByLabel(/^YouTube link/).fill("https://youtu.be/e2eWatch001");
   await page
@@ -67,13 +68,13 @@ test("a student watches a recording on a phone and resumes where they stopped", 
     .fill("Week 2: Prayer");
   await page.getByRole("button", { name: "Add recording" }).click();
   await expect(page.getByText("Week 2: Prayer (published)")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   // The online student (seeded with a password) signs in.
   await signIn(page, STUDENT);
 
   const youtube = await stubYouTube(page);
-  await page.getByRole("link", { name: "My courses" }).click();
+  await openArea(page, "Courses");
   await page.getByText(/^Recordings \(/).click();
   await page.getByRole("link", { name: "Week 2: Prayer" }).click();
 

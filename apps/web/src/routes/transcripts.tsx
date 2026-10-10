@@ -63,7 +63,7 @@ export function MyTranscriptsPage() {
   };
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Transcripts</h2>
+      <h1 className="text-title">Transcripts</h1>
       {error ? <Alert tone="error">{error}</Alert> : null}
       {programmes.length > 1 ? (
         <label className="block text-sm">
@@ -300,7 +300,7 @@ function TranscriptView({ transcript: d }: { transcript: Transcript }) {
   return (
     <article className="space-y-4 rounded border border-slate-200 bg-white p-4 text-sm">
       <header className="space-y-1">
-        <h2 className="text-lg font-semibold">{s.institution.name}</h2>
+        <h1 className="text-title">{s.institution.name}</h1>
         <p className="font-medium">
           {s.kind === "OFFICIAL" ? "Official" : "Unofficial"} transcript · {d.serialNo}
         </p>
@@ -402,7 +402,7 @@ export function RegistrarTranscriptsPage() {
   });
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Transcript requests</h2>
+      <h1 className="text-title">Transcript requests</h1>
       <label className="block text-sm">
         <span className="block text-slate-700">Show</span>
         <select
@@ -570,7 +570,7 @@ export function VerifyPage() {
   });
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Verify a transcript</h2>
+      <h1 className="text-title">Verify a transcript</h1>
       {check.isPending ? <div className="h-24 animate-pulse rounded bg-slate-200" /> : null}
       {check.isError ? (
         <Alert tone="error">No transcript has the code {code}. Check it and try again.</Alert>

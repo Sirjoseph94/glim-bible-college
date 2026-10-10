@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken, nextGoogleSignIn } from "./mailbox";
+import { openArea, signOut } from "./nav";
 
 const EMAIL = "e2e-google@glim.test";
 const PASSWORD = "gloria's long passphrase";
@@ -11,7 +12,7 @@ test("a staff member links Google on their profile, then signs in with it", asyn
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Gloria Google" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Profile" }).click();
+  await openArea(page, "Profile");
   await nextGoogleSignIn({
     sub: "e2e-google-sub",
     email: "gloria.personal@gmail.com",
@@ -20,7 +21,7 @@ test("a staff member links Google on their profile, then signs in with it", asyn
   await page.getByRole("link", { name: "Link Google account" }).click();
   await expect(page.getByText("Your Google account is now linked.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await nextGoogleSignIn({ sub: "e2e-google-sub", email: "gloria.personal@gmail.com" });
   await page.getByRole("link", { name: "Continue with Google" }).click();

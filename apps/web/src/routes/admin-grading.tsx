@@ -46,7 +46,7 @@ export function AdminGradingPage() {
   if (schemes.isError) return <Alert tone="error">We couldn't load the grading schemes.</Alert>;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Grading schemes</h2>
+      <h1 className="text-title">Grading schemes</h1>
       <p className="text-sm text-slate-600">
         Results are graded with their programme's scheme when a Lecturer finalizes them. Once a
         scheme has been used it can't change; save a new version instead.

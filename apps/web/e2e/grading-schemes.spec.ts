@@ -1,5 +1,6 @@
 import { linkToken } from "./mailbox";
 import { expect, test } from "./test";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-registrar@glim.test";
 const PASSWORD = "registrar passphrase 2026";
@@ -13,6 +14,7 @@ test("the Registrar manages grading schemes", async ({ page }) => {
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Grading schemes" }).click();
 
   const diploma = page.getByRole("listitem", { name: "GLIM Diploma", exact: true });

@@ -60,12 +60,12 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">
+      <h1 className="text-title">
         Curriculum v{curriculum.curriculumVersion}{" "}
         <span className="text-base font-normal text-slate-600">
           · {curriculum.status.toLowerCase()}
         </span>
-      </h2>
+      </h1>
       <p className="text-sm text-slate-600">
         Effective from {curriculum.effectiveFrom}. Students need {curriculum.minElectiveCredits}{" "}
         elective credits for the award.

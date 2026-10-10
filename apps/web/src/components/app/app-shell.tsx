@@ -1,0 +1,269 @@
+import type { Me } from "@glim/contracts";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useState, type ReactNode } from "react";
+import { cn } from "../../design/cn";
+import { Crest } from "../../design/crest";
+import { Icon } from "../../design/icons";
+import { Avatar } from "../ui/avatar";
+import { Sheet } from "../ui/dialog";
+import { Menu } from "../ui/menu";
+import { NotificationDot } from "../ui/notification-dot";
+import { activeItem, navItems, sectionLinks, type NavItem } from "./nav";
+
+/** The bottom bar holds this many items; beyond it the rest go under "More". */
+const BOTTOM_NAV_MAX = 5;
+
+function InstitutionName({ name, testId }: { name: string | undefined; testId?: string }) {
+  return name === undefined ? (
+    <span className="block h-6 w-40 rounded-sm bg-surface-sunken" aria-label="Loading" />
+  ) : (
+    <span data-testid={testId} className="truncate text-heading font-bold text-ink">
+      {name}
+    </span>
+  );
+}
+
+function NotificationsLink({ unread }: { unread: boolean }) {
+  return (
+    <Link
+      to="/notifications"
+      aria-label={unread ? "Notifications, something new" : "Notifications"}
+      className="relative inline-flex size-tap shrink-0 items-center justify-center rounded-pill text-ink-muted transition-colors duration-120 hover:bg-surface-sunken"
+    >
+      <Icon name="bell" />
+      {unread ? <NotificationDot className="absolute top-2 right-2" /> : null}
+    </Link>
+  );
+}
+
+function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <Menu
+      trigger={
+        <button
+          type="button"
+          aria-label="Account"
+          className="inline-flex size-tap shrink-0 items-center justify-center rounded-pill"
+        >
+          <Avatar name={name} current />
+        </button>
+      }
+      items={[
+        {
+          label: "Profile",
+          icon: "user",
+          onSelect: () => {
+            void navigate({ to: "/profile" });
+          },
+        },
+        { label: "Sign out", onSelect: onSignOut },
+      ]}
+    />
+  );
+}
+
+/** One navigation link: icon in a pill over its label (bottom bar), or stacked (rail). */
+function NavLink({ item, current }: { item: NavItem; current: boolean }) {
+  return (
+    <Link
+      to={item.to}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "flex min-h-tap flex-1 flex-col items-center justify-center gap-1 text-caption",
+        current ? "text-brand" : "text-ink-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-7.5 w-14 items-center justify-center rounded-pill",
+          current && "bg-brand-soft",
+        )}
+      >
+        <Icon name={item.icon} size={22} />
+      </span>
+      {item.label}
+    </Link>
+  );
+}
+
+function BottomNav({ items, current }: { items: NavItem[]; current: NavItem | undefined }) {
+  const [more, setMore] = useState(false);
+  const overflow = items.length > BOTTOM_NAV_MAX;
+  const shown = overflow ? items.slice(0, BOTTOM_NAV_MAX - 1) : items;
+  const rest = overflow ? items.slice(BOTTOM_NAV_MAX - 1) : [];
+  const moreIsCurrent = rest.some((item) => item.to === current?.to);
+  return (
+    <nav
+      aria-label="Main"
+      className="glim-safe-bottom z-nav shrink-0 border-t border-line bg-surface-raised shadow-sheet lg:hidden"
+    >
+      <div className="flex h-nav items-stretch px-2">
+        {shown.map((item) => (
+          <NavLink key={item.to} item={item} current={item.to === current?.to} />
+        ))}
+        {overflow ? (
+          <button
+            type="button"
+            onClick={() => {
+              setMore(true);
+            }}
+            className={cn(
+              "flex min-h-tap flex-1 flex-col items-center justify-center gap-1 text-caption",
+              moreIsCurrent ? "text-brand" : "text-ink-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-7.5 w-14 items-center justify-center rounded-pill",
+                moreIsCurrent && "bg-brand-soft",
+              )}
+            >
+              <Icon name="menu" size={22} />
+            </span>
+            More
+          </button>
+        ) : null}
+      </div>
+      <Sheet open={more} onOpenChange={setMore} title="More">
+        <ul className="divide-y divide-line">
+          {rest.map((item) => (
+            <li key={item.to}>
+              <Link
+                to={item.to}
+                aria-current={item.to === current?.to ? "page" : undefined}
+                onClick={() => {
+                  setMore(false);
+                }}
+                className="flex min-h-tap items-center gap-3 py-2 text-body text-ink aria-[current=page]:text-brand"
+              >
+                <Icon name={item.icon} />
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Sheet>
+    </nav>
+  );
+}
+
+function NavRail({ items, current }: { items: NavItem[]; current: NavItem | undefined }) {
+  return (
+    <nav
+      aria-label="Main"
+      className="hidden w-22 shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-line bg-surface-raised py-4 lg:flex"
+    >
+      <div className="mb-2">
+        <Crest size={36} />
+      </div>
+      {items.map((item) => (
+        <div key={item.to} className="flex w-full">
+          <NavLink item={item} current={item.to === current?.to} />
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/** Links between the pages of one area (Academic: Calendar, Offerings…), above the page. */
+function SectionNav({ pathname, me }: { pathname: string; me: Me }) {
+  const links = sectionLinks(pathname, me.roles);
+  if (links.length === 0) return null;
+  return (
+    <nav aria-label="Section" className="-mx-4 overflow-x-auto px-4">
+      <div className="flex gap-1 border-b border-line">
+        {links.map((link) => {
+          const current = pathname === link.to;
+          return (
+            <Link
+              key={link.to}
+              to={link.to}
+              aria-current={current ? "page" : undefined}
+              className={cn(
+                "-mb-px flex min-h-tap shrink-0 items-center border-b-3 px-3 text-label whitespace-nowrap",
+                current
+                  ? "border-brand text-brand"
+                  : "border-transparent text-ink-muted hover:text-ink",
+              )}
+            >
+              {link.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+/**
+ * The signed-in app (docs/ui-design-handoff.md §6.2): on phones and tablets a top bar, the page,
+ * and a bottom navigation bar; from 1024px a left rail. Only the page scrolls.
+ */
+export function AppShell({
+  me,
+  institutionName,
+  unread,
+  onSignOut,
+  children,
+}: {
+  me: Me;
+  institutionName: string | undefined;
+  unread: boolean;
+  onSignOut: () => void;
+  children: ReactNode;
+}) {
+  const { pathname } = useLocation();
+  const items = navItems(me.roles);
+  const current = activeItem(pathname, items);
+  const actions = (
+    <div className="flex shrink-0 items-center">
+      <NotificationsLink unread={unread} />
+      <AccountMenu name={me.user.displayName} onSignOut={onSignOut} />
+    </div>
+  );
+  return (
+    <div className="flex h-dvh bg-surface text-ink">
+      <NavRail items={items} current={current} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="z-nav flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line bg-surface-raised pr-1 pl-4 lg:hidden">
+          <Link to="/" className="flex min-w-0 items-center gap-2">
+            <Crest size={28} />
+            <InstitutionName name={institutionName} testId="institution-name" />
+          </Link>
+          {actions}
+        </header>
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-content space-y-5 px-4 pt-4 pb-6 lg:px-6 lg:pt-6 lg:pb-8">
+            <div className="hidden items-center justify-between gap-4 lg:flex">
+              <InstitutionName name={institutionName} />
+              {actions}
+            </div>
+            <SectionNav pathname={pathname} me={me} />
+            {children}
+          </div>
+        </main>
+        <BottomNav items={items} current={current} />
+      </div>
+    </div>
+  );
+}
+
+/** Pages for people who aren't signed in: the crest and name over a centred column. */
+export function SignedOutShell({
+  institutionName,
+  children,
+}: {
+  institutionName: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-h-dvh bg-surface text-ink">
+      <header className="flex h-14 items-center gap-2 border-b border-line bg-surface-raised px-4">
+        <Crest size={28} />
+        <InstitutionName name={institutionName} testId="institution-name" />
+      </header>
+      <main className="mx-auto w-full max-w-3xl px-4 py-6">{children}</main>
+    </div>
+  );
+}

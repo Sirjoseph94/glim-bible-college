@@ -11,7 +11,7 @@ export function AdminAuditPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Audit log</h2>
+      <h1 className="text-title">Audit log</h1>
       {log.isPending ? (
         <div className="h-40 animate-pulse rounded bg-slate-200" />
       ) : log.isError ? (

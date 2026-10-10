@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { openArea } from "./nav";
 
 const OPS = "e2e-ops@glim.test";
 const PASSWORD = "operations passphrase 2026";
@@ -13,7 +14,7 @@ test("a System Admin invites a registrar, grants a role, and sees it in the audi
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Obi Ops" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Users" }).click();
+  await openArea(page, "People");
   await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
   await page.getByText("Invite a staff member").click();
   await page.getByLabel("Full name", { exact: true }).fill("Rita Registrar");
@@ -31,6 +32,7 @@ test("a System Admin invites a registrar, grants a role, and sees it in the audi
   await page.getByRole("button", { name: "Grant role" }).click();
   await expect(page.getByText("Admissions Officer since")).toBeVisible();
 
+  await openArea(page, "Settings");
   await page.getByRole("link", { name: "Audit log" }).click();
   await expect(page.getByText("authorization.role.granted").first()).toBeVisible();
   await expect(page.getByText("Also runs admissions")).toBeVisible();

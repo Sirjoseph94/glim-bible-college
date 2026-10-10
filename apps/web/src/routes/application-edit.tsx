@@ -283,7 +283,7 @@ function StartApplication() {
       }}
     >
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Start your application</h2>
+        <h1 className="text-title">Start your application</h1>
         <p className="text-sm text-slate-600">
           For the {open.academicSessionName}. Applications close on{" "}
           <CalendarDate value={open.closesOn} />.
@@ -489,7 +489,7 @@ function Wizard({ initial }: { initial: Application }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold">Your application</h2>
+          <h1 className="text-title">Your application</h1>
           <p className="text-sm text-slate-600">
             {application.programme.name} ·{" "}
             {application.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} ·{" "}

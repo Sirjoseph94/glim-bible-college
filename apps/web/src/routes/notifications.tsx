@@ -31,7 +31,7 @@ export function NotificationsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Notifications</h2>
+        <h1 className="text-title">Notifications</h1>
         {unread > 0 ? (
           <button
             type="button"

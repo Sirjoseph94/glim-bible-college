@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -20,19 +21,20 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("the Registrar computes, approves and publishes semester results", async ({ page }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("link", { name: "Results" }).click();
   await page.getByRole("button", { name: "Finalize results" }).click();
   await page.getByRole("button", { name: "Finalize now" }).click();
   await expect(page.getByText("2 of 2 results finalized.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My results" }).click();
+  await openArea(page, "Results");
   await expect(page.getByText("Provisional")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, REGISTRAR);
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Semester results" }).click();
   await page.getByLabel("Semester").selectOption({ label: "First Semester, 2032/2033" });
   await page.getByRole("button", { name: "Compute" }).click();
@@ -48,10 +50,10 @@ test("the Registrar computes, approves and publishes semester results", async ({
     "href",
     /\/api\/v1\/reports\/results\?semesterId=.+&format=csv$/,
   );
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My results" }).click();
+  await openArea(page, "Results");
   await expect(page.getByText(/GPA \d\.\d\d · CGPA \d\.\d\d/)).toBeVisible();
   await expect(page.getByText("Provisional")).toHaveCount(0);
 });

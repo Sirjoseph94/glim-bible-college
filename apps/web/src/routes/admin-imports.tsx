@@ -89,7 +89,7 @@ export function AdminImportsPage() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-xl font-semibold">Import data</h2>
+      <h1 className="text-title">Import data</h1>
       <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
         <label className="block space-y-1">
           <span className="text-sm font-medium text-slate-700">What are you importing?</span>

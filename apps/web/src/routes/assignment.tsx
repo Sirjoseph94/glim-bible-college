@@ -54,7 +54,7 @@ export function AssignmentPage() {
   const draft = attempts.find((s) => s.status === "DRAFT") ?? null;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">{a.title}</h2>
+      <h1 className="text-title">{a.title}</h1>
       <div className="text-sm text-slate-600">
         <p>
           Due <Time value={a.dueAt} />
@@ -310,7 +310,7 @@ export function GradeAssignmentPage() {
   const a = assignment.data;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Grade: {a.title}</h2>
+      <h1 className="text-title">Grade: {a.title}</h1>
       <p className="text-sm text-slate-600">
         Out of {a.maxScore}. Grades stay hidden from students until you release them in the
         gradebook.

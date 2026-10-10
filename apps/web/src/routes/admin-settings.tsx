@@ -47,13 +47,13 @@ export function AdminSettingsPage() {
   const policies = useQuery(policiesQuery);
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Settings</h2>
+      <h1 className="text-title">Settings</h1>
       {current.data ? (
         <SettingsForm current={current.data} />
       ) : (
         <div className="h-40 animate-pulse rounded bg-slate-200" />
       )}
-      <h2 className="text-xl font-semibold">Policies</h2>
+      <h2 className="text-heading">Policies</h2>
       {policies.data?.items.map((policy) => (
         <PolicyForm key={`${policy.type}-${String(policy.version)}`} policy={policy} />
       )) ?? <div className="h-40 animate-pulse rounded bg-slate-200" />}

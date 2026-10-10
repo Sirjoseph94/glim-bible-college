@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea } from "./nav";
 
 /** Set in the grading-schemes spec. */
 const REGISTRAR = { email: "e2e-registrar@glim.test", password: "registrar passphrase 2026" };
@@ -17,6 +18,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("the Registrar proposes and confers an award", async ({ page }) => {
   await signIn(page, REGISTRAR);
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Awards" }).click();
   const bola = page.getByRole("listitem", { name: "Bola Online" });
   await expect(bola).toContainText("GLIM/DIP/2032/0002 · DMIN");

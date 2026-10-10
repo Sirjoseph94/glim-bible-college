@@ -63,7 +63,7 @@ export function CourseResultsPage() {
   const pending = r.items.length - r.finalized;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Course results</h2>
+      <h1 className="text-title">Course results</h1>
       <p className="text-sm text-slate-600">
         {r.finalized === 0
           ? "Nothing is finalized yet: this is what finalizing would record, from the gradebook as it is now."
@@ -234,7 +234,7 @@ export function ResultsCoursesPage() {
   if (list.isError) return <Alert tone="error">We couldn't load the courses.</Alert>;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Course results</h2>
+      <h1 className="text-title">Course results</h1>
       <ul className="space-y-2 text-sm">
         {list.data.items.map((o) => (
           <li key={o.id} className="rounded border border-slate-200 bg-white p-3">
@@ -269,7 +269,7 @@ export function MyResultsPage() {
   const programmes = mine.data.programmes;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">My results</h2>
+      <h1 className="text-title">My results</h1>
       {programmes.every((p) => p.semesters.length === 0) ? (
         <p className="text-sm text-slate-600">
           No results yet. They appear here as soon as your Lecturers finalize them.
@@ -393,7 +393,7 @@ export function SemesterResultsPage() {
   const broadsheet = `/api/v1/reports/results?${new URLSearchParams({ ...scope, format: "csv" }).toString()}`;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Semester results</h2>
+      <h1 className="text-title">Semester results</h1>
       <div className="flex flex-wrap gap-3 text-sm">
         <label className="block">
           <span className="block text-slate-700">Semester</span>

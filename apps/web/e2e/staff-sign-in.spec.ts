@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { signOut } from "./nav";
 
 const ADMIN = "e2e-admin@glim.test";
 const PASSWORD = "a long and happy passphrase 2026";
@@ -16,7 +17,7 @@ test("an invited System Admin sets a password, signs out, signs in, and resets t
   await expect(page.getByRole("heading", { name: "Welcome, Esther Admin" })).toBeVisible();
   await expect(page.getByText("Signed in as system admin.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
   await page.getByLabel("Email").fill(ADMIN);
@@ -27,7 +28,7 @@ test("an invited System Admin sets a password, signs out, signs in, and resets t
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Esther Admin" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
   await page.getByRole("link", { name: "Forgot your password?" }).click();

@@ -822,7 +822,7 @@ export function TeachPage() {
         actions={(meeting) => <MeetingActions meeting={meeting} />}
       />
       <section className="space-y-2">
-        <h2 className="text-xl font-semibold">My offerings</h2>
+        <h1 className="text-title">My offerings</h1>
         {list.data.items.length === 0 ? (
           <p className="text-slate-600">You aren't assigned to any Course Offerings yet.</p>
         ) : null}

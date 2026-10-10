@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-lecturer@glim.test";
 const PASSWORD = "lecturer passphrase 2026";
@@ -27,7 +28,7 @@ test("a Lecturer schedules a Class Meeting in a Room and sees it on their schedu
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: /^Welcome/ })).toBeVisible();
 
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await expect(page.getByText("No Class Meetings in the next two weeks.")).toBeVisible();
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel("Title").fill("Week 1: Caring for the flock");
@@ -53,7 +54,7 @@ test("a Lecturer schedules a Class Meeting in a Room and sees it on their schedu
   ).toBeVisible();
 
   // Move it, then cancel it.
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   const mine = page.getByRole("listitem").filter({ hasText: "Week 1: Caring for the flock" });
   await mine.getByRole("button", { name: "Reschedule" }).click();
   await mine.getByLabel("New date").fill(lagosDate(2));
@@ -72,7 +73,7 @@ test("a Lecturer schedules a weekly series", async ({ page }) => {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel(/^Title/).fill("Seminar {n}");
   await page.getByLabel(/^Date/).fill(lagosDate(3));
@@ -108,7 +109,7 @@ test("a Lecturer starts a class with the room instructions, then ends it", async
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel("Title").fill("Starting soon");
   await page.getByLabel(/^Date/).fill(start.date);
@@ -135,7 +136,7 @@ test("a Lecturer adds a YouTube recording to the course", async ({ page }) => {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Recordings" }).click();
   await expect(page.getByText("No recordings yet.")).toBeVisible();
 

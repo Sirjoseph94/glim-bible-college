@@ -243,7 +243,7 @@ export function RecordingPage() {
   const dataSaver = saveData();
   return (
     <div className="space-y-3">
-      <h2 className="text-xl font-semibold">{p.title}</h2>
+      <h1 className="text-title">{p.title}</h1>
       {dataSaver ? <DataSaverTip durationMs={p.durationMs} /> : null}
       {started ? (
         <Player playback={p} />

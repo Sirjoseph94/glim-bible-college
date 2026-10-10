@@ -34,7 +34,7 @@ export function AwardsPage() {
   if (candidates.isError) return <Alert tone="error">We couldn't load the students.</Alert>;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Awards</h2>
+      <h1 className="text-title">Awards</h1>
       {proposal !== null ? (
         <Proposal
           key={`${proposal.id}:${String(proposal.version)}`}

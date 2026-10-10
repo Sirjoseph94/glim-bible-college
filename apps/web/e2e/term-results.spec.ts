@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -30,7 +31,7 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
   page,
 }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("link", { name: "Gradebook" }).click();
   const note = await page.getByText(/weights add up to/).textContent();
   const total = /add up to ([\d.]+) %/.exec(note ?? "")?.[1] ?? "100";
@@ -58,18 +59,19 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
   await expect(bola).toContainText("Finalized");
   const letter = /% · ([A-F])/.exec((await bola.textContent()) ?? "")?.[1];
   expect(letter).toMatch(/^[A-F]$/);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My results" }).click();
+  await openArea(page, "Results");
   const semester = page.locator('[aria-label*="2032/2033"]');
   await expect(semester).toContainText("Provisional");
   await expect(semester).toContainText("PAS101 Pastoral Care");
   await expect(semester.locator("strong")).toHaveText(letter ?? "");
   await expect(semester).toContainText(/GPA \d\.\d\d · CGPA \d\.\d\d/);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, REGISTRAR);
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Course results" }).click();
   await page.getByRole("link", { name: "PAS101 Pastoral Care" }).click();
   const row = page.getByRole("listitem", { name: "Bola Online" });

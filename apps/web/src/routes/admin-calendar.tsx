@@ -68,7 +68,7 @@ export function AdminCalendarPage() {
 
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-semibold">Academic calendar</h2>
+      <h1 className="text-title">Academic calendar</h1>
       {error ? <Alert tone="error">{error}</Alert> : null}
       {sessions.data?.items.map((session) => (
         <SessionCard

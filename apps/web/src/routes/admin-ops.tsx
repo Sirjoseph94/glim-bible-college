@@ -1,6 +1,5 @@
 import type { OpsFailure, ops } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
 import { Time } from "../components/time";
@@ -31,12 +30,7 @@ export function AdminOpsPage() {
   });
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Ops</h2>
-        <Link to="/admin/jobs" className="text-sm text-brand underline">
-          Job queues
-        </Link>
-      </div>
+      <h1 className="text-title">Ops</h1>
       <YouTubeCheck />
       <section className="space-y-2">
         <h3 className="font-medium">Failures</h3>
@@ -162,12 +156,7 @@ export function AdminJobsPage() {
   });
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Job queues</h2>
-        <Link to="/admin/ops" className="text-sm text-brand underline">
-          Failures
-        </Link>
-      </div>
+      <h1 className="text-title">Job queues</h1>
       <p className="text-sm text-slate-600">
         A queue whose oldest waiting job is over 2 minutes old is falling behind; you're emailed
         about it.

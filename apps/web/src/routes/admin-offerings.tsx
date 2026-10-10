@@ -57,7 +57,7 @@ export function AdminOfferingsPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Course Offerings</h2>
+      <h1 className="text-title">Course Offerings</h1>
       <label className="block text-sm">
         <span className="font-medium text-slate-700">Semester</span>
         <select
@@ -196,10 +196,10 @@ export function AdminOfferingPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">
+      <h1 className="text-title">
         {o.courseCode} {o.title}{" "}
         <span className="text-base font-normal text-slate-600">({o.sectionCode})</span>
-      </h2>
+      </h1>
       <p className="text-slate-600">
         {o.semesterName}, {o.sessionCode} · {o.credits} credits · {o.status.toLowerCase()}
       </p>
@@ -438,7 +438,7 @@ export function AdminLecturersPage() {
   const [notice, setNotice] = useState<string | null>(null);
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Lecturers</h2>
+      <h1 className="text-title">Lecturers</h1>
       <ul className="divide-y divide-slate-200 rounded border border-slate-200 bg-white text-sm">
         {lecturers.data?.items.map((l) => (
           <li key={l.id} className="flex flex-wrap justify-between gap-2 px-3 py-2">

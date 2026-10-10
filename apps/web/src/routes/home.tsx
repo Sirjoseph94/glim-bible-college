@@ -7,7 +7,7 @@ export function HomePage() {
   if (me === null) return null;
   return (
     <section className="space-y-2">
-      <h2 className="text-xl font-semibold">Welcome, {me.user.displayName}</h2>
+      <h1 className="text-title">Welcome, {me.user.displayName}</h1>
       {me.roles.staff.length > 0 ? (
         <p className="text-slate-700">
           Signed in as {me.roles.staff.map((r) => r.replaceAll("_", " ").toLowerCase()).join(", ")}.

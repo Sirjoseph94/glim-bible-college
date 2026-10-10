@@ -35,7 +35,7 @@ export function RegistrationPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">My registration</h2>
+      <h1 className="text-title">My registration</h1>
       {mine.data.programmes.map((p) => (
         <section key={p.matricNumber} className="space-y-3">
           <div>
@@ -172,7 +172,7 @@ export function CoursesPage() {
   if (list.isError) return <Alert tone="error">We couldn't load your courses.</Alert>;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">My courses</h2>
+      <h1 className="text-title">My courses</h1>
       {list.data.items.length === 0 ? (
         <p className="text-slate-600">You aren't registered for any courses yet.</p>
       ) : null}

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -18,7 +19,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("a hybrid exam: paper scores and an online part in one gradebook column", async ({ page }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("link", { name: "Gradebook" }).click();
   await page.getByText("Columns and weights").click();
   const add = page.getByRole("form", { name: "Add a column" });
@@ -59,10 +60,10 @@ test("a hybrid exam: paper scores and an online part in one gradebook column", a
   await grant.getByLabel("Reason").fill("Travelling for a mission");
   await grant.getByRole("button", { name: "Let them sit online" }).click();
   await expect(page.getByText("(Travelling for a mission)")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My courses" }).click();
+  await openArea(page, "Courses");
   await page.getByText("Quizzes", { exact: true }).click();
   await page.getByRole("link", { name: "Semester exam" }).click();
   await page.getByRole("button", { name: /^Start/ }).click();
@@ -73,11 +74,11 @@ test("a hybrid exam: paper scores and an online part in one gradebook column", a
   await expect(page.getByText("Answers saved")).toBeVisible();
   await page.getByRole("button", { name: "Submit" }).click();
   await expect(page.getByText("Score: 1.00 / 1.00")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   // The paper score goes in by hand; Bola's online score is already there, scaled to 20.
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("link", { name: "Gradebook" }).click();
   await expect(page.getByRole("button", { name: "Bola Online, Semester exam" })).toContainText(
     "20.00draft",

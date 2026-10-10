@@ -54,7 +54,7 @@ export function AdminVideosPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Videos</h2>
+      <h1 className="text-title">Videos</h1>
       <div className="flex flex-wrap gap-2">
         <select
           aria-label="Offering"

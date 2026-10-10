@@ -1,6 +1,7 @@
 import type { admissions, ReviewedApplication } from "@glim/contracts";
+import { BackLink } from "../components/app/back-link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { STATUS_LABEL } from "../api/applications";
 import { api } from "../api/client";
@@ -98,15 +99,13 @@ export function AdmissionsApplicationPage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/admissions" className="text-sm underline">
-        ← All applications
-      </Link>
+      <BackLink to="/admissions" label="All applications" />
       <div>
-        <h2 className="text-xl font-semibold">
+        <h1 className="text-title">
           {[a.personal.firstName, a.personal.middleName, a.personal.lastName]
             .filter(Boolean)
             .join(" ")}
-        </h2>
+        </h1>
         <p className="text-sm text-slate-600">
           {a.referenceNo} · {a.programme.name} ·{" "}
           {a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · {a.intake.academicSessionName}

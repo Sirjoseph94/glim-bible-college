@@ -17,7 +17,7 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Your profile</h2>
+      <h1 className="text-title">Your profile</h1>
       {search.linked === "google" ? (
         <Alert tone="success">Your Google account is now linked.</Alert>
       ) : null}

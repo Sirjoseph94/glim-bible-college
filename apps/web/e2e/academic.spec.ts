@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { openArea, signOut } from "./nav";
 
 const EMAIL = "e2e-academic@glim.test";
 const PASSWORD = "academic passphrase 2026";
@@ -13,7 +14,7 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Ade Academic" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Academic" }).click();
+  await openArea(page, "Academic");
   await page.getByText("Add a programme").click();
   await page.getByLabel("Code (e.g. DIP)").fill("CERT");
   await page.getByLabel("Name").fill("Certificate in Theology");
@@ -92,13 +93,13 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await expect(page.getByText(/· published/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Students (0 enrolled)" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await page.goto(`/invite/${await linkToken("lecturer.e2e@glim.test", "invite")}`);
   await page.getByLabel("New password (at least 12 characters)").fill("lecturer passphrase 2026");
   await page.getByLabel("Confirm the new password").fill("lecturer passphrase 2026");
   await page.getByRole("button", { name: "Set password and sign in" }).click();
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await expect(page.getByText("BIB101 Old Testament Survey")).toBeVisible();
   await expect(page.getByText("Rev Tunde Bello (Primary Lecturer)")).toBeVisible();
 });

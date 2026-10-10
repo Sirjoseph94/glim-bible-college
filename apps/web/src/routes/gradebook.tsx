@@ -50,7 +50,7 @@ export function GradebookPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Gradebook</h2>
+        <h1 className="text-title">Gradebook</h1>
         <Link to="/teach" className="text-sm text-brand underline">
           Back to teaching
         </Link>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -26,7 +27,7 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   page,
 }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Assignments" }).click();
   const form = page.locator("form", { hasText: "New assignment" });
   await form.getByLabel("Title").fill("Essay on John 1");
@@ -39,10 +40,10 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await expect(item).toContainText("Draft · 20.00 marks · 15.00%");
   await item.getByRole("button", { name: "Publish" }).click();
   await expect(item.getByRole("link", { name: "Grade submissions" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My courses" }).click();
+  await openArea(page, "Courses");
   await page.getByText("Assignments", { exact: true }).click();
   await page.getByRole("link", { name: "Essay on John 1" }).click();
   await expect(page.getByText("300 words")).toBeVisible();
@@ -58,10 +59,10 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await page.getByRole("button", { name: "Submit" }).click();
   await expect(page.getByText(/Attempt 1, submitted/)).toBeVisible();
   await expect(page.getByText("You've used all your attempts.")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Assignments" }).click();
   await page
     .getByRole("listitem", { name: "Essay on John 1" })

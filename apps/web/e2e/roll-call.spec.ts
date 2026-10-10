@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-rollcall@glim.test";
 const PASSWORD = "roll call passphrase 2026";
@@ -32,7 +33,7 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("button", { name: "Schedule a Class Meeting" }).click();
   await page.getByLabel("Title").fill("Roll call practice");
   await page.getByLabel(/^Date/).fill(start.date);

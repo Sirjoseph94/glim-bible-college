@@ -27,7 +27,7 @@ const curriculaQuery = queryOptions({
 export function AdminAcademicPage() {
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-semibold">Programmes and courses</h2>
+      <h1 className="text-title">Programmes and courses</h1>
       <Programmes />
       <Courses />
     </div>

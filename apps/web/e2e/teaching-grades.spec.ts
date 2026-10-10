@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -29,7 +30,7 @@ test("a Lecturer enters, imports and releases grades; the student sees only rele
   page,
 }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
+  await openArea(page, "Teaching");
   await page.getByRole("link", { name: "Gradebook" }).click();
   await expect(page.getByRole("heading", { name: "Gradebook" })).toBeVisible();
 
@@ -80,10 +81,10 @@ test("a Lecturer enters, imports and releases grades; the student sees only rele
   await expect(page.getByRole("button", { name: "Bola Online, Memory verse test" })).toHaveText(
     "8.00",
   );
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My courses" }).click();
+  await openArea(page, "Courses");
   await page.getByText("Grades", { exact: true }).click();
   const released = page.getByRole("listitem", { name: "Memory verse test" });
   await expect(released).toContainText("8.00 / 10.00");
