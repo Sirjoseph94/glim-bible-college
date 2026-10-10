@@ -1,4 +1,4 @@
-import type { BodyOf, Transcript, TranscriptRequest, results, transcripts } from "@glim/contracts";
+import type { BodyOf, Transcript, TranscriptRequest, transcripts } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
@@ -7,17 +7,18 @@ import { meQuery } from "../api/session";
 import { Alert, formText } from "../components/form";
 import { Time } from "../components/time";
 import { useSubmit } from "../components/use-submit";
-
-/** Hundredths as a decimal with two places, e.g. 460 → "4.60". */
-function x100(v: number | null): string {
-  if (v === null) return "–";
-  return `${String(Math.trunc(v / 100))}.${String(v % 100).padStart(2, "0")}`;
-}
-
-/** Tenths of a credit, e.g. 30 → "3", 25 → "2.5". */
-function credits(v: number): string {
-  return v % 10 === 0 ? String(v / 10) : `${String(Math.trunc(v / 10))}.${String(v % 10)}`;
-}
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { useDetailBar } from "../components/app/shell-parts";
+import { bodyCell, DataTable, headCell, numericCell } from "../components/ui/data-table";
+import { ConfirmDialog, Sheet } from "../components/ui/dialog";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
+import { cn } from "../design/cn";
+import { Card, cardClass } from "../components/ui/card";
+import { Select, TextField } from "../components/ui/field";
+import { credits, hundredths } from "../design/format";
 
 const STATUS_LABELS: Record<TranscriptRequest["status"], string> = {
   REQUESTED: "Waiting for the Registrar",
@@ -28,26 +29,24 @@ const STATUS_LABELS: Record<TranscriptRequest["status"], string> = {
 };
 
 const mineKey = ["my-transcripts"];
-const input = "block w-full rounded border border-slate-300 px-3 py-2";
 
 /**
- * A student's (or graduate's) transcripts (TRD §14.7): an unofficial one at once, or an official
- * one for a recipient once the Registrar issues it.
+ * A student's (or graduate's) transcripts, on the Results page (§11.6, decision UI-Q8): an
+ * unofficial one at once, or an official one for a recipient once the Registrar issues it.
  */
-export function MyTranscriptsPage() {
+export function TranscriptsSection({
+  programmes,
+}: {
+  programmes: { programmeEnrollmentId: string; programmeName: string; matricNumber: string }[];
+}) {
   const queryClient = useQueryClient();
   const mine = useQuery({
     queryKey: mineKey,
     queryFn: ({ signal }) =>
       api<typeof transcripts.getMyTranscripts>("GET", "/me/transcripts", { signal }),
   });
-  const enrollments = useQuery({
-    queryKey: ["my-results"],
-    queryFn: ({ signal }) => api<typeof results.getMyResults>("GET", "/me/results", { signal }),
-  });
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const [official, setOfficial] = useState(false);
-  const programmes = enrollments.data?.programmes ?? [];
   const [chosen, setChosen] = useState("");
   const enrollmentId = chosen === "" ? (programmes[0]?.programmeEnrollmentId ?? "") : chosen;
   const ask = (body: BodyOf<typeof transcripts.requestTranscript>) => {
@@ -61,55 +60,65 @@ export function MyTranscriptsPage() {
       await queryClient.invalidateQueries({ queryKey: mineKey });
     });
   };
+  const items = mine.data?.items ?? [];
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Transcripts</h2>
-      {error ? <Alert tone="error">{error}</Alert> : null}
+    <section className="space-y-3" aria-label="Transcripts">
+      <h2 className="text-heading">Transcripts</h2>
+      <p className="text-body-sm text-ink-muted">
+        An unofficial transcript is ready at once. The Registrar checks and issues official ones,
+        with approved semesters only.
+      </p>
+      {problem && !official ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       {programmes.length > 1 ? (
-        <label className="block text-sm">
-          <span className="block text-slate-700">Programme</span>
-          <select
-            value={enrollmentId}
-            onChange={(e) => {
-              setChosen(e.target.value);
-            }}
-            className={input}
-          >
-            {programmes.map((p) => (
-              <option key={p.programmeEnrollmentId} value={p.programmeEnrollmentId}>
-                {p.programmeName} ({p.matricNumber})
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Programme"
+          value={enrollmentId}
+          onChange={(e) => {
+            setChosen(e.target.value);
+          }}
+        >
+          {programmes.map((p) => (
+            <option key={p.programmeEnrollmentId} value={p.programmeEnrollmentId}>
+              {p.programmeName} ({p.matricNumber})
+            </option>
+          ))}
+        </Select>
       ) : null}
       {enrollmentId === "" ? null : (
-        <div className="flex flex-wrap gap-2 text-sm">
-          <button
-            type="button"
-            disabled={busy}
-            className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
+        <div className="flex flex-col gap-2 md:flex-row">
+          <Button
+            variant="secondary"
+            icon="file"
+            loading={busy && !official}
             onClick={() => {
               ask({ kind: "UNOFFICIAL" });
             }}
           >
             Get an unofficial transcript
-          </button>
-          <button
-            type="button"
-            className="rounded border border-slate-300 px-3 py-2"
+          </Button>
+          <Button
+            variant="quiet"
             onClick={() => {
-              setOfficial((v) => !v);
+              setOfficial(true);
             }}
           >
             Request an official transcript
-          </button>
+          </Button>
         </div>
       )}
-      {official ? (
+      <Sheet
+        open={official}
+        onOpenChange={setOfficial}
+        title="Request an official transcript"
+        description="The Registrar checks and issues official transcripts. They include only approved semesters."
+      >
         <form
           aria-label="Official transcript"
-          className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm"
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             const data = new FormData(e.currentTarget);
@@ -121,114 +130,143 @@ export function MyTranscriptsPage() {
             });
           }}
         >
-          <p className="text-slate-600">
-            The Registrar checks and issues official transcripts. They include only approved
-            semesters.
-          </p>
-          <label className="block">
-            <span className="block text-slate-700">What it's for</span>
-            <input name="purpose" required maxLength={500} className={input} />
-          </label>
-          <label className="block">
-            <span className="block text-slate-700">Recipient</span>
-            <input name="recipientName" required maxLength={200} className={input} />
-          </label>
-          <label className="block">
-            <span className="block text-slate-700">Recipient's email</span>
-            <input name="recipientEmail" type="email" required className={input} />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
-          >
+          {problem ? (
+            <Banner tone="danger" title={problem.title}>
+              {problem.body}
+            </Banner>
+          ) : null}
+          <TextField name="purpose" label="What it's for" required maxLength={500} />
+          <TextField name="recipientName" label="Recipient" required maxLength={200} />
+          <TextField
+            name="recipientEmail"
+            label="Recipient's email"
+            type="email"
+            autoComplete="email"
+            required
+          />
+          <Button type="submit" variant="primary" block loading={busy}>
             Send request
-          </button>
+          </Button>
         </form>
-      ) : null}
-      <ul className="space-y-2 text-sm">
-        {(mine.data?.items ?? []).map((r) => (
-          <li
-            key={r.id}
-            className="rounded border border-slate-200 bg-white p-3"
-            aria-label={r.transcript?.serialNo ?? `${r.kind} request`}
-          >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="font-medium">
-                {r.kind === "OFFICIAL" ? "Official" : "Unofficial"} · {r.programmeName}
-              </span>
-              <span className="text-slate-600">
-                <Time value={r.createdAt} />
-              </span>
+      </Sheet>
+      {items.length > 0 ? (
+        <Card list role="list">
+          {items.map((r) => (
+            <div
+              key={r.id}
+              role="listitem"
+              aria-label={r.transcript?.serialNo ?? `${r.kind} request`}
+              className="space-y-1 px-4 py-3.5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-subhead">
+                  {r.kind === "OFFICIAL" ? "Official" : "Unofficial"} · {r.programmeName}
+                </span>
+                <span className="text-meta text-ink-muted">
+                  <Time value={r.createdAt} />
+                </span>
+              </div>
+              <p className="text-body-sm text-ink-muted">
+                {r.transcript === null ? (
+                  STATUS_LABELS[r.status]
+                ) : (
+                  <>
+                    <span className="font-mono text-code">{r.transcript.serialNo}</span> ·{" "}
+                    {r.transcript.status === "ISSUED"
+                      ? "Issued"
+                      : r.transcript.status === "REVOKED"
+                        ? "Revoked"
+                        : "Superseded"}
+                  </>
+                )}
+                {r.recipientName === null ? "" : ` · for ${r.recipientName}`}
+              </p>
+              {r.decisionReason === null ? null : (
+                <p className="text-body-sm text-danger">Reason: {r.decisionReason}</p>
+              )}
+              {r.transcript === null ? null : (
+                <Link
+                  to="/transcripts/$transcriptId"
+                  params={{ transcriptId: r.transcript.id }}
+                  className="inline-flex min-h-tap items-center text-body-sm font-semibold text-brand underline"
+                >
+                  View transcript
+                </Link>
+              )}
             </div>
-            <div className="text-slate-600">
-              {r.transcript === null
-                ? STATUS_LABELS[r.status]
-                : `${r.transcript.serialNo} · ${r.transcript.status === "ISSUED" ? "Issued" : r.transcript.status === "REVOKED" ? "Revoked" : "Superseded"}`}
-              {r.recipientName === null ? "" : ` · for ${r.recipientName}`}
-            </div>
-            {r.decisionReason === null ? null : (
-              <div className="text-red-800">Reason: {r.decisionReason}</div>
-            )}
-            {r.transcript === null ? null : (
-              <Link
-                to="/transcripts/$transcriptId"
-                params={{ transcriptId: r.transcript.id }}
-                className="text-brand underline"
-              >
-                View transcript
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-      {mine.isSuccess && mine.data.items.length === 0 ? (
-        <p className="text-sm text-slate-600">No transcripts yet.</p>
+          ))}
+        </Card>
+      ) : mine.isSuccess ? (
+        <p className="text-body-sm text-ink-muted">No transcripts yet.</p>
       ) : null}
-    </div>
+    </section>
   );
 }
 
 /** A transcript as issued: rendered from its frozen snapshot, with how to verify it. */
 export function TranscriptPage() {
-  const { transcriptId } = useParams({ strict: false });
-  const id = transcriptId ?? "";
+  const { transcriptId } = useParams({ from: "/transcripts/$transcriptId" });
+  const me = useQuery(meQuery);
+  const isRegistrar =
+    me.data?.roles.staff.some((r) => r === "REGISTRAR" || r === "SYSTEM_ADMIN") ?? false;
+  useDetailBar(
+    isRegistrar
+      ? { back: { to: "/results/semesters", label: "Semester results" } }
+      : { back: { to: "/results", label: "Results" } },
+  );
   const doc = useQuery({
-    queryKey: ["transcript", id],
+    queryKey: ["transcript", transcriptId],
     queryFn: ({ signal }) =>
-      api<typeof transcripts.getTranscript>("GET", "/transcripts/:id", { params: { id }, signal }),
+      api<typeof transcripts.getTranscript>("GET", "/transcripts/:id", {
+        params: { id: transcriptId },
+        signal,
+      }),
   });
-  if (doc.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (doc.isError) return <Alert tone="error">We couldn't load the transcript.</Alert>;
+  if (doc.isPending)
+    return (
+      <SkeletonGroup label="Loading the transcript">
+        <Skeleton className="h-80" />
+      </SkeletonGroup>
+    );
+  if (doc.isError)
+    return isNotAvailable(doc.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="the transcript" onRetry={() => void doc.refetch()} />
+    );
   return (
-    <div className="space-y-3">
-      <a
-        href={`/api/v1/transcripts/${doc.data.id}/download`}
-        className="inline-block rounded bg-brand px-3 py-2 text-sm text-white"
-      >
-        Download PDF
-      </a>
-      <RegistrarActions transcript={doc.data} />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2 md:flex-row md:flex-wrap">
+        <a
+          href={`/api/v1/transcripts/${doc.data.id}/download`}
+          className={buttonClass({ variant: "primary" })}
+        >
+          Download PDF
+        </a>
+      </div>
+      {isRegistrar ? <RegistrarActions transcript={doc.data} /> : null}
       <TranscriptView transcript={doc.data} />
     </div>
   );
 }
 
-/** The Registrar's actions on an issued transcript: email the PDF, or revoke it. */
+/** The Registrar's actions on an issued transcript: email the PDF, or revoke it (§10.5). */
 function RegistrarActions({ transcript: d }: { transcript: Transcript }) {
   const queryClient = useQueryClient();
-  const me = useQuery(meQuery);
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const [done, setDone] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
-  const staff = me.data?.roles.staff.some((r) => r === "REGISTRAR" || r === "SYSTEM_ADMIN");
-  if (staff !== true || d.status !== "ISSUED") return null;
+  if (d.status !== "ISSUED") return null;
   return (
-    <section aria-label="Registrar actions" className="space-y-2 text-sm">
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {done ? <Alert tone="success">{done}</Alert> : null}
+    <section aria-label="Registrar actions" className="space-y-3">
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      {done ? <Banner tone="success">{done}</Banner> : null}
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="flex flex-col gap-3 md:flex-row md:items-end"
         aria-label="Email the PDF"
         onSubmit={(e) => {
           e.preventDefault();
@@ -243,53 +281,45 @@ function RegistrarActions({ transcript: d }: { transcript: Transcript }) {
           });
         }}
       >
-        <label className="block">
-          <span className="block text-slate-700">Email to (blank: the request's recipient)</span>
-          <input name="to" type="email" className={input} />
-        </label>
-        <button type="submit" disabled={busy} className="rounded border border-slate-300 px-3 py-2">
+        <div className="md:flex-1">
+          <TextField
+            name="to"
+            type="email"
+            label="Email to"
+            optional
+            hint="Leave empty to send it to the request's recipient."
+          />
+        </div>
+        <Button type="submit" variant="secondary" icon="upload" loading={busy}>
           Email PDF
-        </button>
-      </form>
-      {revoking ? (
-        <form
-          aria-label="Revoke transcript"
-          className="space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const reason = formText(new FormData(e.currentTarget), "reason");
-            void run(async () => {
-              await api<typeof transcripts.revokeTranscript>("POST", "/transcripts/:id/revoke", {
-                params: { id: d.id },
-                body: { reason },
-              });
-              await queryClient.invalidateQueries({ queryKey: ["transcript", d.id] });
-            });
-          }}
-        >
-          <label className="block">
-            <span className="block text-slate-700">Why it's being revoked</span>
-            <input name="reason" required maxLength={500} className={input} />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded bg-red-700 px-3 py-2 text-white disabled:opacity-60"
-          >
-            Revoke transcript
-          </button>
-        </form>
-      ) : (
-        <button
-          type="button"
-          className="text-red-700 underline"
+        </Button>
+        <Button
+          variant="danger"
           onClick={() => {
             setRevoking(true);
           }}
         >
-          Revoke…
-        </button>
-      )}
+          Revoke transcript
+        </Button>
+      </form>
+      <ConfirmDialog
+        open={revoking}
+        onOpenChange={setRevoking}
+        title={`Revoke ${d.serialNo}?`}
+        confirmLabel="Revoke transcript"
+        tone="danger"
+        reason={{ label: "Why it's being revoked", minLength: 1 }}
+        onConfirm={async (reason) => {
+          await api<typeof transcripts.revokeTranscript>("POST", "/transcripts/:id/revoke", {
+            params: { id: d.id },
+            body: { reason },
+          });
+          setRevoking(false);
+          await queryClient.invalidateQueries({ queryKey: ["transcript", d.id] });
+        }}
+      >
+        Anyone who checks its code will see that it was revoked. This can't be undone.
+      </ConfirmDialog>
     </section>
   );
 }
@@ -298,258 +328,100 @@ function TranscriptView({ transcript: d }: { transcript: Transcript }) {
   const s = d.snapshot;
   const verifyUrl = `${window.location.origin}/verify/${d.verificationCode}`;
   return (
-    <article className="space-y-4 rounded border border-slate-200 bg-white p-4 text-sm">
+    <article className={`${cardClass()} space-y-5`}>
       <header className="space-y-1">
-        <h2 className="text-lg font-semibold">{s.institution.name}</h2>
-        <p className="font-medium">
+        <h1 className="text-title">{s.institution.name}</h1>
+        <p className="text-subhead">
           {s.kind === "OFFICIAL" ? "Official" : "Unofficial"} transcript · {d.serialNo}
         </p>
         {d.status === "ISSUED" ? null : (
-          <Alert tone="error">
+          <Banner tone="danger">
             This transcript was {d.status === "REVOKED" ? "revoked" : "superseded"}
             {d.revokeReason === null ? "" : `: ${d.revokeReason}`}.
-          </Alert>
+          </Banner>
         )}
-        <p>
-          {s.student.legalName} · {s.student.matricNumber}
+        <p className="text-body-sm">
+          {s.student.legalName} · <span className="font-mono">{s.student.matricNumber}</span>
         </p>
-        <p>
+        <p className="text-body-sm text-ink-muted">
           {s.programme.name} ({s.programme.code}) · as of {s.asOf}
         </p>
       </header>
       {s.semesters.map((sem) => (
-        <section key={`${sem.sessionCode}-${sem.semesterName}`} className="space-y-1">
-          <h3 className="font-medium">
+        <section key={`${sem.sessionCode}-${sem.semesterName}`} className="space-y-2">
+          <h2 className="flex flex-wrap items-center gap-2 text-heading">
             {sem.semesterName}, {sem.sessionCode}
-            {sem.provisional ? (
-              <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-amber-900">
-                Provisional
-              </span>
-            ) : null}
-          </h3>
-          <div
-            role="region"
-            aria-label="Courses"
-            tabIndex={0}
-            className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            {sem.provisional ? <Badge status="provisional" /> : null}
+          </h2>
+          <DataTable
+            caption={`Courses, ${sem.semesterName} ${sem.sessionCode}`}
+            minWidth="min-w-120"
           >
-            <table className="min-w-full text-left">
-              <thead className="text-slate-600">
-                <tr>
-                  <th className="pr-3 font-normal">Course</th>
-                  <th className="pr-3 font-normal">Credits</th>
-                  <th className="pr-3 font-normal">%</th>
-                  <th className="font-normal">Grade</th>
+            <thead>
+              <tr>
+                <th scope="col" className={headCell}>
+                  Course
+                </th>
+                <th scope="col" className={cn(headCell, numericCell)}>
+                  Credits
+                </th>
+                <th scope="col" className={cn(headCell, numericCell)}>
+                  %
+                </th>
+                <th scope="col" className={headCell}>
+                  Grade
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sem.courses.map((c) => (
+                <tr key={`${c.code}-${String(c.attemptNo)}`}>
+                  <td className={cn(bodyCell, "whitespace-normal")}>
+                    <span className="font-mono text-code">{c.code}</span> {c.title}
+                    {c.repeated ? " (repeated)" : ""}
+                  </td>
+                  <td className={cn(bodyCell, numericCell)}>{credits(c.creditsX10)}</td>
+                  <td className={cn(bodyCell, numericCell)}>{hundredths(c.finalPctX100)}</td>
+                  <td className={cn(bodyCell, "font-mono font-semibold")}>
+                    {c.letter ?? c.resultKind.toLowerCase()}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {sem.courses.map((c) => (
-                  <tr key={`${c.code}-${String(c.attemptNo)}`}>
-                    <td className="pr-3">
-                      {c.code} {c.title}
-                      {c.repeated ? " (repeated)" : ""}
-                    </td>
-                    <td className="pr-3">{credits(c.creditsX10)}</td>
-                    <td className="pr-3">{x100(c.finalPctX100)}</td>
-                    <td>{c.letter ?? c.resultKind.toLowerCase()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-slate-700">
-            GPA {x100(sem.gpaX100)} · CGPA {x100(sem.cgpaX100)}
+              ))}
+            </tbody>
+          </DataTable>
+          <p className="text-body-sm text-ink-muted">
+            GPA {hundredths(sem.gpaX100)} · CGPA {hundredths(sem.cgpaX100)}
           </p>
         </section>
       ))}
       <section className="space-y-1">
-        <p className="font-medium">
-          CGPA {x100(s.totals.cgpaX100)} · {credits(s.totals.creditsEarnedX10)} credits earned
+        <p className="text-subhead">
+          CGPA {hundredths(s.totals.cgpaX100)} · {credits(s.totals.creditsEarnedX10)} credits earned
         </p>
         {s.award === null ? null : (
-          <p>
+          <p className="text-body-sm">
             Awarded {s.programme.awardType === "CERTIFICATE" ? "the Certificate" : "the Diploma"}{" "}
             with {s.award.awardClass} on {s.award.awardedOn} · {s.award.certificateNo}
           </p>
         )}
       </section>
-      <footer className="space-y-1 border-t border-slate-100 pt-2 text-xs text-slate-600">
+      <footer className="space-y-1 border-t border-line pt-3 text-meta text-ink-muted">
         <p>
           Grades:{" "}
           {s.legend.bands
-            .map((b) => `${b.letter} ${x100(b.minX100)}–${x100(b.maxX100)} (${x100(b.pointsX100)})`)
+            .map(
+              (b) =>
+                `${b.letter} ${hundredths(b.minX100)}–${hundredths(b.maxX100)} (${hundredths(b.pointsX100)})`,
+            )
             .join(" · ")}
         </p>
         <p>
           Check it at <span className="break-all">{verifyUrl}</span> · code{" "}
-          <strong>{d.verificationCode}</strong> · SHA-256 {d.snapshotSha256.slice(0, 16)}…
+          <strong className="font-mono text-ink">{d.verificationCode}</strong> · SHA-256{" "}
+          {d.snapshotSha256.slice(0, 16)}…
         </p>
       </footer>
     </article>
-  );
-}
-
-/** The Registrar's transcript requests: approve or decline official ones, then issue. */
-export function RegistrarTranscriptsPage() {
-  const [status, setStatus] = useState<TranscriptRequest["status"] | "">("REQUESTED");
-  const list = useQuery({
-    queryKey: ["transcript-requests", status],
-    queryFn: ({ signal }) =>
-      api<typeof transcripts.listTranscriptRequests>("GET", "/transcript-requests", {
-        query: status === "" ? {} : { status },
-        signal,
-      }),
-  });
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Transcript requests</h2>
-      <label className="block text-sm">
-        <span className="block text-slate-700">Show</span>
-        <select
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value as TranscriptRequest["status"] | "");
-          }}
-          className="rounded border border-slate-300 px-2 py-2"
-        >
-          <option value="REQUESTED">Waiting</option>
-          <option value="APPROVED">Approved</option>
-          <option value="ISSUED">Issued</option>
-          <option value="REJECTED">Declined</option>
-          <option value="">All</option>
-        </select>
-      </label>
-      {list.isSuccess && list.data.items.length === 0 ? (
-        <p className="text-sm text-slate-600">Nothing here.</p>
-      ) : null}
-      <ul className="space-y-2 text-sm">
-        {(list.data?.items ?? []).map((r) => (
-          <RequestItem key={r.id} request={r} />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function RequestItem({ request: r }: { request: TranscriptRequest }) {
-  const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
-  const [declining, setDeclining] = useState(false);
-  const act = (action: () => Promise<unknown>) => {
-    void run(async () => {
-      await action();
-      setDeclining(false);
-      await queryClient.invalidateQueries({ queryKey: ["transcript-requests"] });
-    });
-  };
-  return (
-    <li
-      className="space-y-1 rounded border border-slate-200 bg-white p-3"
-      aria-label={r.studentName}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">
-          {r.studentName} <span className="font-normal text-slate-500">{r.matricNumber}</span>
-        </span>
-        <span>{r.kind === "OFFICIAL" ? "Official" : "Unofficial"}</span>
-      </div>
-      {r.purpose === null ? null : (
-        <p>
-          {r.purpose} · for {r.recipientName} ({r.recipientEmail})
-        </p>
-      )}
-      <p className="text-slate-600">
-        {STATUS_LABELS[r.status]}
-        {r.transcript === null ? "" : ` · ${r.transcript.serialNo}`}
-      </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <div className="flex flex-wrap gap-3">
-        {r.status === "REQUESTED" ? (
-          <button
-            type="button"
-            disabled={busy}
-            className="text-brand underline"
-            onClick={() => {
-              act(() =>
-                api<typeof transcripts.approveTranscriptRequest>(
-                  "POST",
-                  "/transcript-requests/:id/approve",
-                  { params: { id: r.id } },
-                ),
-              );
-            }}
-          >
-            Approve
-          </button>
-        ) : null}
-        {r.status === "APPROVED" ? (
-          <button
-            type="button"
-            disabled={busy}
-            className="rounded bg-brand px-3 py-1 text-white disabled:opacity-60"
-            onClick={() => {
-              act(() =>
-                api<typeof transcripts.issueTranscript>("POST", "/transcript-requests/:id/issue", {
-                  params: { id: r.id },
-                  headers: { "idempotency-key": crypto.randomUUID() },
-                }),
-              );
-            }}
-          >
-            Issue
-          </button>
-        ) : null}
-        {r.status === "REQUESTED" || r.status === "APPROVED" ? (
-          <button
-            type="button"
-            className="text-red-700 underline"
-            onClick={() => {
-              setDeclining((v) => !v);
-            }}
-          >
-            Decline
-          </button>
-        ) : null}
-        {r.transcript === null ? null : (
-          <Link
-            to="/transcripts/$transcriptId"
-            params={{ transcriptId: r.transcript.id }}
-            className="text-brand underline"
-          >
-            View
-          </Link>
-        )}
-      </div>
-      {declining ? (
-        <form
-          aria-label="Decline request"
-          className="space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const reason = formText(new FormData(e.currentTarget), "reason");
-            act(() =>
-              api<typeof transcripts.rejectTranscriptRequest>(
-                "POST",
-                "/transcript-requests/:id/reject",
-                { params: { id: r.id }, body: { reason } },
-              ),
-            );
-          }}
-        >
-          <label className="block">
-            <span className="block text-slate-700">Reason (the student sees it)</span>
-            <input name="reason" required maxLength={500} className={input} />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded border border-slate-300 px-3 py-1"
-          >
-            Decline request
-          </button>
-        </form>
-      ) : null}
-    </li>
   );
 }
 
@@ -570,7 +442,7 @@ export function VerifyPage() {
   });
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Verify a transcript</h2>
+      <h1 className="text-title">Verify a transcript</h1>
       {check.isPending ? <div className="h-24 animate-pulse rounded bg-slate-200" /> : null}
       {check.isError ? (
         <Alert tone="error">No transcript has the code {code}. Check it and try again.</Alert>
@@ -586,6 +458,7 @@ export function VerifyPage() {
               longer valid.
             </Alert>
           )}
+          {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width */}
           <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1">
             <dt className="text-slate-600">Issued by</dt>
             <dd>{check.data.institutionName}</dd>

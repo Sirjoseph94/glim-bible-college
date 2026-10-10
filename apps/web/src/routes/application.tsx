@@ -24,7 +24,7 @@ export function ApplicationPage() {
   if (latest === undefined)
     return (
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold">Your application</h2>
+        <h1 className="text-title">Your application</h1>
         <p>
           You haven't started an application yet.{" "}
           <Link to="/apply" className="text-brand underline">
@@ -62,7 +62,7 @@ function StatusView({ id }: { id: string }) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-semibold">Your application</h2>
+        <h1 className="text-title">Your application</h1>
         <p className="text-sm text-slate-600">
           {a.programme.name} · {a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} ·{" "}
           {a.intake.academicSessionName}

@@ -2,15 +2,16 @@ import type { auth } from "@glim/contracts";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
-import { Alert, Card, Field, formText, SubmitButton } from "../components/form";
+import { Alert, Field, formText, SubmitButton } from "../components/form";
 import { useSubmit } from "../components/use-submit";
+import { AuthLayout } from "../components/app/auth-layout";
 
 export function ForgotPage() {
   const { busy, error, fieldErrors, run } = useSubmit();
   const [sent, setSent] = useState(false);
 
   return (
-    <Card title="Reset your password">
+    <AuthLayout title="Reset your password">
       {sent ? (
         <Alert tone="success">
           If an account uses that email, we've sent a link to reset the password. It expires in 30
@@ -48,6 +49,6 @@ export function ForgotPage() {
           Back to sign in
         </Link>
       </p>
-    </Card>
+    </AuthLayout>
   );
 }

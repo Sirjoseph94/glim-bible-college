@@ -1,9 +1,16 @@
 import type { OpsFailure, ops } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { api } from "../api/client";
-import { Alert } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
 import { Time } from "../components/time";
+import { Badge } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { bodyCell, DataTable, headCell, numericCell } from "../components/ui/data-table";
+import { EmptyState } from "../components/ui/empty-state";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 
 const KIND_LABELS: Record<OpsFailure["kind"], string> = {
@@ -30,67 +37,95 @@ export function AdminOpsPage() {
       api<typeof ops.listOpsFailures>("GET", "/admin/ops/failures", { signal }),
   });
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Ops</h2>
-        <Link to="/admin/jobs" className="text-sm text-brand underline">
-          Job queues
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader title="Ops" meta="What failed, and how the integrations are doing." />
       <YouTubeCheck />
-      <section className="space-y-2">
-        <h3 className="font-medium">Failures</h3>
-        {list.isPending ? <div className="h-24 animate-pulse rounded bg-slate-200" /> : null}
-        {list.isError ? <Alert tone="error">We couldn't load the failures.</Alert> : null}
-        {list.isSuccess && list.data.items.length === 0 ? (
-          <p className="text-sm text-slate-600">Nothing has failed.</p>
-        ) : null}
-        <ul className="space-y-2 text-sm">
-          {(list.data?.items ?? []).map((f) => (
-            <FailureItem key={`${f.kind}:${f.id}`} failure={f} />
-          ))}
-        </ul>
+      <section className="space-y-3">
+        <h2 className="text-heading">Failures</h2>
+        {list.isPending ? (
+          <SkeletonGroup label="Loading the failures">
+            <Skeleton className="h-40" />
+          </SkeletonGroup>
+        ) : list.isError ? (
+          <LoadFailed what="the failures" onRetry={() => void list.refetch()} />
+        ) : list.data.items.length === 0 ? (
+          <EmptyState icon="check" title="Nothing has failed" headingLevel={3} />
+        ) : (
+          <DataTable caption="Failures" minWidth="min-w-200">
+            <thead>
+              <tr>
+                <th scope="col" className={headCell}>
+                  What
+                </th>
+                <th scope="col" className={headCell}>
+                  Status
+                </th>
+                <th scope="col" className={headCell}>
+                  Detail
+                </th>
+                <th scope="col" className={headCell}>
+                  When
+                </th>
+                <th scope="col" className={headCell}>
+                  <span className="sr-only">Replay</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.data.items.map((f) => (
+                <FailureRow key={`${f.kind}:${f.id}`} failure={f} />
+              ))}
+            </tbody>
+          </DataTable>
+        )}
       </section>
     </div>
   );
 }
 
-function FailureItem({ failure: f }: { failure: OpsFailure }) {
+function FailureRow({ failure: f }: { failure: OpsFailure }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   return (
-    <li className="space-y-1 rounded border border-slate-200 bg-white p-3" aria-label={f.label}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">
-          {KIND_LABELS[f.kind]}: {f.label}
-        </span>
-        <span className="text-xs text-slate-500">
-          <Time value={f.occurredAt} />
-        </span>
-      </div>
-      <p className="text-slate-600">
-        {f.status}
-        {f.detail === null ? "" : ` · ${f.detail}`}
-      </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {f.replayable ? (
-        <button
-          type="button"
-          disabled={busy}
-          className="text-brand underline disabled:opacity-60"
-          onClick={() => {
-            void run(async () => {
-              await api<typeof ops.replayOpsFailure>("POST", "/admin/ops/replay/:kind/:id", {
-                params: { kind: f.kind, id: f.id },
-              });
-              await queryClient.invalidateQueries({ queryKey: ["ops"] });
-            });
-          }}
-        >
-          {REPLAY_LABELS[f.kind]}
-        </button>
-      ) : null}
-    </li>
+    <tr aria-label={f.label} className="align-top">
+      <td className={`${bodyCell} whitespace-normal`}>
+        <span className="block text-meta text-ink-muted">{KIND_LABELS[f.kind]}</span>
+        {f.label}
+      </td>
+      <td className={bodyCell}>
+        <Badge tone="danger">{f.status}</Badge>
+      </td>
+      <td className={`${bodyCell} min-w-48 whitespace-normal text-ink-muted`}>{f.detail ?? "–"}</td>
+      <td className={`${bodyCell} text-ink-muted`}>
+        <Time value={f.occurredAt} />
+      </td>
+      <td className={`${bodyCell} whitespace-normal`}>
+        {f.replayable ? (
+          <div className="space-y-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={busy}
+              onClick={() => {
+                void run(async () => {
+                  await api<typeof ops.replayOpsFailure>("POST", "/admin/ops/replay/:kind/:id", {
+                    params: { kind: f.kind, id: f.id },
+                  });
+                  await queryClient.invalidateQueries({ queryKey: ["ops"] });
+                });
+              }}
+            >
+              {REPLAY_LABELS[f.kind]}
+            </Button>
+            {problem ? (
+              <p role="alert" className="text-body-sm text-danger">
+                {problem.title}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </td>
+    </tr>
   );
 }
 
@@ -101,54 +136,67 @@ function YouTubeCheck() {
     queryFn: ({ signal }) =>
       api<typeof ops.getYouTubeStatus>("GET", "/admin/integrations/youtube/status", { signal }),
   });
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const s = status.data?.status ?? null;
   return (
-    <section
-      aria-label="YouTube"
-      className="space-y-1 rounded border border-slate-200 bg-white p-3 text-sm"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-medium">YouTube</h3>
-        <button
-          type="button"
-          disabled={busy}
-          className="text-brand underline disabled:opacity-60"
-          onClick={() => {
-            void run(async () => {
-              await api<typeof ops.testYouTube>("POST", "/admin/integrations/youtube/test", {});
-              // The check runs in the background; look again shortly.
-              setTimeout(() => {
-                void queryClient.invalidateQueries({ queryKey: ["ops", "youtube"] });
-              }, 3000);
-            });
-          }}
-        >
-          Check now
-        </button>
-      </div>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {s === null ? (
-        <p className="text-slate-600">Not checked yet.</p>
-      ) : (
-        <>
-          <p className={s.ok ? "text-green-800" : "text-red-800"}>
-            {s.ok ? "Working" : "Needs attention"} · checked <Time value={s.checkedAt} />
-          </p>
-          <p>
-            Link checks (oEmbed): {s.reachable ? "reachable" : "unreachable"}
-            {s.detail === null ? "" : ` · ${s.detail}`}
-          </p>
-          <ul>
-            {s.channels.map((c) => (
-              <li key={c.url} className="break-all">
-                {c.resolves ? "✓" : "✗"} {c.url}
-                {c.detail === null ? "" : ` · ${c.detail}`}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+    <section aria-label="YouTube">
+      <Card className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-heading">YouTube</h2>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={busy}
+            onClick={() => {
+              void run(async () => {
+                await api<typeof ops.testYouTube>("POST", "/admin/integrations/youtube/test", {});
+                // The check runs in the background; look again shortly.
+                setTimeout(() => {
+                  void queryClient.invalidateQueries({ queryKey: ["ops", "youtube"] });
+                }, 3000);
+              });
+            }}
+          >
+            Check now
+          </Button>
+        </div>
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        {status.isError ? (
+          <LoadFailed what="the YouTube check" onRetry={() => void status.refetch()} />
+        ) : s === null ? (
+          <p className="text-body-sm text-ink-muted">Not checked yet.</p>
+        ) : (
+          <div className="space-y-2 text-body-sm">
+            <p className="flex flex-wrap items-center gap-2">
+              <Badge tone={s.ok ? "success" : "danger"}>
+                {s.ok ? "Working" : "Needs attention"}
+              </Badge>
+              <span className="text-ink-muted">
+                checked <Time value={s.checkedAt} />
+              </span>
+            </p>
+            <p>
+              Link checks (oEmbed): {s.reachable ? "reachable" : "unreachable"}
+              {s.detail === null ? "" : ` · ${s.detail}`}
+            </p>
+            <ul className="space-y-1">
+              {s.channels.map((c) => (
+                <li key={c.url} className="break-all">
+                  <span className={c.resolves ? "text-success" : "text-danger"}>
+                    {c.resolves ? "✓" : "✗"}
+                  </span>{" "}
+                  {c.url}
+                  {c.detail === null ? "" : ` · ${c.detail}`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
     </section>
   );
 }
@@ -161,53 +209,60 @@ export function AdminJobsPage() {
     queryFn: ({ signal }) => api<typeof ops.listQueues>("GET", "/admin/jobs", { signal }),
   });
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Job queues</h2>
-        <Link to="/admin/ops" className="text-sm text-brand underline">
-          Failures
-        </Link>
-      </div>
-      <p className="text-sm text-slate-600">
-        A queue whose oldest waiting job is over 2 minutes old is falling behind; you're emailed
-        about it.
-      </p>
-      {list.isError ? <Alert tone="error">We couldn't load the queues.</Alert> : null}
-      <div
-        role="region"
-        aria-label="Job queues"
-        tabIndex={0}
-        className="overflow-x-auto rounded border border-slate-200 bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-      >
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50">
+    <div className="space-y-5">
+      <PageHeader
+        title="Job queues"
+        meta="A queue whose oldest waiting job is over 2 minutes old is falling behind; you're emailed about it."
+      />
+      {list.isPending ? (
+        <SkeletonGroup label="Loading the job queues">
+          <Skeleton className="h-48" />
+        </SkeletonGroup>
+      ) : list.isError ? (
+        <LoadFailed what="the job queues" onRetry={() => void list.refetch()} />
+      ) : list.data.items.length === 0 ? (
+        <EmptyState icon="clock" title="No job queues yet" />
+      ) : (
+        <DataTable caption="Job queues" minWidth="min-w-160">
+          <thead>
             <tr>
-              <th className="p-2">Queue</th>
-              <th className="p-2">Waiting</th>
-              <th className="p-2">Running</th>
-              <th className="p-2">Failed (24 h)</th>
-              <th className="p-2">Oldest wait</th>
+              <th scope="col" className={headCell}>
+                Queue
+              </th>
+              <th scope="col" className={`${headCell} ${numericCell}`}>
+                Waiting
+              </th>
+              <th scope="col" className={`${headCell} ${numericCell}`}>
+                Running
+              </th>
+              <th scope="col" className={`${headCell} ${numericCell}`}>
+                Failed (24 h)
+              </th>
+              <th scope="col" className={headCell}>
+                Oldest wait
+              </th>
             </tr>
           </thead>
           <tbody>
-            {(list.data?.items ?? []).map((q) => (
-              <tr
-                key={q.name}
-                className={`border-t border-slate-100 ${q.behind ? "bg-red-50" : ""}`}
-              >
-                <td className="p-2 font-mono text-xs">{q.name}</td>
-                <td className="p-2">{q.queued}</td>
-                <td className="p-2">{q.active}</td>
-                <td className="p-2">{q.failedLastDay}</td>
-                <td className="p-2">
-                  {q.oldestQueuedSeconds === null ? "–" : `${String(q.oldestQueuedSeconds)} s`}
-                  {q.behind ? " · behind" : ""}
+            {list.data.items.map((q) => (
+              <tr key={q.name}>
+                <td className={`${bodyCell} font-mono text-code`}>{q.name}</td>
+                <td className={`${bodyCell} ${numericCell}`}>{q.queued}</td>
+                <td className={`${bodyCell} ${numericCell}`}>{q.active}</td>
+                <td className={`${bodyCell} ${numericCell}`}>{q.failedLastDay}</td>
+                <td className={bodyCell}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="tabular-nums">
+                      {q.oldestQueuedSeconds === null ? "–" : `${String(q.oldestQueuedSeconds)} s`}
+                    </span>
+                    {q.behind ? <Badge tone="danger">Behind</Badge> : null}
+                  </span>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </DataTable>
+      )}
     </div>
   );
 }

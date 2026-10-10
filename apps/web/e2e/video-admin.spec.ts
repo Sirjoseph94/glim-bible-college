@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken, scriptYouTube } from "./mailbox";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-videos@glim.test";
 const PASSWORD = "video admin passphrase 2026";
@@ -13,6 +14,7 @@ test("the System Admin manages videos across the college", async ({ page }) => {
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();
+  await openArea(page, "Settings");
   await page.getByRole("link", { name: "Videos" }).click();
 
   const row = page.getByRole("listitem", { name: "Week 2: Prayer" });
@@ -39,8 +41,11 @@ test("the System Admin manages videos across the college", async ({ page }) => {
   );
 
   // Deleted by mistake, then restored.
-  page.once("dialog", (dialog) => void dialog.accept());
   await row.getByRole("button", { name: "Delete" }).click();
+  await page
+    .getByRole("dialog", { name: 'Delete "Week 2: Prayer"?' })
+    .getByRole("button", { name: "Delete video" })
+    .click();
   await expect(row).toContainText("Deleted");
   await expect(row).toContainText("Can be restored until");
   await row.getByRole("button", { name: "Restore" }).click();

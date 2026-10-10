@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { signOut } from "./nav";
 
 const ADMIN = "e2e-admin@glim.test";
 const PASSWORD = "a long and happy passphrase 2026";
@@ -16,21 +17,21 @@ test("an invited System Admin sets a password, signs out, signs in, and resets t
   await expect(page.getByRole("heading", { name: "Welcome, Esther Admin" })).toBeVisible();
   await expect(page.getByText("Signed in as system admin.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
   await page.getByLabel("Email").fill(ADMIN);
   await page.getByLabel("Password").fill("not the right password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("alert")).toContainText("The email or password is incorrect");
+  await expect(page.getByRole("alert")).toContainText("That email and password don't match");
 
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Esther Admin" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Forgot your password?" }).click();
+  await page.getByRole("link", { name: "Forgot password?" }).click();
   await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
   await page.getByLabel("Email").fill(ADMIN);
   await page.getByRole("button", { name: "Email me a link" }).click();

@@ -37,7 +37,7 @@ export function AdmissionsIntakesPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Intakes</h2>
+      <h1 className="text-title">Intakes</h1>
       {error ? <Alert tone="error">{error}</Alert> : null}
       <ul className="space-y-2">
         {intakes.data?.items.map((i) => (

@@ -9,6 +9,8 @@ import {
 import { meQuery } from "./api/session";
 import { LoginPage } from "./routes/login";
 import { RootLayout } from "./routes/root";
+import { TEACH_TABS, type TeachTab } from "./routes/teach-tabs";
+import { COURSE_TABS, type CourseTab } from "./routes/course-tabs";
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -215,6 +217,16 @@ const coursesRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/student"), "CoursesPage"),
 });
 
+/** A course's sections as tabs; the tab is in the URL so back and refresh keep it (§9.7). */
+const courseRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$offeringId",
+  validateSearch: (search: Record<string, unknown>): { tab?: CourseTab } =>
+    COURSE_TABS.includes(search.tab as CourseTab) ? { tab: search.tab as CourseTab } : {},
+  beforeLoad: requireStudent,
+  component: lazyRouteComponent(() => import("./routes/course"), "CoursePage"),
+});
+
 const teachRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/teach",
@@ -296,14 +308,33 @@ const quizGradingRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/quiz"), "QuizGradingPage"),
 });
 
+/** The old gradebook address now opens the course's Gradebook tab (decision UI-Q5). */
 const gradebookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/teach/offerings/$offeringId/gradebook",
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/teach/$offeringId",
+      params: { offeringId: params.offeringId },
+      search: { tab: "gradebook" },
+    });
+  },
+});
+
+/**
+ * A course for its Lecturers, tabs in the URL (§11.9). Signed in is enough here, as for the
+ * gradebook before it: the API decides who may see each part.
+ */
+const teachCourseRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/teach/$offeringId",
+  validateSearch: (search: Record<string, unknown>): { tab?: TeachTab } =>
+    TEACH_TABS.includes(search.tab as TeachTab) ? { tab: search.tab as TeachTab } : {},
   beforeLoad: async ({ context }) => {
     const me = await context.queryClient.query(meQuery);
     if (me === null) throw redirect({ to: "/login" });
   },
-  component: lazyRouteComponent(() => import("./routes/gradebook"), "GradebookPage"),
+  component: lazyRouteComponent(() => import("./routes/teach"), "TeachCoursePage"),
 });
 
 const courseResultsRoute = createRoute({
@@ -313,21 +344,21 @@ const courseResultsRoute = createRoute({
     const me = await context.queryClient.query(meQuery);
     if (me === null) throw redirect({ to: "/login" });
   },
-  component: lazyRouteComponent(() => import("./routes/results"), "CourseResultsPage"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "CourseResultsPage"),
 });
 
 const resultsCoursesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/courses",
   beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
-  component: lazyRouteComponent(() => import("./routes/results"), "ResultsCoursesPage"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "ResultsCoursesPage"),
 });
 
 const semesterResultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/semesters",
   beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
-  component: lazyRouteComponent(() => import("./routes/results"), "SemesterResultsPage"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "SemesterResultsPage"),
 });
 
 const awardsRoute = createRoute({
@@ -344,11 +375,13 @@ const myResultsRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/results"), "MyResultsPage"),
 });
 
+/** Transcripts moved onto the Results page (decision UI-Q8); old links still land there. */
 const myTranscriptsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/transcripts",
-  beforeLoad: requireStudentOrAlumnus,
-  component: lazyRouteComponent(() => import("./routes/transcripts"), "MyTranscriptsPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/results" });
+  },
 });
 
 const transcriptRoute = createRoute({
@@ -361,11 +394,13 @@ const transcriptRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/transcripts"), "TranscriptPage"),
 });
 
+/** Transcript requests are on the semester results page now (decision UI-Q8). */
 const registrarTranscriptsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/transcripts",
-  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR"),
-  component: lazyRouteComponent(() => import("./routes/transcripts"), "RegistrarTranscriptsPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/results/semesters" });
+  },
 });
 
 /** Public: anyone holding a transcript can check it (§14.7). */
@@ -449,7 +484,20 @@ const admissionsIntakesRoute = createRoute({
   ),
 });
 
+/** The design-system gallery: built only when VITE_DEV_UI=true (the e2e build), never shipped. */
+const devUiRoutes =
+  import.meta.env.VITE_DEV_UI === "true"
+    ? [
+        createRoute({
+          getParentRoute: () => rootRoute,
+          path: "/dev/ui",
+          component: lazyRouteComponent(() => import("./dev/ui-gallery"), "DevUiPage"),
+        }),
+      ]
+    : [];
+
 const routeTree = rootRoute.addChildren([
+  ...devUiRoutes,
   homeRoute,
   rollCallRoute,
   meetingAttendanceRoute,
@@ -459,6 +507,7 @@ const routeTree = rootRoute.addChildren([
   quizRoute,
   quizGradingRoute,
   gradebookRoute,
+  teachCourseRoute,
   courseResultsRoute,
   resultsCoursesRoute,
   semesterResultsRoute,
@@ -490,6 +539,7 @@ const routeTree = rootRoute.addChildren([
   teachRoute,
   registrationRoute,
   coursesRoute,
+  courseRoute,
   applyRoute,
   applicationRoute,
   applicationEditRoute,

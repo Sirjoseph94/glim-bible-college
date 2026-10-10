@@ -1,5 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-imports@glim.test";
 const PASSWORD = "imports passphrase 2026";
@@ -11,6 +12,7 @@ test("the Academic Admin checks a Lecturers CSV, then imports it", async ({ page
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Ike Imports" })).toBeVisible();
 
+  await openArea(page, "Academic");
   await page.getByRole("link", { name: "Imports" }).click();
   await page.getByLabel("What are you importing?").selectOption("LECTURERS");
   await page.getByLabel("CSV file").setInputFiles({

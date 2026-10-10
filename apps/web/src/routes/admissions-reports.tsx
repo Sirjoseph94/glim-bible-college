@@ -1,6 +1,5 @@
 import type { admissions, AdmissionsReport, reports } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
 import { Alert } from "../components/form";
@@ -59,12 +58,7 @@ export function AdmissionsReportsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Admissions reports</h2>
-        <Link to="/admissions" className="text-sm underline">
-          Applications
-        </Link>
-      </div>
+      <h1 className="text-title">Admissions reports</h1>
       <select
         aria-label="Intake"
         value={intakeId}

@@ -1,8 +1,19 @@
-import type { AcademicSession, calendar, Semester } from "@glim/contracts";
+import type { AcademicSession, calendar, Room, Semester } from "@glim/contracts";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useId, useState } from "react";
 import { api } from "../api/client";
-import { Alert, Field, formText, SubmitButton } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
+import { formText } from "../components/form";
 import { CalendarDate } from "../components/time";
+import { Badge, type Tone } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card, cardClass } from "../components/ui/card";
+import { ConfirmDialog, Sheet } from "../components/ui/dialog";
+import { EmptyState } from "../components/ui/empty-state";
+import { TextField } from "../components/ui/field";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 
 const sessionsQuery = queryOptions({
@@ -41,12 +52,33 @@ const NEXT_STEP: Partial<Record<Semester["status"], { action: SemesterAction; la
   ACTIVE: { action: "close", label: "Close semester" },
 };
 
+const SESSION_STATUS: Record<AcademicSession["status"], { tone: Tone; word: string }> = {
+  PLANNED: { tone: "info", word: "Planned" },
+  ACTIVE: { tone: "success", word: "Active" },
+  CLOSED: { tone: "neutral", word: "Closed" },
+};
+
+const SEMESTER_STATUS: Record<Semester["status"], { tone: Tone; word: string }> = {
+  PLANNED: { tone: "info", word: "Planned" },
+  REGISTRATION: { tone: "brand", word: "Registration open" },
+  ACTIVE: { tone: "success", word: "Active" },
+  CLOSED: { tone: "neutral", word: "Closed" },
+};
+
+/** A closing step waiting for confirmation: it can't be undone. */
+type Closing =
+  { kind: "session"; id: string; name: string } | { kind: "semester"; id: string; name: string };
+
 /** Academic Sessions, their semesters, and Rooms (TRD §9.1). */
 export function AdminCalendarPage() {
   const sessions = useQuery(sessionsQuery);
   const semesters = useQuery(semestersQuery);
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
+  // The session or semester whose step is running, for its button's spinner.
+  const [pending, setPending] = useState<string | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [closing, setClosing] = useState<Closing | null>(null);
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["academic-sessions"] }),
@@ -54,12 +86,14 @@ export function AdminCalendarPage() {
     ]);
 
   const sessionAction = (id: string, action: SessionAction) => {
+    setPending(id);
     void run(async () => {
       await api<SessionTransition>("POST", SESSION_PATHS[action], { params: { id } });
       await refresh();
     });
   };
   const semesterAction = (id: string, action: SemesterAction) => {
+    setPending(id);
     void run(async () => {
       await api<SemesterTransition>("POST", SEMESTER_PATHS[action], { params: { id } });
       await refresh();
@@ -68,23 +102,94 @@ export function AdminCalendarPage() {
 
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-semibold">Academic calendar</h2>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {sessions.data?.items.map((session) => (
-        <SessionCard
-          key={session.id}
-          session={session}
-          semesters={semesters.data?.items.filter((s) => s.academicSessionId === session.id) ?? []}
-          busy={busy}
-          onSessionAction={(action) => {
-            sessionAction(session.id, action);
-          }}
-          onSemesterAction={semesterAction}
-          onAdded={refresh}
-        />
-      ))}
-      <NewSession onCreated={refresh} />
+      <PageHeader
+        title="Academic calendar"
+        meta="Academic Sessions, their semesters, and Rooms."
+        actions={
+          <Button
+            variant="primary"
+            icon="calendar"
+            onClick={() => {
+              setPlanning(true);
+            }}
+          >
+            Plan an Academic Session
+          </Button>
+        }
+      />
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      {sessions.isPending ? (
+        <SkeletonGroup label="Loading Academic Sessions">
+          <Skeleton className="h-40" />
+        </SkeletonGroup>
+      ) : sessions.isError ? (
+        <LoadFailed what="the Academic Sessions" onRetry={() => void sessions.refetch()} />
+      ) : sessions.data.items.length === 0 ? (
+        <EmptyState icon="calendar" title="No Academic Sessions yet">
+          Plan the first Academic Session, then add its two semesters.
+        </EmptyState>
+      ) : (
+        <div className="space-y-4">
+          {semesters.isError ? (
+            <LoadFailed what="the semesters" onRetry={() => void semesters.refetch()} />
+          ) : null}
+          {sessions.data.items.map((session) => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              semesters={
+                semesters.data?.items.filter((s) => s.academicSessionId === session.id) ?? []
+              }
+              loadingId={busy ? pending : null}
+              onSessionAction={(action) => {
+                if (action === "close")
+                  setClosing({ kind: "session", id: session.id, name: session.name });
+                else sessionAction(session.id, action);
+              }}
+              onSemesterAction={(semester, action) => {
+                if (action === "close")
+                  setClosing({ kind: "semester", id: semester.id, name: semester.name });
+                else semesterAction(semester.id, action);
+              }}
+              onAdded={refresh}
+            />
+          ))}
+        </div>
+      )}
       <Rooms />
+      <NewSession open={planning} onOpenChange={setPlanning} onCreated={refresh} />
+      <ConfirmDialog
+        open={closing !== null}
+        onOpenChange={(open) => {
+          if (!open) setClosing(null);
+        }}
+        title={
+          closing?.kind === "session" ? "Close this Academic Session?" : "Close this semester?"
+        }
+        confirmLabel={closing?.kind === "session" ? "Close Academic Session" : "Close semester"}
+        tone="danger"
+        onConfirm={async () => {
+          if (closing === null) return;
+          if (closing.kind === "session")
+            await api<SessionTransition>("POST", SESSION_PATHS.close, {
+              params: { id: closing.id },
+            });
+          else
+            await api<SemesterTransition>("POST", SEMESTER_PATHS.close, {
+              params: { id: closing.id },
+            });
+          await refresh();
+          setClosing(null);
+        }}
+      >
+        {closing?.kind === "session"
+          ? `${closing.name} will be closed. This can't be undone.`
+          : `${closing?.name ?? "The semester"} will be closed and its teaching ends. This can't be undone.`}
+      </ConfirmDialog>
     </div>
   );
 }
@@ -92,118 +197,163 @@ export function AdminCalendarPage() {
 function SessionCard(props: {
   session: AcademicSession;
   semesters: Semester[];
-  busy: boolean;
+  /** The session or semester whose step is running. */
+  loadingId: string | null;
   onSessionAction: (action: SessionAction) => void;
-  onSemesterAction: (id: string, action: SemesterAction) => void;
+  onSemesterAction: (semester: Semester, action: SemesterAction) => void;
   onAdded: () => Promise<unknown>;
 }) {
   const { session } = props;
+  const status = SESSION_STATUS[session.status];
+  const [adding, setAdding] = useState(false);
+  const sequence = props.semesters.length === 0 ? 1 : 2;
+  const canAddSemester = session.status !== "CLOSED" && props.semesters.length < 2;
   return (
-    <section
-      aria-label={session.name}
-      className="space-y-3 rounded border border-slate-200 bg-white p-4"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold">
-          {session.name}{" "}
-          <span className="text-sm font-normal text-slate-600">
-            · {session.status.toLowerCase()}
-          </span>
-        </h3>
-        <span className="text-sm text-slate-600">
-          <CalendarDate value={session.startsOn} /> – <CalendarDate value={session.endsOn} />
-        </span>
+    <section aria-label={session.name} className={`${cardClass()} space-y-4`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-heading">{session.name}</h2>
+            <Badge tone={status.tone}>{status.word}</Badge>
+          </div>
+          <p className="text-meta text-ink-muted">
+            <CalendarDate value={session.startsOn} /> – <CalendarDate value={session.endsOn} />
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {session.status === "PLANNED" ? (
+            <Button
+              size="sm"
+              variant="primary"
+              loading={props.loadingId === session.id}
+              onClick={() => {
+                props.onSessionAction("activate");
+              }}
+            >
+              Activate Academic Session
+            </Button>
+          ) : null}
+          {session.status === "ACTIVE" ? (
+            <Button
+              size="sm"
+              variant="danger"
+              loading={props.loadingId === session.id}
+              onClick={() => {
+                props.onSessionAction("close");
+              }}
+            >
+              Close session
+            </Button>
+          ) : null}
+        </div>
       </div>
-      <ul className="space-y-2">
-        {props.semesters.map((s) => {
-          const next = NEXT_STEP[s.status];
-          return (
-            <li key={s.id} className="rounded border border-slate-100 p-2 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">
-                  {s.name} ({s.code}) · {s.status.toLowerCase()}
-                </span>
+      {props.semesters.length === 0 ? (
+        <p className="text-body-sm text-ink-muted">No semesters yet.</p>
+      ) : (
+        <Card list role="list">
+          {props.semesters.map((s) => {
+            const next = NEXT_STEP[s.status];
+            const semesterStatus = SEMESTER_STATUS[s.status];
+            const label = `${s.name} (${s.code})`;
+            return (
+              <div
+                key={s.id}
+                role="listitem"
+                aria-label={label}
+                className="flex flex-wrap items-center gap-3 px-4 py-3"
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-subhead">{label}</p>
+                    <Badge tone={semesterStatus.tone}>{semesterStatus.word}</Badge>
+                  </div>
+                  <p className="text-meta text-ink-muted">
+                    <CalendarDate value={s.startsOn} /> – <CalendarDate value={s.endsOn} />
+                    {s.examsStartOn ? (
+                      <>
+                        {" "}
+                        · exams <CalendarDate value={s.examsStartOn} /> –{" "}
+                        <CalendarDate value={s.examsEndOn} />
+                      </>
+                    ) : null}
+                    {s.addDropDeadlineOn ? (
+                      <>
+                        {" "}
+                        · add/drop until <CalendarDate value={s.addDropDeadlineOn} />
+                      </>
+                    ) : null}
+                  </p>
+                </div>
                 {next ? (
-                  <button
-                    type="button"
-                    className="underline"
-                    disabled={props.busy}
+                  <Button
+                    size="sm"
+                    variant={next.action === "close" ? "danger" : "secondary"}
+                    loading={props.loadingId === s.id}
                     onClick={() => {
-                      props.onSemesterAction(s.id, next.action);
+                      props.onSemesterAction(s, next.action);
                     }}
                   >
                     {next.label}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
-              <div className="text-slate-600">
-                <CalendarDate value={s.startsOn} /> – <CalendarDate value={s.endsOn} />
-                {s.examsStartOn ? (
-                  <>
-                    {" "}
-                    · exams <CalendarDate value={s.examsStartOn} /> –{" "}
-                    <CalendarDate value={s.examsEndOn} />
-                  </>
-                ) : null}
-                {s.addDropDeadlineOn ? (
-                  <>
-                    {" "}
-                    · add/drop until <CalendarDate value={s.addDropDeadlineOn} />
-                  </>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="flex flex-wrap gap-3 text-sm">
-        {session.status === "PLANNED" ? (
-          <button
-            type="button"
-            className="underline"
-            disabled={props.busy}
+            );
+          })}
+        </Card>
+      )}
+      {canAddSemester ? (
+        <>
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => {
-              props.onSessionAction("activate");
+              setAdding(true);
             }}
           >
-            Activate session
-          </button>
-        ) : null}
-        {session.status === "ACTIVE" ? (
-          <button
-            type="button"
-            className="underline"
-            disabled={props.busy}
-            onClick={() => {
-              props.onSessionAction("close");
-            }}
-          >
-            Close session
-          </button>
-        ) : null}
-      </div>
-      {session.status !== "CLOSED" && props.semesters.length < 2 ? (
-        <NewSemester
-          sessionId={session.id}
-          sequence={props.semesters.length === 0 ? 1 : 2}
-          onCreated={props.onAdded}
-        />
+            Add semester {sequence}
+          </Button>
+          <NewSemester
+            open={adding}
+            onOpenChange={setAdding}
+            session={session}
+            sequence={sequence}
+            onCreated={props.onAdded}
+          />
+        </>
       ) : null}
     </section>
   );
 }
 
-function NewSession({ onCreated }: { onCreated: () => Promise<unknown> }) {
-  const { busy, error, fieldErrors, run } = useSubmit();
+function NewSession({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: () => Promise<unknown>;
+}) {
+  const formId = useId();
+  const { busy, problem, fieldErrors, run } = useSubmit();
   return (
-    <details className="rounded border border-slate-200 bg-white p-4">
-      <summary className="cursor-pointer font-medium">Plan an Academic Session</summary>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Plan an Academic Session"
+      description="An Academic Session holds up to two semesters."
+      footer={
+        <Button type="submit" form={formId} variant="primary" block loading={busy}>
+          Plan Academic Session
+        </Button>
+      }
+    >
       <form
-        className="mt-3 grid gap-3 sm:grid-cols-2"
+        id={formId}
+        className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const form = event.currentTarget;
-          const d = new FormData(form);
+          const d = new FormData(event.currentTarget);
           void run(async () => {
             await api<typeof calendar.createAcademicSession>("POST", "/academic-sessions", {
               body: {
@@ -213,50 +363,74 @@ function NewSession({ onCreated }: { onCreated: () => Promise<unknown> }) {
                 endsOn: formText(d, "endsOn"),
               },
             });
-            form.reset();
             await onCreated();
+            onOpenChange(false);
           });
         }}
       >
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        <Field
-          id="s-code"
-          name="code"
-          label="Code (e.g. 2027/2028)"
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        <TextField name="code" label="Code (e.g. 2027/2028)" required error={fieldErrors.code} />
+        <TextField
+          name="startsOn"
+          type="date"
+          label="Starts (September)"
           required
-          error={fieldErrors.code}
+          error={fieldErrors.startsOn}
         />
-        <Field id="s-starts" name="startsOn" type="date" label="Starts (September)" required />
-        <Field id="s-ends" name="endsOn" type="date" label="Ends (June)" required />
-        <SubmitButton busy={busy}>Plan session</SubmitButton>
+        <TextField
+          name="endsOn"
+          type="date"
+          label="Ends (June)"
+          required
+          error={fieldErrors.endsOn}
+        />
       </form>
-    </details>
+    </Sheet>
   );
 }
 
 function NewSemester({
-  sessionId,
+  open,
+  onOpenChange,
+  session,
   sequence,
   onCreated,
 }: {
-  sessionId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  session: AcademicSession;
   sequence: 1 | 2;
   onCreated: () => Promise<unknown>;
 }) {
-  const { busy, error, run } = useSubmit();
+  const formId = useId();
+  const { busy, problem, fieldErrors, run } = useSubmit();
   const optional = (d: FormData, key: string) => formText(d, key) || null;
   return (
-    <details className="text-sm">
-      <summary className="cursor-pointer underline">Add semester {sequence}</summary>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Add semester ${String(sequence)}`}
+      description={`${sequence === 1 ? "First" : "Second"} Semester of the ${session.name}.`}
+      footer={
+        <Button type="submit" form={formId} variant="primary" block loading={busy}>
+          Add semester
+        </Button>
+      }
+    >
       <form
-        className="mt-3 grid gap-3 sm:grid-cols-2"
+        id={formId}
+        className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
           const d = new FormData(event.currentTarget);
           void run(async () => {
             await api<typeof calendar.createSemester>("POST", "/semesters", {
               body: {
-                academicSessionId: sessionId,
+                academicSessionId: session.id,
                 code: `S${String(sequence)}`,
                 name: sequence === 1 ? "First Semester" : "Second Semester",
                 sequence,
@@ -270,84 +444,163 @@ function NewSemester({
               },
             });
             await onCreated();
+            onOpenChange(false);
           });
         }}
       >
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        <Field id={`${sessionId}-start`} name="startsOn" type="date" label="Starts" required />
-        <Field id={`${sessionId}-end`} name="endsOn" type="date" label="Ends" required />
-        <Field
-          id={`${sessionId}-ro`}
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        <TextField
+          name="startsOn"
+          type="date"
+          label="Starts"
+          required
+          error={fieldErrors.startsOn}
+        />
+        <TextField name="endsOn" type="date" label="Ends" required error={fieldErrors.endsOn} />
+        <TextField
           name="registrationOpensOn"
           type="date"
           label="Registration opens"
+          optional
+          error={fieldErrors.registrationOpensOn}
         />
-        <Field
-          id={`${sessionId}-rc`}
+        <TextField
           name="registrationClosesOn"
           type="date"
           label="Registration closes"
+          optional
+          error={fieldErrors.registrationClosesOn}
         />
-        <Field
-          id={`${sessionId}-ad`}
+        <TextField
           name="addDropDeadlineOn"
           type="date"
           label="Add/drop deadline"
+          optional
+          error={fieldErrors.addDropDeadlineOn}
         />
-        <Field id={`${sessionId}-es`} name="examsStartOn" type="date" label="Exams start" />
-        <Field id={`${sessionId}-ee`} name="examsEndOn" type="date" label="Exams end" />
-        <SubmitButton busy={busy}>Add semester</SubmitButton>
+        <TextField
+          name="examsStartOn"
+          type="date"
+          label="Exams start"
+          optional
+          error={fieldErrors.examsStartOn}
+        />
+        <TextField
+          name="examsEndOn"
+          type="date"
+          label="Exams end"
+          optional
+          error={fieldErrors.examsEndOn}
+        />
       </form>
-    </details>
+    </Sheet>
   );
+}
+
+function roomDetail(r: Room): string {
+  return r.capacity === null ? "No seat count" : `${String(r.capacity)} seats`;
 }
 
 function Rooms() {
   const rooms = useQuery(roomsQuery);
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const formId = useId();
+  const [adding, setAdding] = useState(false);
+  const { busy, problem, fieldErrors, run } = useSubmit();
   return (
     <section className="space-y-3">
-      <h3 className="text-lg font-semibold">Rooms</h3>
-      <ul className="divide-y divide-slate-200 rounded border border-slate-200 bg-white text-sm">
-        {rooms.data?.items.map((r) => (
-          <li key={r.id} className="flex justify-between px-3 py-2">
-            <span>
-              <span className="font-medium">{r.code}</span> {r.name}
-            </span>
-            <span className="text-slate-600">
-              {r.capacity === null ? "" : `${String(r.capacity)} seats`}
-              {r.status === "ARCHIVED" ? " · archived" : ""}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <form
-        className="grid gap-3 sm:grid-cols-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const d = new FormData(form);
-          void run(async () => {
-            const capacity = formText(d, "capacity");
-            await api<typeof calendar.createRoom>("POST", "/rooms", {
-              body: {
-                code: formText(d, "code"),
-                name: formText(d, "name"),
-                capacity: capacity === "" ? null : Number(capacity),
-              },
-            });
-            form.reset();
-            await queryClient.invalidateQueries({ queryKey: ["rooms"] });
-          });
-        }}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-heading">Rooms</h2>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setAdding(true);
+          }}
+        >
+          Add a Room
+        </Button>
+      </div>
+      {rooms.isPending ? (
+        <SkeletonGroup label="Loading Rooms">
+          <Skeleton className="h-24" />
+        </SkeletonGroup>
+      ) : rooms.isError ? (
+        <LoadFailed what="the Rooms" onRetry={() => void rooms.refetch()} />
+      ) : rooms.data.items.length === 0 ? (
+        <EmptyState icon="home" title="No Rooms yet">
+          Add the rooms on campus where Class Meetings can take place.
+        </EmptyState>
+      ) : (
+        <Card list role="list">
+          {rooms.data.items.map((r) => (
+            <div
+              key={r.id}
+              role="listitem"
+              aria-label={`${r.code} ${r.name}`}
+              className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+            >
+              <p className="text-body">
+                <span className="font-mono text-code">{r.code}</span> {r.name}
+              </p>
+              <span className="flex items-center gap-2 text-meta text-ink-muted">
+                {roomDetail(r)}
+                {r.status === "ARCHIVED" ? <Badge tone="neutral">Archived</Badge> : null}
+              </span>
+            </div>
+          ))}
+        </Card>
+      )}
+      <Sheet
+        open={adding}
+        onOpenChange={setAdding}
+        title="Add a Room"
+        footer={
+          <Button type="submit" form={formId} variant="primary" block loading={busy}>
+            Add Room
+          </Button>
+        }
       >
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        <Field id="r-code" name="code" label="Room code" required error={fieldErrors.code} />
-        <Field id="r-name" name="name" label="Room name" required />
-        <Field id="r-cap" name="capacity" type="number" min={1} label="Seats (optional)" />
-        <SubmitButton busy={busy}>Add Room</SubmitButton>
-      </form>
+        <form
+          id={formId}
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const d = new FormData(event.currentTarget);
+            void run(async () => {
+              const capacity = formText(d, "capacity");
+              await api<typeof calendar.createRoom>("POST", "/rooms", {
+                body: {
+                  code: formText(d, "code"),
+                  name: formText(d, "name"),
+                  capacity: capacity === "" ? null : Number(capacity),
+                },
+              });
+              await queryClient.invalidateQueries({ queryKey: ["rooms"] });
+              setAdding(false);
+            });
+          }}
+        >
+          {problem ? (
+            <Banner tone="danger" title={problem.title}>
+              {problem.body}
+            </Banner>
+          ) : null}
+          <TextField name="code" label="Room code" required error={fieldErrors.code} />
+          <TextField name="name" label="Room name" required error={fieldErrors.name} />
+          <TextField
+            name="capacity"
+            type="number"
+            min={1}
+            label="Seats"
+            optional
+            error={fieldErrors.capacity}
+          />
+        </form>
+      </Sheet>
     </section>
   );
 }

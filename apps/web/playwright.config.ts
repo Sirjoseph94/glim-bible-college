@@ -15,7 +15,8 @@ export default defineConfig({
   // Students and applicants are mostly on phones (TRD §18).
   projects: [{ name: "mobile", use: { ...devices["Pixel 7"] } }],
   webServer: {
-    command: "pnpm --filter @glim/web build && pnpm --filter @glim/api e2e:serve",
+    // VITE_DEV_UI adds the /dev/ui gallery for e2e/design-system.spec.ts; production builds lack it.
+    command: "VITE_DEV_UI=true pnpm --filter @glim/web build && pnpm --filter @glim/api e2e:serve",
     url: `http://localhost:${String(PORT)}/readyz`,
     reuseExistingServer: false,
     timeout: 240_000,

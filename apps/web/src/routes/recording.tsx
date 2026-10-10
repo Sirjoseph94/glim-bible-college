@@ -3,7 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import { Alert } from "../components/form";
+import { meQuery } from "../api/session";
+import { useDetailBar } from "../components/app/shell-parts";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
+import { Icon } from "../design/icons";
 
 /** The parts of the YouTube IFrame API the player uses. */
 interface YouTubePlayer {
@@ -91,13 +97,20 @@ function saveData(): boolean {
   return connection?.saveData === true;
 }
 
+/** The low-data tip (§13.4, decision UI-Q2: YouTube's own quality menu, no audio-only). */
 function DataSaverTip({ durationMs }: { durationMs: number | null }) {
   const estimate = dataEstimate(durationMs);
   return (
-    <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-      <p>On mobile data, tap ⚙ → Quality → 144p (≈ 40 MB/hour) or 240p (≈ 70 MB/hour).</p>
+    <Banner tone="info" title="Save data on mobile">
+      <p>
+        In the player, tap{" "}
+        <span className="inline-flex translate-y-0.5">
+          <Icon name="settings" size={16} label="Settings" />
+        </span>{" "}
+        → Quality → 144p (≈ 40 MB per hour) or 240p (≈ 70 MB per hour).
+      </p>
       {estimate === null ? null : <p className="mt-1">{estimate}</p>}
-    </div>
+    </Banner>
   );
 }
 
@@ -124,7 +137,7 @@ function useProgressReporter(videoId: string, enabled: boolean) {
   };
 }
 
-function Player({ playback }: { playback: VideoPlayback }) {
+function Player({ playback, onRetry }: { playback: VideoPlayback; onRetry: () => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [failed, setFailed] = useState(false);
   const report = useProgressReporter(playback.videoId, playback.tracksProgress);
@@ -189,8 +202,8 @@ function Player({ playback }: { playback: VideoPlayback }) {
   src.searchParams.set("autoplay", "1");
   src.searchParams.set("origin", window.location.origin);
   return (
-    <div className="space-y-2">
-      <div className="relative aspect-video w-full overflow-hidden rounded bg-black">
+    <div className="space-y-3">
+      <div className="glim-stage relative aspect-video w-full overflow-hidden md:rounded-lg">
         <iframe
           ref={frame}
           title={playback.title}
@@ -203,19 +216,34 @@ function Player({ playback }: { playback: VideoPlayback }) {
         />
       </div>
       {failed ? (
-        <Alert tone="error">Can't reach YouTube — try another network or Wi-Fi.</Alert>
+        <Banner
+          tone="danger"
+          title="This recording didn't load"
+          action={
+            <Button size="sm" variant="secondary" onClick={onRetry}>
+              Try again
+            </Button>
+          }
+        >
+          Can't reach YouTube. Try another network or Wi-Fi, or choose a lower quality in the
+          player.
+        </Banner>
       ) : null}
     </div>
   );
 }
 
 /**
- * A recording (§13.4): a thumbnail and play button until the student taps it, then YouTube's
- * player, resuming where they stopped, with the data-saver tip.
+ * A recording (§11.4, §13.4; decision UI-Q2): the thumbnail and a play button until the student
+ * taps it (YouTube's player is a large download), then YouTube's player, resuming where they
+ * stopped, with the data-saver tip first when the browser asks to save data.
  */
 export function RecordingPage() {
   const { videoId } = useParams({ strict: false });
+  const me = useQuery(meQuery);
   const [started, setStarted] = useState(false);
+  // Remounts the player for "Try again" after YouTube failed to load.
+  const [attempt, setAttempt] = useState(0);
   const playback = useQuery({
     queryKey: ["videos", videoId, "play"],
     queryFn: ({ signal }) =>
@@ -228,28 +256,43 @@ export function RecordingPage() {
     enabled: videoId !== undefined,
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
+  // Playback doesn't say which course it belongs to, so students go back to My courses.
+  useDetailBar(
+    me.data?.roles.isStudent
+      ? { back: { to: "/courses", label: "My courses" } }
+      : { back: { to: "/", label: "Home" } },
+  );
   if (playback.isPending)
-    return <div className="aspect-video animate-pulse rounded bg-slate-200" />;
-  if (playback.isError)
     return (
-      <Alert tone="error">
-        {playback.error instanceof ApiError && playback.error.status === 404
-          ? "This recording isn't available to you."
-          : "We couldn't load this recording."}
-      </Alert>
+      <SkeletonGroup label="Loading the recording">
+        <Skeleton className="aspect-video w-full" />
+        <Skeleton className="h-6 w-2/3" />
+      </SkeletonGroup>
+    );
+  if (playback.isError)
+    return isNotAvailable(playback.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="this recording" onRetry={() => void playback.refetch()} />
     );
   const p = playback.data;
   const dataSaver = saveData();
+  const length = p.durationMs === null ? null : clock(p.durationMs);
   return (
-    <div className="space-y-3">
-      <h2 className="text-xl font-semibold">{p.title}</h2>
+    <div className="space-y-4">
       {dataSaver ? <DataSaverTip durationMs={p.durationMs} /> : null}
       {started ? (
-        <Player playback={p} />
+        <Player
+          key={attempt}
+          playback={p}
+          onRetry={() => {
+            setAttempt((n) => n + 1);
+          }}
+        />
       ) : (
         <button
           type="button"
-          className="group relative block aspect-video w-full overflow-hidden rounded bg-black"
+          className="glim-stage group relative block aspect-video w-full overflow-hidden md:rounded-lg"
           onClick={() => {
             setStarted(true);
           }}
@@ -262,18 +305,22 @@ export function RecordingPage() {
             height={180}
             className="h-full w-full object-cover opacity-90"
           />
-          <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-2xl shadow group-hover:bg-red-700">
-              ▶
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="glim-stage-chip flex size-16 items-center justify-center rounded-pill transition-colors duration-120 group-hover:bg-transparent">
+              <Icon name="play" size={30} />
             </span>
-            {p.resumeMs > 0 ? (
-              <span className="rounded bg-black/70 px-2 py-0.5 text-sm">
-                Resume from {clock(p.resumeMs)}
-              </span>
-            ) : null}
           </span>
         </button>
       )}
+      <div className="space-y-1">
+        <h1 className="text-title">{p.title}</h1>
+        {length ? <p className="text-body-sm text-ink-muted">{length}</p> : null}
+      </div>
+      {p.resumeMs > 0 && !started ? (
+        <Banner tone="info" title={`You stopped at ${clock(p.resumeMs)}`}>
+          Tap play to carry on from there.
+        </Banner>
+      ) : null}
       {dataSaver ? null : <DataSaverTip durationMs={p.durationMs} />}
     </div>
   );

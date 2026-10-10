@@ -101,6 +101,29 @@ PostgreSQL 18, Drizzle, pg-boss (no Redis), Google Workspace Business Standard w
 | Video host (C-42), **superseded by C-43** | **Cloudflare Stream.** Stream bills per minute stored, so with recordings kept indefinitely the storage cost grows each year (roughly +$240–360/month per year of recordings at list prices). **Accepted and monitored**, with an alert threshold. An archive policy would be a future decision. | ADR-0002, §13.7 |
 | Video host (C-43), later the same day | Stream was **too expensive**. **Recordings are hosted on GLIM's YouTube channel as unlisted videos** (ADR-0003). This **supersedes C-42.** Cost $0. The owner accepts: anyone with a link can watch, ads may appear, YouTube can take videos down, and there's no audio-only mode in v1. In v1, staff upload in YouTube Studio and paste the link; automatic upload comes with the Google integration. | ADR-0003, §13 |
 
+## 10 October 2026 — UI overhaul (answers to `docs/ui-audit.md` § Questions)
+
+The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-audit.md`.
+
+| ID | Topic | Decision | Where |
+|---|---|---|---|
+| UI-Q1 | Vocabulary | **`GLOSSARY.md` wins.** UI copy and code say Lecturer, Class Meeting and Matric Number, never "teacher", unqualified "session" or "student number". The handoff's SessionCard is built as `ClassMeetingCard`, and its "Teacher" role and copy are read as Lecturer. | handoff §6.3, §9.14, §12 |
+| UI-Q2 | Player | **Keep the YouTube embed for now** (ADR-0003). WP-UI-06 restyles the facade, stage, resume banner and data-saver tip. No QualityMenu, no Audio only, and no 180-day purge state (recordings are kept indefinitely). | handoff §9.16, §11.4 |
+| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. Until it lands, the card shows only the six real states, with `NO_SHOW` as "Didn't take place". | handoff §9.14 |
+| UI-Q4 | Roll call | Compose it from §9.18 AttendanceRow and the §9.20 offline queue. | WP-UI-09 |
+| UI-Q5 | Course routes | Add `/courses/$offeringId` (WP-UI-05) and `/teach/$offeringId` (WP-UI-09). `/courses` and `/teach` become lists linking to them. Announcements go in the Overview tab. | handoff §11.3, §11.9 |
+| UI-Q6 | Lecturer home | A Lecturer's `/` is Lecturer Today (§11.7). | WP-UI-04/09 |
+| UI-Q7 | Admissions and registration screens | Compose them from §9/§10 in WP-UI-11 ("composed, not specified"). INV-15 is unchanged. | WP-UI-11 |
+| UI-Q8 | Transcripts | **Merge** the transcripts pages into the results pages: the student's into `/results` (§11.6), the Registrar's requests into the semester results page (§11.10). The old paths redirect. | WP-UI-08, WP-UI-10 |
+| UI-Q9 | Data the API doesn't return | **Skip for now.** No UI is built for it; it is documented for future work in `.scratch/ui-overhaul/issues/02-ui-data-gaps.md`. | — |
+| UI-Q10 | Radix UI | **Install it** for Dialog/Sheet, DropdownMenu, Tabs, RadioGroup, Checkbox, Switch and Tooltip. In practice Dialog, DropdownMenu, Tabs and Switch are used; Checkbox and Radio stay native (§9.5) and Tooltip has no use yet, so those three were removed until one does. | handoff §3.1 |
+| UI-Q11 | Google sign-in button | **A design exception is approved for the four-colour "G" mark.** Checked against Google's *Sign in with Google* branding guidelines: the standard G must sit on white and cannot be recoloured, and the button may only use Google's light, dark or neutral themes, not a brand fill. So the brand-green `primary` button in §11.1 is **not** acceptable. "Continue with Google" stays the first, full-width button, but uses Google's light theme (white fill, `#747775` 1 px stroke, `#1F1F1F` text) in light mode and its dark theme (`#131314` fill, `#8E918F` stroke, `#E3E3E3` text) in dark mode, with the G on white. Those values are design exceptions too. | handoff §11.1 |
+| UI-Q12 | Collapsible section | Add a "Disclosure" component to §9 (restyled native `<details>`). | WP-UI-03 |
+| UI-Q13 | Product name | The name stays admin-editable (`GET /institution`) and appears everywhere a name is needed (top bar, rail, sign-in, page `<title>`, transcripts). There is no hard-coded "GLIM LMS" wordmark; this answers UQ-2. | WP-UI-04/05 |
+| UI-Q14 | Budget tooling | WP-UI-01 extends `budget-check.mjs` to report brotli and gzip and adds a Playwright check that the first screen downloads no fonts and no images except the crest. Signed-in Lighthouse runs come in WP-UI-12. | handoff §14 |
+| UI-Q15 | Spec references | The handoff's `SCHOOL_LMS_BUILD_SPEC.md` v2.1 references mean the equivalent sections of `docs/TRD.md` v3.0 (frontend is §18). | — |
+| UI-Q16 | Tailwind's default palette | WP-UI-01 adds the tokens alongside Tailwind's defaults, with the raw-value lint as a warning. WP-UI-12 removes the defaults and makes the lint an error. | handoff §15.1 |
+
 ## Defaults applied — awaiting owner confirmation
 
 These came up while writing the spec; none was put to the owner yet. They're built as defaults that are easy to change.
@@ -116,6 +139,7 @@ These came up while writing the spec; none was put to the owner yet. They're bui
 | D-07 | Keep Google Drive originals (reverses the earlier "Drive cleanup: yes") | Keep Meet recordings in Drive (`DRIVE_CLEANUP_MODE=NONE`), because YouTube can take videos down and the Drive file is the only reliable original | Recordings are kept indefinitely |
 | D-08 | Recording notice wording | The notice says recordings are published on GLIM's YouTube channel as unlisted videos that anyone with the link can view. Lecturers keep the camera on themselves and the slides where possible. | Students' faces and voices go onto YouTube |
 | D-09 | Audio-only | None in v1 (YouTube has no audio-only embed; a "choose 144p" tip instead). Optional later: an ~18 MB/hour audio file made from the Drive original. | Low-bandwidth students |
+| D-UI-01 | Main navigation for every role (handoff §6.3 covers only three; UI-Q6 answered the Lecturer home) | One area per role held, merged in this order: Home · Courses (student) · Results (student, graduate) · Application (applicant) · Teaching (Lecturer) · Admissions · Academic · Results (Registrar, Academic Admin) · People · Settings · Ops (System Admin) · Profile. The bottom bar shows up to five; beyond that, four plus **More** (a sheet with the rest). The desktop rail shows all. Areas with several pages (Academic: Calendar, Offerings, Lecturers, Imports…) show their pages as a row of links on each. Notifications and the account menu (Profile, Sign out) sit top right. A Schedule item and the profile role switcher arrive with their screens (WP-UI-11). Code: `apps/web/src/components/app/nav.ts`. | Decides how staff with many roles reach ~25 pages on a phone |
 
 ## Open
 

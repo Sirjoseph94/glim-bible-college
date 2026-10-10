@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openArea, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -20,38 +21,46 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("the Registrar computes, approves and publishes semester results", async ({ page }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
-  await page.getByRole("link", { name: "Results" }).click();
+  await openTeaching(page, "Pastoral Care", "Gradebook");
+  await page.getByRole("link", { name: "Finalize results" }).click();
   await page.getByRole("button", { name: "Finalize results" }).click();
-  await page.getByRole("button", { name: "Finalize now" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Finalize now" }).click();
   await expect(page.getByText("2 of 2 results finalized.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My results" }).click();
-  await expect(page.getByText("Provisional")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await openArea(page, "Results");
+  await expect(page.getByText("Provisional", { exact: true })).toBeVisible();
+  await signOut(page);
 
   await signIn(page, REGISTRAR);
-  await page.getByRole("link", { name: "Semester results" }).click();
+  await openArea(page, "Results");
+  await page.getByRole("link", { name: "Semester results", exact: true }).click();
   await page.getByLabel("Semester").selectOption({ label: "First Semester, 2032/2033" });
   await page.getByRole("button", { name: "Compute" }).click();
   await expect(page.getByText("Computed 2; 2 changed.")).toBeVisible();
   const bola = page.getByRole("row", { name: /Bola Online/ });
-  await expect(bola).toContainText("Draft");
-  await page.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByText("Approved 2.")).toBeVisible();
-  await page.getByRole("button", { name: "Publish" }).click();
-  await expect(page.getByText("Published 2. Students have been told.")).toBeVisible();
+  await expect(bola).toContainText("Provisional");
+  // §11.10: the cohort is ready; approving publishes too, after a Dialog saying what it does.
+  await expect(page.getByText("1 cohort is ready to approve")).toBeVisible();
+  await page.getByRole("button", { name: "Approve and publish" }).click();
+  const approve = page.getByRole("dialog", { name: /^Approve / });
+  await expect(approve).toContainText("2 students' GPA and CGPA become official");
+  await approve.getByRole("button", { name: "Approve and publish" }).click();
+  await expect(
+    page.getByText("Approved 2 and published 2. Students have been told."),
+  ).toBeVisible();
   await expect(bola).toContainText("Published");
   await expect(page.getByRole("link", { name: "Broadsheet (CSV)" })).toHaveAttribute(
     "href",
     /\/api\/v1\/reports\/results\?semesterId=.+&format=csv$/,
   );
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My results" }).click();
-  await expect(page.getByText(/GPA \d\.\d\d · CGPA \d\.\d\d/)).toBeVisible();
-  await expect(page.getByText("Provisional")).toHaveCount(0);
+  await openArea(page, "Results");
+  const gpa = page.getByRole("region", { name: "Grade point average" });
+  await expect(gpa).toContainText(/This semester\d\.\d\dCGPA\d\.\d\d/);
+  await expect(gpa).toContainText("Approved");
+  await expect(page.getByText(/provisional/i)).toHaveCount(0);
 });

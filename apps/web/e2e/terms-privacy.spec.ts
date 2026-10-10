@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "./test";
+import { openArea, signOut } from "./nav";
 
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
 /** Set in the ops spec. */
@@ -19,7 +20,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("a person downloads their data, then the System Admin erases them", async ({ page }) => {
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "Profile" }).click();
+  await openArea(page, "Profile");
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download my data" }).click();
   const file = await downloading;
@@ -29,17 +30,19 @@ test("a person downloads their data, then the System Admin erases them", async (
   };
   expect(data.sections.account.email).toBe(STUDENT.email);
   expect(data.sections.programmeEnrollments[0]?.matricNumber).toBe("GLIM/DIP/2032/0002");
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, ADMIN);
-  await page.getByRole("link", { name: "Users" }).click();
+  await openArea(page, "People");
   await page.getByLabel("Search by name or email").fill("Bola");
   await page.getByRole("link", { name: "Bola Online" }).click();
-  page.once("dialog", (dialog) => void dialog.accept("Asked to be forgotten"));
   await page.getByRole("button", { name: "Erase personal data" }).click();
+  const erase = page.getByRole("dialog", { name: "Erase this person's personal data?" });
+  await erase.getByLabel("Why erase them?").fill("Asked to be forgotten");
+  await erase.getByRole("button", { name: "Erase personal data" }).click();
   await expect(page.getByRole("heading", { name: /^Erased [0-9a-f]{10}$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Erase personal data" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   // The erased account can't sign in any more.
   await page.goto("/login");

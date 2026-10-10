@@ -1,18 +1,46 @@
-import type { assessment, Gradebook, GradebookColumn, GradebookRow } from "@glim/contracts";
+import type {
+  assessment,
+  Gradebook as GradebookData,
+  GradebookColumn,
+  GradebookRow,
+} from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
-import { useId, useState } from "react";
-import { api } from "../api/client";
-import { Alert, formText } from "../components/form";
+import { Link } from "@tanstack/react-router";
+import { useEffect, useId, useRef, useState, type SubmitEvent } from "react";
+import { api, ApiError } from "../api/client";
+import { errorText } from "../api/error-copy";
+import { LoadFailed } from "../components/app/page-states";
+import { formText } from "../components/form";
 import { useSubmit } from "../components/use-submit";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Checkbox } from "../components/ui/choice";
+import {
+  bodyCell,
+  DataTable,
+  headCell,
+  numericCell,
+  stickyCell,
+} from "../components/ui/data-table";
+import { Sheet } from "../components/ui/dialog";
+import { Select, TextField } from "../components/ui/field";
+import { IconButton } from "../components/ui/icon-button";
+import { EmptyState } from "../components/ui/empty-state";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
+import { cn } from "../design/cn";
+import { Icon } from "../design/icons";
 
 const gradebookKey = (offeringId: string) => ["gradebook", offeringId];
 
 type Cell = GradebookRow["grades"][number];
 type ImportResult = Awaited<ReturnType<typeof runImport>>;
+interface Address {
+  studentId: string;
+  assessmentId: string;
+}
 
-const input = "rounded border border-slate-300 px-3 py-2";
-const button = "rounded bg-brand px-3 py-2 text-white disabled:opacity-60";
+const sameCell = (a: Address | null, b: Address) =>
+  a !== null && a.studentId === b.studentId && a.assessmentId === b.assessmentId;
 
 function runImport(
   offeringId: string,
@@ -25,110 +53,256 @@ function runImport(
 }
 
 /**
- * A course's gradebook (TRD §14.2): a column per assessment, a row per student. Lecturers enter
- * scores, import a column from CSV, set weights and release each column when it's ready.
+ * The reason a change to this grade needs, or null: a released grade, or a choice between the
+ * online exam score and one typed by hand (C-34). The API refuses those changes without one.
  */
-export function GradebookPage() {
-  const { offeringId } = useParams({ strict: false });
-  const id = offeringId ?? "";
+function reasonFor(
+  row: GradebookRow,
+  column: GradebookColumn,
+  cell: Cell | undefined,
+): string | null {
+  if (cell?.status === "RELEASED") return "Reason for changing a released grade";
+  const online = row.onlineScores.some((o) => o.assessmentId === column.assessmentId);
+  if (cell?.source === "QUIZ" || (online && cell?.score != null))
+    return "Reason for choosing this score";
+  return null;
+}
+
+/** Whether a cell opens its Sheet rather than an inline input: it needs a reason, or is excused. */
+const needsDetails = (row: GradebookRow, column: GradebookColumn, cell: Cell | undefined) =>
+  cell?.status === "EXCUSED" || reasonFor(row, column, cell) !== null;
+
+/** A cell's value in words, for its accessible name. */
+function cellWords(cell: Cell | undefined): string {
+  if (cell?.status === "EXCUSED") return "excused";
+  if (cell?.score == null) return "no score";
+  return cell.status === "DRAFT" ? `${cell.score}, draft` : cell.score;
+}
+
+/**
+ * A course's gradebook (TRD §14.2; handoff §9.19, §11.9): a column per assessment, a row per
+ * student, the student column fixed while the rest scroll. A score is typed in its cell: Enter
+ * saves and moves down, Tab saves and moves right, Escape cancels. Feedback, excusing and
+ * changes that need a reason open the cell's Sheet. Students see a grade once its column is
+ * released.
+ */
+export function Gradebook({ offeringId }: { offeringId: string }) {
   const book = useQuery({
-    queryKey: gradebookKey(id),
+    queryKey: gradebookKey(offeringId),
     queryFn: ({ signal }) =>
       api<typeof assessment.getGradebook>("GET", "/course-offerings/:id/gradebook", {
-        params: { id },
+        params: { id: offeringId },
         signal,
       }),
   });
-  const [selected, setSelected] = useState<{ studentId: string; assessmentId: string } | null>(
-    null,
-  );
-  if (book.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (book.isError) return <Alert tone="error">We couldn't load the gradebook.</Alert>;
+  const [details, setDetails] = useState<Address | null>(null);
+  const [sheet, setSheet] = useState<"import" | "columns" | null>(null);
+  if (book.isPending)
+    return (
+      <SkeletonGroup label="Loading the gradebook">
+        <Skeleton className="h-10 w-2/3" />
+        <Skeleton className="h-60" />
+      </SkeletonGroup>
+    );
+  if (book.isError) return <LoadFailed what="the gradebook" onRetry={() => void book.refetch()} />;
   const g = book.data;
-  const row = g.rows.find((r) => r.studentId === selected?.studentId);
-  const column = g.columns.find((c) => c.assessmentId === selected?.assessmentId);
+  const row = g.rows.find((r) => r.studentId === details?.studentId);
+  const column = g.columns.find((c) => c.assessmentId === details?.assessmentId);
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold">Gradebook</h2>
-        <Link to="/teach" className="text-sm text-brand underline">
-          Back to teaching
+      <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+        <h2 className="text-heading md:mr-auto">Gradebook</h2>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setSheet("columns");
+          }}
+        >
+          Columns and weights
+        </Button>
+        {g.columns.length > 0 ? (
+          <Button
+            variant="secondary"
+            icon="upload"
+            onClick={() => {
+              setSheet("import");
+            }}
+          >
+            Import scores (CSV)
+          </Button>
+        ) : null}
+        <Link
+          to="/course-results/$offeringId"
+          params={{ offeringId }}
+          className={buttonClass({ variant: "primary" })}
+        >
+          Finalize results
         </Link>
       </div>
-      <p className="text-sm text-slate-600">
-        Students see a grade only after you release its column.
-      </p>
-      <WeightsNote gradebook={g} />
-      {g.columns.length === 0 ? (
-        <p className="text-sm text-slate-600">
-          No columns yet: add assignments, quizzes or a column below.
-        </p>
+      {g.weightsValid ? (
+        <Banner tone="info">
+          Students see a grade only after you release its column. Published columns' weights add up
+          to 100%.
+        </Banner>
       ) : (
-        <GradeTable gradebook={g} offeringId={id} onSelect={setSelected} selected={selected} />
+        <Banner tone="warning" title="Weights must add up to 100%">
+          They add up to {g.weightTotal}% now. Results can be finalized once they add up to 100%.
+        </Banner>
       )}
-      {row !== undefined && column !== undefined ? (
-        <EditGrade
-          key={`${row.studentId}:${column.assessmentId}`}
-          offeringId={id}
-          row={row}
-          column={column}
-          cell={row.grades.find((x) => x.assessmentId === column.assessmentId)}
-          onClose={() => {
-            setSelected(null);
+      {g.columns.length === 0 ? (
+        <EmptyState icon="award" title="No columns yet">
+          Add assignments or quizzes in Work, or a column under Columns and weights.
+        </EmptyState>
+      ) : (
+        <GradeTable
+          gradebook={g}
+          offeringId={offeringId}
+          onDetails={(address) => {
+            setDetails(address);
           }}
         />
-      ) : null}
-      <Columns offeringId={id} columns={g.columns} />
-      <ImportGrades offeringId={id} columns={g.columns} />
+      )}
+      <p className="text-meta text-ink-muted">
+        {g.rows.length === 1 ? "1 student" : `${String(g.rows.length)} students`}. Every change is
+        logged with your name and the time.
+      </p>
+      <Sheet
+        open={row !== undefined && column !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setDetails(null);
+        }}
+        title={row && column ? `${row.studentName}: ${column.title}` : "Edit grade"}
+      >
+        {row !== undefined && column !== undefined ? (
+          <EditGrade
+            key={`${row.studentId}:${column.assessmentId}`}
+            offeringId={offeringId}
+            row={row}
+            column={column}
+            cell={row.grades.find((x) => x.assessmentId === column.assessmentId)}
+          />
+        ) : null}
+      </Sheet>
+      <Sheet
+        open={sheet === "columns"}
+        onOpenChange={(open) => {
+          setSheet(open ? "columns" : null);
+        }}
+        title="Columns and weights"
+      >
+        <Columns
+          offeringId={offeringId}
+          columns={g.columns}
+          onAdded={() => {
+            setSheet(null);
+          }}
+        />
+      </Sheet>
+      <Sheet
+        open={sheet === "import"}
+        onOpenChange={(open) => {
+          setSheet(open ? "import" : null);
+        }}
+        title="Import scores (CSV)"
+      >
+        <ImportGrades offeringId={offeringId} columns={g.columns} />
+      </Sheet>
     </div>
   );
 }
 
-function WeightsNote({ gradebook: g }: { gradebook: Gradebook }) {
-  return g.weightsValid ? (
-    <p className="text-sm text-green-700">Published columns' weights add up to 100 %.</p>
-  ) : (
-    <p
-      role="status"
-      className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-    >
-      Published columns' weights add up to {g.weightTotal} %. They must add up to exactly 100 %
-      before results can be finalized.
-    </p>
-  );
-}
+type CellState = { saving: true } | { saved: true } | { error: string; draft: string };
 
 function GradeTable({
   gradebook: g,
   offeringId,
-  selected,
-  onSelect,
+  onDetails,
 }: {
-  gradebook: Gradebook;
+  gradebook: GradebookData;
   offeringId: string;
-  selected: { studentId: string; assessmentId: string } | null;
-  onSelect: (cell: { studentId: string; assessmentId: string }) => void;
+  onDetails: (address: Address) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<Address | null>(null);
+  const [states, setStates] = useState<Record<string, CellState>>({});
+  const keyOf = (a: Address) => `${a.studentId}:${a.assessmentId}`;
+  const setState = (a: Address, state: CellState | null) => {
+    setStates((current) => {
+      const rest = Object.fromEntries(Object.entries(current).filter(([k]) => k !== keyOf(a)));
+      return state === null ? rest : { ...rest, [keyOf(a)]: state };
+    });
+  };
+
+  const [announcement, setAnnouncement] = useState("");
+  /** Back to a cell's button when editing ends with nowhere to move, so focus isn't lost. */
+  const focusCell = (a: Address) => {
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(`[data-cell="${keyOf(a)}"]`)?.focus();
+    });
+  };
+
+  async function save(row: GradebookRow, column: GradebookColumn, value: string) {
+    const label = `${row.studentName}, ${column.title}`;
+    const address = { studentId: row.studentId, assessmentId: column.assessmentId };
+    const cell = row.grades.find((x) => x.assessmentId === column.assessmentId);
+    const score = value.trim();
+    if (score === (cell?.score ?? "")) return;
+    setState(address, { saving: true });
+    try {
+      await api<typeof assessment.putGrade>("PUT", "/assessments/:id/grades/:studentId", {
+        params: { id: column.assessmentId, studentId: row.studentId },
+        body: { score: score === "" ? null : score },
+        headers: { "if-match": `"${String(cell?.version ?? 0)}"` },
+      });
+      await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
+      setState(address, { saved: true });
+      setAnnouncement(`Saved ${label}.`);
+      window.setTimeout(() => {
+        setStates((current) =>
+          "saved" in (current[keyOf(address)] ?? {})
+            ? Object.fromEntries(Object.entries(current).filter(([k]) => k !== keyOf(address)))
+            : current,
+        );
+      }, 1000);
+    } catch (error) {
+      const fields = error instanceof ApiError ? error.fieldErrors : {};
+      const message = fields.score ?? errorText(error);
+      setState(address, { error: message, draft: score });
+      setAnnouncement(`${label} not saved: ${message}`);
+      setEditing(address);
+      if (error instanceof ApiError && error.status === 412)
+        await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
+    }
+  }
+
+  /** The next cell down, or to the right (wrapping to the next row); null past the last. */
+  function neighbour(from: Address, move: "down" | "right"): Address | null {
+    const r = g.rows.findIndex((x) => x.studentId === from.studentId);
+    const c = g.columns.findIndex((x) => x.assessmentId === from.assessmentId);
+    const [nr, nc] =
+      move === "down" ? [r + 1, c] : c + 1 < g.columns.length ? [r, c + 1] : [r + 1, 0];
+    const row = g.rows[nr];
+    const column = g.columns[nc];
+    return row && column ? { studentId: row.studentId, assessmentId: column.assessmentId } : null;
+  }
+
   return (
-    // The table scrolls sideways inside its box on a phone; the page itself doesn't.
-    <div
-      role="region"
-      aria-label="Gradebook"
-      tabIndex={0}
-      className="overflow-x-auto rounded border border-slate-200 bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-    >
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left align-bottom">
+    <>
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
+      <DataTable caption="Gradebook" minWidth="min-w-205">
+        <thead>
           <tr>
-            <th scope="col" className="sticky left-0 bg-slate-50 p-2">
+            <th scope="col" className={cn(headCell, stickyCell, "bg-surface-sunken")}>
               Student
             </th>
             {g.columns.map((c) => (
-              <th key={c.assessmentId} scope="col" className="min-w-28 p-2 font-medium">
-                <div>{c.title}</div>
-                <div className="font-normal text-slate-600">
-                  /{c.maxScore} · {c.weight} %{c.status === "DRAFT" ? " · draft" : ""}
-                </div>
+              <th key={c.assessmentId} scope="col" className={cn(headCell, "min-w-32")}>
+                <span className="block text-ink">{c.title}</span>
+                <span className="block font-normal">
+                  / {c.maxScore} · {c.weight}%{c.status === "DRAFT" ? " · draft" : ""}
+                </span>
                 <ReleaseButton column={c} offeringId={offeringId} />
               </th>
             ))}
@@ -136,64 +310,171 @@ function GradeTable({
         </thead>
         <tbody>
           {g.rows.map((r) => (
-            <tr key={r.studentId} className="border-t border-slate-100">
-              <th scope="row" className="sticky left-0 bg-white p-2 text-left font-normal">
-                <div className="font-medium">{r.studentName}</div>
-                <div className="text-xs text-slate-500">
-                  {r.matricNumber} · {r.studyMode === "ONLINE" ? "Online" : "On-campus"}
-                </div>
+            <tr key={r.studentId}>
+              <th scope="row" className={cn(bodyCell, stickyCell, "text-left font-normal")}>
+                <span className="block text-subhead">{r.studentName}</span>
+                <span className="block text-meta text-ink-muted">
+                  {[r.matricNumber, r.studyMode === "ONLINE" ? "Online" : "On campus"]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
               </th>
               {g.columns.map((c) => {
+                const address = { studentId: r.studentId, assessmentId: c.assessmentId };
                 const cell = r.grades.find((x) => x.assessmentId === c.assessmentId);
-                const active =
-                  selected?.studentId === r.studentId && selected.assessmentId === c.assessmentId;
+                const state = states[keyOf(address)];
+                const label = `${r.studentName}, ${c.title}`;
                 return (
-                  <td key={c.assessmentId} className="p-1">
-                    <button
-                      type="button"
-                      aria-label={`${r.studentName}, ${c.title}`}
-                      aria-pressed={active}
-                      className={`w-full rounded px-2 py-1 text-left ${active ? "bg-brand/10 ring-2 ring-brand" : "hover:bg-slate-100"}`}
-                      onClick={() => {
-                        onSelect({ studentId: r.studentId, assessmentId: c.assessmentId });
-                      }}
-                    >
-                      <CellText cell={cell} />
-                    </button>
+                  <td key={c.assessmentId} className={cn(bodyCell, numericCell, "py-1.5")}>
+                    {sameCell(editing, address) ? (
+                      <InlineScore
+                        label={label}
+                        initial={state && "draft" in state ? state.draft : (cell?.score ?? "")}
+                        error={state && "error" in state ? state.error : null}
+                        onDetails={() => {
+                          setEditing(null);
+                          onDetails(address);
+                        }}
+                        onCancel={() => {
+                          setEditing(null);
+                          setState(address, null);
+                          focusCell(address);
+                        }}
+                        onCommit={(value, move) => {
+                          const next = move ? neighbour(address, move) : null;
+                          setEditing(next);
+                          if (move && next === null) focusCell(address);
+                          void save(r, c, value);
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`${label}, ${cellWords(cell)}`}
+                        data-cell={keyOf(address)}
+                        className="flex min-h-tap w-full items-center justify-end gap-1 rounded-sm px-2 hover:bg-brand-soft"
+                        onClick={() => {
+                          if (needsDetails(r, c, cell)) onDetails(address);
+                          else setEditing(address);
+                        }}
+                      >
+                        <CellText cell={cell} />
+                        {state && "saving" in state ? (
+                          <span className="glim-spinner size-4 rounded-pill border-2 border-line border-t-brand" />
+                        ) : state && "saved" in state ? (
+                          <span className="text-success">
+                            <Icon name="check" size={16} label="Saved" />
+                          </span>
+                        ) : null}
+                      </button>
+                    )}
                   </td>
                 );
               })}
             </tr>
           ))}
         </tbody>
-      </table>
+      </DataTable>
+    </>
+  );
+}
+
+/** The score input inside a cell: 16 px text so phones don't zoom (§9.19). */
+function InlineScore({
+  label,
+  initial,
+  error,
+  onCommit,
+  onCancel,
+  onDetails,
+}: {
+  label: string;
+  initial: string;
+  error: string | null;
+  onCommit: (value: string, move: "down" | "right" | null) => void;
+  onCancel: () => void;
+  onDetails: () => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const done = useRef(false);
+  const errorId = useId();
+  useEffect(() => {
+    input.current?.focus();
+    input.current?.select();
+  }, []);
+  const commit = (move: "down" | "right" | null) => {
+    if (done.current) return;
+    done.current = true;
+    onCommit(input.current?.value ?? "", move);
+  };
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <IconButton icon="file" label={`Feedback and more for ${label}`} onClick={onDetails} />
+      <div>
+        <input
+          ref={input}
+          aria-label={`Score for ${label}`}
+          inputMode="decimal"
+          defaultValue={initial}
+          aria-invalid={error === null ? undefined : true}
+          aria-describedby={error === null ? undefined : errorId}
+          className="h-control w-24 rounded-sm border border-line-strong bg-surface px-2 text-right text-body text-ink"
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit("down");
+            } else if (event.key === "Tab" && !event.shiftKey) {
+              event.preventDefault();
+              commit("right");
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              done.current = true;
+              onCancel();
+            }
+          }}
+          onBlur={(event) => {
+            // Leaving for the cell's own "Feedback and more" button isn't a save.
+            if (event.relatedTarget?.closest("td") === event.currentTarget.closest("td")) return;
+            commit(null);
+          }}
+        />
+        {error !== null ? (
+          <p id={errorId} className="mt-1 text-left text-meta whitespace-normal text-danger">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 function CellText({ cell }: { cell: Cell | undefined }) {
   if (cell === undefined || (cell.score === null && cell.status !== "EXCUSED"))
-    return <span className="text-slate-400">–</span>;
-  if (cell.status === "EXCUSED") return <span className="text-slate-600">Excused</span>;
+    return <span className="text-ink-muted">–</span>;
+  if (cell.status === "EXCUSED") return <span className="text-ink-muted">Excused</span>;
   return (
     <span>
       {cell.score}
-      {cell.status === "DRAFT" ? <span className="ml-1 text-xs text-amber-700">draft</span> : null}
+      {cell.status === "DRAFT" ? (
+        <span className="ml-1 text-caption text-warning">draft</span>
+      ) : null}
     </span>
   );
 }
 
 function ReleaseButton({ column: c, offeringId }: { column: GradebookColumn; offeringId: string }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   if (c.unreleased === 0)
-    return c.released > 0 ? <div className="font-normal text-green-700">Released</div> : null;
+    return c.released > 0 ? (
+      <span className="mt-1 block font-normal text-success">Released</span>
+    ) : null;
   return (
-    <div className="font-normal">
-      <button
-        type="button"
-        disabled={busy}
-        className="text-brand underline disabled:opacity-60"
+    <span className="mt-1 block font-normal">
+      <Button
+        size="sm"
+        variant="secondary"
+        loading={busy}
         aria-label={`Release ${String(c.unreleased)} grades for ${c.title}`}
         onClick={() =>
           void run(async () => {
@@ -205,46 +486,39 @@ function ReleaseButton({ column: c, offeringId }: { column: GradebookColumn; off
           })
         }
       >
-        Release {c.unreleased}
-      </button>
-      {error ? <div className="text-red-700">{error}</div> : null}
-    </div>
+        Release grades
+      </Button>
+      {problem ? <span className="block text-danger">{problem.title}</span> : null}
+    </span>
   );
 }
 
+/** Everything about one grade: score, feedback, excusing, the online score and the reason. */
 function EditGrade({
   offeringId,
   row,
   column,
   cell,
-  onClose,
 }: {
   offeringId: string;
   row: GradebookRow;
   column: GradebookColumn;
   cell: Cell | undefined;
-  onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const { busy, problem, fieldErrors, run } = useSubmit();
   const [excused, setExcused] = useState(cell?.status === "EXCUSED");
   const [saved, setSaved] = useState(false);
-  const id = useId();
-  const released = cell?.status === "RELEASED";
   const online = row.onlineScores.find((o) => o.assessmentId === column.assessmentId);
-  // Moving between the online score and one typed by hand needs a reason (C-34).
-  const reasonLabel = released
-    ? "Reason for changing a released grade"
-    : cell?.source === "QUIZ" || (online !== undefined && cell?.score != null)
-      ? "Reason for choosing this score"
-      : null;
+  const reasonLabel = reasonFor(row, column, cell);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
   return (
     <form
       // Remounts with the stored values after each save.
       key={cell?.version ?? 0}
       aria-label="Edit grade"
-      className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm"
-      onSubmit={(e) => {
+      className="space-y-4"
+      onSubmit={(e: SubmitEvent<HTMLFormElement>) => {
         e.preventDefault();
         const data = new FormData(e.currentTarget);
         const score = formText(data, "score").trim();
@@ -262,21 +536,13 @@ function EditGrade({
             },
             headers: { "if-match": `"${String(cell?.version ?? 0)}"` },
           });
-          await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
+          await refresh();
           setSaved(true);
         });
       }}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-medium">
-          {row.studentName}: {column.title}
-        </h3>
-        <button type="button" className="text-brand underline" onClick={onClose}>
-          Close
-        </button>
-      </div>
       {cell !== undefined ? (
-        <p className="text-slate-600">
+        <p className="text-body-sm text-ink-muted">
           {cell.status === "RELEASED"
             ? "Released to the student"
             : cell.status === "EXCUSED"
@@ -291,16 +557,20 @@ function EditGrade({
               : ""}
         </p>
       ) : null}
-      {error ? <Alert tone="error">{error}</Alert> : null}
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       {online !== undefined && cell?.source !== "QUIZ" ? (
-        <div className="rounded bg-slate-50 p-2">
-          <p>
+        <div className="space-y-2 rounded-md bg-surface-sunken p-3">
+          <p className="text-body-sm">
             Online exam score: {online.score} / {column.maxScore}
           </p>
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="secondary"
             disabled={busy}
-            className="text-brand underline"
             onClick={(e) => {
               const form = e.currentTarget.form;
               const reason = form === null ? "" : formText(new FormData(form), "reason").trim();
@@ -315,86 +585,82 @@ function EditGrade({
                     headers: { "if-match": `"${String(cell?.version ?? 0)}"` },
                   },
                 );
-                await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
+                await refresh();
                 setSaved(true);
               });
             }}
           >
             Use the online score
-          </button>
+          </Button>
         </div>
       ) : null}
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={excused}
-          onChange={(e) => {
-            setExcused(e.target.checked);
-          }}
-        />
-        Excused (left out of the final result)
-      </label>
+      <Checkbox
+        label="Excused (left out of the final result)"
+        checked={excused}
+        onChange={(e) => {
+          setExcused(e.target.checked);
+        }}
+      />
       {excused ? null : (
-        <label className="block" htmlFor={`${id}-score`}>
-          <span className="block font-medium text-slate-700">Score (out of {column.maxScore})</span>
-          <input
-            id={`${id}-score`}
-            name="score"
-            inputMode="decimal"
-            defaultValue={cell?.score ?? ""}
-            className={`w-32 ${input}`}
-            aria-invalid={fieldErrors.score === undefined ? undefined : true}
-          />
-        </label>
-      )}
-      <label className="block">
-        <span className="block font-medium text-slate-700">Feedback</span>
-        <textarea
-          name="feedback"
-          rows={3}
-          defaultValue={cell?.feedbackMd ?? ""}
-          className={`block w-full ${input}`}
+        <TextField
+          name="score"
+          label={`Score (out of ${column.maxScore})`}
+          inputMode="decimal"
+          defaultValue={cell?.score ?? ""}
+          className="w-32"
+          error={fieldErrors.score}
         />
-      </label>
+      )}
+      <TextField
+        multiline
+        name="feedback"
+        label="Feedback"
+        optional
+        rows={3}
+        defaultValue={cell?.feedbackMd ?? ""}
+      />
       {reasonLabel !== null ? (
-        <label className="block">
-          <span className="block font-medium text-slate-700">{reasonLabel}</span>
-          <input
-            name="reason"
-            maxLength={500}
-            className={`block w-full ${input}`}
-            aria-invalid={fieldErrors.reason === undefined ? undefined : true}
-          />
-        </label>
+        <TextField name="reason" label={reasonLabel} maxLength={500} error={fieldErrors.reason} />
       ) : null}
-      <button type="submit" disabled={busy} className={button}>
-        Save grade
-      </button>
-      {saved ? <span className="ml-2 text-green-700">Saved</span> : null}
+      <div className="flex items-center gap-3">
+        <Button type="submit" variant="primary" loading={busy}>
+          Save grade
+        </Button>
+        <span role="status" className="text-body-sm text-success">
+          {saved ? "Saved" : ""}
+        </span>
+      </div>
     </form>
   );
 }
 
-function Columns({ offeringId, columns }: { offeringId: string; columns: GradebookColumn[] }) {
+function Columns({
+  offeringId,
+  columns,
+  onAdded,
+}: {
+  offeringId: string;
+  columns: GradebookColumn[];
+  onAdded: () => void;
+}) {
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
-  const [formKey, setFormKey] = useState(0);
+  const { busy, problem, fieldErrors, run } = useSubmit();
   return (
-    <details className="rounded border border-slate-200 bg-white p-3 text-sm">
-      <summary className="cursor-pointer font-medium">Columns and weights</summary>
-      <ul className="mt-2 space-y-2">
-        {columns.map((c) => (
-          <ColumnWeight
-            key={`${c.assessmentId}:${String(c.version)}`}
-            offeringId={offeringId}
-            column={c}
-          />
-        ))}
-      </ul>
+    <div className="space-y-5">
+      {columns.length > 0 ? (
+        <ul className="space-y-3">
+          {columns.map((c) => (
+            <ColumnWeight
+              key={`${c.assessmentId}:${String(c.version)}`}
+              offeringId={offeringId}
+              column={c}
+            />
+          ))}
+        </ul>
+      ) : null}
       <form
-        key={formKey}
         aria-label="Add a column"
-        className="mt-3 space-y-2 border-t border-slate-100 pt-3"
+        className="space-y-4 border-t border-line pt-4"
         onSubmit={(e) => {
           e.preventDefault();
           const data = new FormData(e.currentTarget);
@@ -418,60 +684,52 @@ function Columns({ offeringId, columns }: { offeringId: string; columns: Gradebo
                 { params: { id: offeringId }, body, headers },
               );
             await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
-            setFormKey((k) => k + 1);
+            onAdded();
           });
         }}
       >
-        <h3 className="font-medium">Add a column</h3>
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        <label className="block">
-          <span className="block text-slate-700">Kind</span>
-          <select name="kind" className={`block w-full ${input}`}>
-            <option value="MANUAL">Marks entered by hand</option>
-            <option value="EXAM">Exam (on paper; add an online part under Quizzes)</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="block text-slate-700">Title</span>
-          <input name="title" required maxLength={200} className={`block w-full ${input}`} />
-        </label>
-        <div className="flex flex-wrap gap-3">
-          <label className="block">
-            <span className="block text-slate-700">Out of</span>
-            <input
-              name="maxScore"
-              required
-              inputMode="decimal"
-              className={`w-24 ${input}`}
-              aria-invalid={fieldErrors.maxScore === undefined ? undefined : true}
-            />
-          </label>
-          <label className="block">
-            <span className="block text-slate-700">Weight (%)</span>
-            <input
-              name="weight"
-              required
-              inputMode="decimal"
-              className={`w-24 ${input}`}
-              aria-invalid={fieldErrors.weight === undefined ? undefined : true}
-            />
-          </label>
+        <h3 className="text-heading">Add a column</h3>
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        <Select name="kind" label="Kind">
+          <option value="MANUAL">Marks entered by hand</option>
+          <option value="EXAM">Exam (on paper; add an online part under Quizzes)</option>
+        </Select>
+        <TextField name="title" label="Title" required maxLength={200} />
+        <div className="grid grid-cols-2 gap-3">
+          <TextField
+            name="maxScore"
+            label="Out of"
+            required
+            inputMode="decimal"
+            error={fieldErrors.maxScore}
+          />
+          <TextField
+            name="weight"
+            label="Weight (%)"
+            required
+            inputMode="decimal"
+            error={fieldErrors.weight}
+          />
         </div>
-        <button type="submit" disabled={busy} className={button}>
+        <Button type="submit" variant="primary" block loading={busy}>
           Add column
-        </button>
+        </Button>
       </form>
-    </details>
+    </div>
   );
 }
 
 function ColumnWeight({ offeringId, column: c }: { offeringId: string; column: GradebookColumn }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   return (
     <li>
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="flex items-end gap-2"
         aria-label={`Weight of ${c.title}`}
         onSubmit={(e) => {
           e.preventDefault();
@@ -486,19 +744,18 @@ function ColumnWeight({ offeringId, column: c }: { offeringId: string; column: G
           });
         }}
       >
-        <label className="block">
-          <span className="block text-slate-700">{c.title}: weight (%)</span>
-          <input
+        <div className="flex-1">
+          <TextField
             name="weight"
+            label={`${c.title}: weight (%)`}
             defaultValue={c.weight}
             inputMode="decimal"
-            className={`w-24 ${input}`}
+            error={problem?.title}
           />
-        </label>
-        <button type="submit" disabled={busy} className="rounded border border-slate-300 px-3 py-2">
+        </div>
+        <Button type="submit" variant="secondary" loading={busy}>
           Save
-        </button>
-        {error ? <span className="text-red-700">{error}</span> : null}
+        </Button>
       </form>
     </li>
   );
@@ -506,25 +763,23 @@ function ColumnWeight({ offeringId, column: c }: { offeringId: string; column: G
 
 function ImportGrades({ offeringId, columns }: { offeringId: string; columns: GradebookColumn[] }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const [checked, setChecked] = useState<{
     assessmentId: string;
     csv: string;
     result: ImportResult;
   } | null>(null);
   const [done, setDone] = useState<ImportResult | null>(null);
-  if (columns.length === 0) return null;
   return (
-    <details className="rounded border border-slate-200 bg-white p-3 text-sm">
-      <summary className="cursor-pointer font-medium">Import scores from CSV</summary>
-      <p className="mt-2 text-slate-600">
+    <div className="space-y-4">
+      <p className="text-body-sm text-ink-muted">
         One line per student with the columns <code>matric_number</code>, <code>score</code> and
         optionally <code>feedback</code>. We check the file first; nothing is saved if any line has
         a problem.
       </p>
       <form
         aria-label="Import scores"
-        className="mt-2 space-y-2"
+        className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           const data = new FormData(e.currentTarget);
@@ -540,45 +795,52 @@ function ImportGrades({ offeringId, columns }: { offeringId: string; columns: Gr
           });
         }}
       >
-        <label className="block">
-          <span className="block text-slate-700">Column</span>
-          <select name="assessmentId" className={`block w-full ${input}`}>
-            {columns.map((c) => (
-              <option key={c.assessmentId} value={c.assessmentId}>
-                {c.title} (out of {c.maxScore})
-              </option>
-            ))}
-          </select>
+        <Select name="assessmentId" label="Column">
+          {columns.map((c) => (
+            <option key={c.assessmentId} value={c.assessmentId}>
+              {c.title} (out of {c.maxScore})
+            </option>
+          ))}
+        </Select>
+        <label className="block space-y-1">
+          <span className="text-label">CSV file</span>
+          <input
+            name="file"
+            type="file"
+            accept=".csv,text/csv"
+            required
+            className="block w-full text-body-sm"
+          />
         </label>
-        <label className="block">
-          <span className="block text-slate-700">CSV file</span>
-          <input name="file" type="file" accept=".csv,text/csv" required className="block w-full" />
-        </label>
-        <button type="submit" disabled={busy} className={button}>
+        <Button type="submit" variant="secondary" block loading={busy}>
           Check file
-        </button>
+        </Button>
       </form>
-      {error ? <Alert tone="error">{error}</Alert> : null}
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       {checked !== null ? (
-        <div className="mt-3 space-y-2">
-          <p>
+        <div className="space-y-3">
+          <p className="text-body-sm">
             {checked.result.created} new, {checked.result.updated} changed,{" "}
             {checked.result.unchanged} unchanged, {checked.result.errors} with problems.
           </p>
-          <ul className="space-y-1">
+          <ul className="space-y-1 text-body-sm text-danger">
             {checked.result.rows
               .filter((r) => r.outcome === "error")
               .map((r) => (
-                <li key={r.line} className="text-red-700">
+                <li key={r.line}>
                   Line {r.line} ({r.matricNumber || "no Matric Number"}): {r.message}
                 </li>
               ))}
           </ul>
           {checked.result.errors === 0 && checked.result.created + checked.result.updated > 0 ? (
-            <button
-              type="button"
-              disabled={busy}
-              className={button}
+            <Button
+              variant="primary"
+              block
+              loading={busy}
               onClick={() =>
                 void run(async () => {
                   const result = await runImport(offeringId, {
@@ -593,17 +855,17 @@ function ImportGrades({ offeringId, columns }: { offeringId: string; columns: Gr
               }
             >
               Import {checked.result.created + checked.result.updated} scores
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
       {done !== null ? (
-        <Alert tone={done.applied ? "success" : "error"}>
+        <Banner tone={done.applied ? "success" : "danger"}>
           {done.applied
             ? `Imported ${String(done.created + done.updated)} scores. Release the column when you're ready.`
             : "Nothing was imported: the file changed or has problems. Check it again."}
-        </Alert>
+        </Banner>
       ) : null}
-    </details>
+    </div>
   );
 }

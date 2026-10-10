@@ -1,6 +1,4 @@
 @import "tailwindcss";
-
-@theme {
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --color-brand: #1e3a5f;
-}
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./design/tailwind-theme.css";

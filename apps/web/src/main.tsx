@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { applyInitialTheme, ThemeProvider } from "./design/theme";
+import { startOfflineQueue } from "./offline";
 import { createAppRouter } from "./router";
 import "./index.css";
 
@@ -13,14 +15,18 @@ const queryClient = new QueryClient({
 });
 
 const router = createAppRouter(queryClient);
+applyInitialTheme();
+startOfflineQueue();
 
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </ThemeProvider>
     </StrictMode>,
   );
 }

@@ -17,13 +17,14 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Your profile</h2>
+      <h1 className="text-title">Your profile</h1>
       {search.linked === "google" ? (
         <Alert tone="success">Your Google account is now linked.</Alert>
       ) : null}
       {search.error ? (
         <Alert tone="error">{GOOGLE_ERRORS[search.error] ?? "Something went wrong."}</Alert>
       ) : null}
+      {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width */}
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 rounded border border-slate-200 bg-white p-4">
         <dt className="text-slate-600">Name</dt>
         <dd>{me.user.displayName}</dd>

@@ -9,3 +9,5 @@ apps/api/static
 packages/db/migrations
 *.md
 skills-lock.json
+# Verbatim copy of the design system tokens (docs/ui-design-handoff.md, Appendix A)
+apps/web/src/styles/tokens.css

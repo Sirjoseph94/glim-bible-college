@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -20,14 +21,14 @@ function localInput(daysAhead: number): string {
 
 /**
  * TRD §14.2: a Lecturer sets and publishes an assignment; a student writes (autosaved), attaches
- * a file and submits on a phone; the Lecturer grades it with feedback.
+ * a file and submits on a phone, through a dropped connection; the Lecturer grades it with
+ * feedback.
  */
 test("a Lecturer sets an assignment, a student submits, the Lecturer grades it", async ({
   page,
 }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
-  await page.getByRole("button", { name: "Assignments" }).click();
+  await openTeaching(page, "Pastoral Care", "Work");
   const form = page.locator("form", { hasText: "New assignment" });
   await form.getByLabel("Title").fill("Essay on John 1");
   await form.getByLabel("Instructions (Markdown)").fill("Write **300 words** on the Word.");
@@ -39,36 +40,45 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await expect(item).toContainText("Draft · 20.00 marks · 15.00%");
   await item.getByRole("button", { name: "Publish" }).click();
   await expect(item.getByRole("link", { name: "Grade submissions" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My courses" }).click();
-  await page.getByText("Assignments", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Work");
   await page.getByRole("link", { name: "Essay on John 1" }).click();
   await expect(page.getByText("300 words")).toBeVisible();
   await page.getByLabel("Answer").fill("In the beginning was the Word.");
-  await expect(page.getByText("Draft saved")).toBeVisible();
-  await page.getByLabel(/Add a file/).setInputFiles({
+  // Drafts save five seconds after the last keystroke (§10.3).
+  await expect(page.getByText("Draft saved")).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel(/Attach a file/).setInputFiles({
     name: "essay.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4 my essay"),
   });
-  await page.getByRole("button", { name: "Upload file" }).click();
-  await expect(page.getByRole("listitem").filter({ hasText: "essay.pdf" })).toBeVisible();
-  await page.getByRole("button", { name: "Submit" }).click();
-  await expect(page.getByText(/Attempt 1, submitted/)).toBeVisible();
+  await expect(page.getByText("essay.pdf")).toBeVisible();
+
+  // The signal drops (§9.20, §10.4): the button still works, and the submission waits on the
+  // phone until the connection returns, then is sent once.
+  await page.context().setOffline(true);
+  await expect(page.getByRole("status").filter({ hasText: "You are offline" })).toBeVisible();
+  await page.getByLabel("Answer").fill("In the beginning was the Word, and the Word was God.");
+  await page.getByRole("button", { name: "Submit assignment" }).click();
+  await expect(page.getByText("1 submission waiting to send")).toBeVisible();
+  await page.context().setOffline(false);
+  await expect(
+    page.getByText(/^Sent\. Your assignment was submitted at \d\d:\d\d\.$/),
+  ).toBeVisible();
+  await expect(page.getByText(/Submitted .* · Attempt 1 of 1/)).toHaveCount(1);
   await expect(page.getByText("You've used all your attempts.")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
-  await page.getByRole("button", { name: "Assignments" }).click();
+  await openTeaching(page, "Pastoral Care", "Work");
   await page
     .getByRole("listitem", { name: "Essay on John 1" })
     .getByRole("link", { name: "Grade submissions" })
     .click();
   const row = page.getByRole("listitem", { name: "Bola Online" });
-  await expect(row).toContainText("In the beginning was the Word.");
+  await expect(row).toContainText("In the beginning was the Word, and the Word was God.");
   await expect(row.getByRole("link", { name: "essay.pdf" })).toBeVisible();
   await row.getByLabel(/Score/).fill("18.5");
   await row.getByLabel("Feedback").fill("Clear and well argued.");

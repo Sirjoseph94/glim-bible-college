@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -19,8 +20,7 @@ async function signIn(page: Page, who: { email: string; password: string }) {
 test("a timed quiz survives a dropped connection at the deadline", async ({ page, context }) => {
   test.setTimeout(180_000);
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
-  await page.getByRole("button", { name: "Quizzes" }).click();
+  await openTeaching(page, "Pastoral Care", "Work");
   await page.getByText(/^Question bank/).click();
 
   const bank = page.locator("form", { hasText: "Add a question" });
@@ -50,11 +50,10 @@ test("a timed quiz survives a dropped connection at the deadline", async ({ page
   await expect(item).toContainText("Draft · 2 questions · 2.00 marks · 1 min");
   await item.getByRole("button", { name: "Publish" }).click();
   await expect(item.getByRole("link", { name: "Attempts and essays" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My courses" }).click();
-  await page.getByText("Quizzes", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Work");
   await page.getByRole("link", { name: "Quick check" }).click();
   await page.getByRole("button", { name: /^Start/ }).click();
   await expect(page.getByRole("timer")).toHaveText(/^[01]:\d\d$/);

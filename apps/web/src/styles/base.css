@@ -1,0 +1,209 @@
+/*
+ * Base styles for the design system (docs/ui-design-handoff.md, Appendix A and §8, §9).
+ * Every value comes from tokens.css; this file only applies them.
+ */
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The one focus ring (§9): 2px, offset so it always lands on the page surface. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+    color: var(--ink);
+  }
+}
+
+/*
+ * §8: with reduced motion, transitions are instant and decorative animation stops. Components
+ * whose motion carries meaning (the button spinner slows to 2400 ms; sheets fade instead of
+ * sliding) override this with important `motion-reduce:!…` utilities.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* §8 motion that carries meaning: the button spinner and the live dot. */
+@keyframes glim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes glim-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.glim-spinner {
+  animation: glim-spin 800ms linear infinite;
+}
+.glim-live-dot {
+  animation: glim-pulse 1600ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Still turning, so "busy" stays visible, but slowly. The live dot stays still. */
+  .glim-spinner {
+    animation-duration: 2400ms !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* §9.11 overlays. The scrim colour is a documented exception (handoff §4.1). */
+.glim-scrim {
+  background: rgb(11 15 13 / 0.45);
+}
+@keyframes glim-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes glim-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes glim-sheet-in {
+  from {
+    translate: 0 100%;
+  }
+}
+@keyframes glim-sheet-out {
+  to {
+    translate: 0 100%;
+  }
+}
+@keyframes glim-dialog-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+.glim-scrim[data-state="open"] {
+  animation: glim-fade-in 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+.glim-scrim[data-state="closed"] {
+  animation: glim-fade-out 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+/* Behind a dialog the scrim keeps the dialog's timing (§8). */
+.glim-scrim.glim-scrim-dialog[data-state="open"] {
+  animation: glim-fade-in 160ms ease-out;
+}
+.glim-scrim.glim-scrim-dialog[data-state="closed"] {
+  animation: glim-fade-out 160ms ease-in;
+}
+.glim-sheet[data-state="open"] {
+  animation: glim-sheet-in 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+.glim-sheet[data-state="closed"] {
+  animation: glim-sheet-out 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+.glim-dialog[data-state="open"] {
+  animation: glim-dialog-in 160ms ease-out;
+}
+.glim-dialog[data-state="closed"] {
+  animation: glim-fade-out 160ms ease-in;
+}
+@media (min-width: 640px) {
+  /* A sheet is a centred dialog from bp-md. */
+  .glim-sheet[data-state="open"] {
+    animation: glim-dialog-in 160ms ease-out;
+  }
+  .glim-sheet[data-state="closed"] {
+    animation: glim-fade-out 160ms ease-in;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Sheets and dialogs fade instead of moving. */
+  :is(.glim-sheet, .glim-dialog)[data-state="open"] {
+    animation-name: glim-fade-in !important;
+    animation-duration: 120ms !important;
+  }
+  :is(.glim-sheet, .glim-dialog)[data-state="closed"] {
+    animation-name: glim-fade-out !important;
+    animation-duration: 120ms !important;
+  }
+}
+
+/*
+ * The video stage (§9.16): always black with light controls, in both themes. A documented
+ * exception to tokens-only.
+ */
+.glim-stage {
+  background: #0b0f0d;
+  color: #ecf2ee;
+}
+.glim-stage-chip {
+  background: rgb(255 255 255 / 0.18);
+}
+
+/* Bars at the bottom edge clear the phone's home indicator (§6.2). */
+.glim-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* The crest always sits on white, in both themes (§7.3): a documented exception. */
+.glim-chip {
+  background: #ffffff;
+}
+
+/* "live bg + 6% black overlay" on hover (§9.1). */
+.glim-live-hover:hover,
+.glim-live-hover:active {
+  box-shadow: inset 0 0 0 999px rgb(0 0 0 / 0.06);
+}
+
+/* §6.1–6.2 page gutter: 16px on phones, growing to 40px; clears notches on the sides. */
+.glim-gutter {
+  padding-left: max(clamp(16px, 3vw, 40px), env(safe-area-inset-left));
+  padding-right: max(clamp(16px, 3vw, 40px), env(safe-area-inset-right));
+}
+.glim-safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/*
+ * Google's sign-in button themes (decision UI-Q11), exact as Google's branding guidelines give
+ * them: light in light mode, dark in dark mode. A documented exception to tokens-only.
+ */
+.glim-google-button {
+  background: #ffffff;
+  border: 1px solid #747775;
+  color: #1f1f1f;
+}
+[data-theme="dark"] .glim-google-button {
+  background: #131314;
+  border-color: #8e918f;
+  color: #e3e3e3;
+}
+
+/* The GLIM-green identity band (§4.1, §11.1): text on it is ink's light value in both themes. */
+.glim-identity-band {
+  background: var(--glim-green);
+  color: #14201a;
+}

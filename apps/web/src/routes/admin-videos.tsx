@@ -1,22 +1,32 @@
 import type { AdminVideo, offerings, video } from "@glim/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
-import { Alert, formText } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
+import { formText } from "../components/form";
 import { Time } from "../components/time";
+import { Badge, type Tone } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { ConfirmDialog } from "../components/ui/dialog";
+import { EmptyState } from "../components/ui/empty-state";
+import { Select, TextField } from "../components/ui/field";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 
 const STATUSES = ["", "UNAVAILABLE", "PUBLISHED", "UNPUBLISHED", "DELETED"] as const;
 const ORIGINS = ["", "LINK", "RECORDING"] as const;
 
-const STATUS_LABEL: Record<AdminVideo["status"], string> = {
-  PROCESSING: "Processing",
-  UNPUBLISHED: "Unpublished",
-  PUBLISHED: "Published",
-  UNAVAILABLE: "Unavailable on YouTube",
-  FAILED: "Failed",
-  DELETED: "Deleted",
+const STATUS: Record<AdminVideo["status"], { tone: Tone; word: string }> = {
+  PROCESSING: { tone: "warning", word: "Processing" },
+  UNPUBLISHED: { tone: "neutral", word: "Unpublished" },
+  PUBLISHED: { tone: "success", word: "Published" },
+  UNAVAILABLE: { tone: "danger", word: "Unavailable on YouTube" },
+  FAILED: { tone: "danger", word: "Failed" },
+  DELETED: { tone: "neutral", word: "Deleted" },
 };
 
 const REASON: Record<string, string> = {
@@ -32,68 +42,62 @@ export function AdminVideosPage() {
   const [offeringId, setOfferingId] = useState("");
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("");
   const [origin, setOrigin] = useState<(typeof ORIGINS)[number]>("");
-  const [cursors, setCursors] = useState<string[]>([]);
-  const cursor = cursors.at(-1);
-  const filters = { offeringId, status, origin, cursor };
-  const list = useQuery({
+  const filters = { offeringId, status, origin };
+  const list = useInfiniteQuery({
     queryKey: ["admin", "videos", filters],
-    queryFn: ({ signal }) =>
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ signal, pageParam }) =>
       api<typeof video.listAdminVideos>("GET", "/admin/videos", {
-        query: { offeringId, status, origin, cursor, limit: 50 },
+        query: { offeringId, status, origin, cursor: pageParam, limit: 50 },
         signal,
       }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const offeringList = useQuery({
     queryKey: ["offerings", "all"],
     queryFn: ({ signal }) =>
       api<typeof offerings.listOfferings>("GET", "/course-offerings", { signal }),
   });
-  const reset = () => {
-    setCursors([]);
-  };
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Videos</h2>
-      <div className="flex flex-wrap gap-2">
-        <select
-          aria-label="Offering"
-          className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-2"
-          value={offeringId}
-          onChange={(e) => {
-            setOfferingId(e.target.value);
-            reset();
-          }}
-        >
-          <option value="">All offerings</option>
-          {(offeringList.data?.items ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.courseCode} {o.title} ({o.semesterName}, {o.sessionCode})
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Status"
-          className="rounded border border-slate-300 px-2 py-2"
+    <div className="space-y-5">
+      <PageHeader title="Videos" meta="Every video across the college, unavailable ones first." />
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="md:col-span-2">
+          <Select
+            label="Offering"
+            value={offeringId}
+            onChange={(e) => {
+              setOfferingId(e.target.value);
+            }}
+          >
+            <option value="">All offerings</option>
+            {(offeringList.data?.items ?? []).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.courseCode} {o.title} ({o.semesterName}, {o.sessionCode})
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Select
+          label="Status"
           value={status}
           onChange={(e) => {
             setStatus(e.target.value as (typeof STATUSES)[number]);
-            reset();
           }}
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s === "" ? "Any status" : STATUS_LABEL[s]}
+              {s === "" ? "Any status" : STATUS[s].word}
             </option>
           ))}
-        </select>
-        <select
-          aria-label="Origin"
-          className="rounded border border-slate-300 px-2 py-2"
+        </Select>
+        <Select
+          label="Origin"
           value={origin}
           onChange={(e) => {
             setOrigin(e.target.value as (typeof ORIGINS)[number]);
-            reset();
           }}
         >
           {ORIGINS.map((o) => (
@@ -101,46 +105,34 @@ export function AdminVideosPage() {
               {o === "" ? "Any origin" : o === "LINK" ? "Added by link" : "Meet recording"}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {list.isPending ? (
-        <div className="h-24 animate-pulse rounded bg-slate-200" />
+        <SkeletonGroup label="Loading videos">
+          <Skeleton className="h-48" />
+        </SkeletonGroup>
       ) : list.isError ? (
-        <Alert tone="error">{list.error.message}</Alert>
+        <LoadFailed what="the videos" onRetry={() => void list.refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState icon="video" title="No videos match">
+          Try another offering, status or origin.
+        </EmptyState>
       ) : (
         <>
-          <ul className="space-y-2">
-            {list.data.items.map((v) => (
+          <Card list role="list">
+            {items.map((v) => (
               <VideoRow key={v.id} video={v} />
             ))}
-            {list.data.items.length === 0 ? (
-              <li className="text-slate-500">No videos match.</li>
-            ) : null}
-          </ul>
-          <div className="flex gap-2">
-            {cursors.length > 0 ? (
-              <button
-                type="button"
-                className="underline"
-                onClick={() => {
-                  setCursors(cursors.slice(0, -1));
-                }}
-              >
-                Previous
-              </button>
-            ) : null}
-            {list.data.nextCursor !== null ? (
-              <button
-                type="button"
-                className="underline"
-                onClick={() => {
-                  if (list.data.nextCursor !== null) setCursors([...cursors, list.data.nextCursor]);
-                }}
-              >
-                Next
-              </button>
-            ) : null}
-          </div>
+          </Card>
+          {list.hasNextPage ? (
+            <Button
+              variant="secondary"
+              loading={list.isFetchingNextPage}
+              onClick={() => void list.fetchNextPage()}
+            >
+              Show more
+            </Button>
+          ) : null}
         </>
       )}
     </div>
@@ -149,36 +141,34 @@ export function AdminVideosPage() {
 
 function VideoRow({ video: v }: { video: AdminVideo }) {
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const { busy, problem, fieldErrors, run } = useSubmit();
+  const [doing, setDoing] = useState<"recheck" | "restore" | "replace" | null>(null);
   const [replacing, setReplacing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "videos"] });
-  const act = (action: () => Promise<unknown>) =>
-    run(async () => {
+  const act = (which: NonNullable<typeof doing>, action: () => Promise<unknown>) => {
+    setDoing(which);
+    return run(async () => {
       await action();
       await refresh();
     });
+  };
   const params = { id: v.id };
   const deleted = v.status === "DELETED";
+  const unavailable = v.status === "UNAVAILABLE";
 
   return (
-    <li
-      className={`space-y-2 rounded border bg-white p-3 ${
-        v.status === "UNAVAILABLE" ? "border-red-300" : "border-slate-200"
-      }`}
-      aria-label={v.title}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">{v.title}</span>
-        <span
-          className={`text-sm ${v.status === "UNAVAILABLE" ? "text-red-700" : "text-slate-600"}`}
-        >
-          {STATUS_LABEL[v.status]}
-          {v.status === "UNAVAILABLE" && v.unavailableReason !== null
-            ? ` (${REASON[v.unavailableReason] ?? v.unavailableReason})`
-            : null}
-        </span>
+    <div role="listitem" aria-label={v.title} className="space-y-3 px-4 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 text-subhead">{v.title}</p>
+        <p className="text-body-sm">
+          <Badge tone={STATUS[v.status].tone}>{STATUS[v.status].word}</Badge>
+          {unavailable && v.unavailableReason !== null ? (
+            <span className="text-danger">{` (${REASON[v.unavailableReason] ?? v.unavailableReason})`}</span>
+          ) : null}
+        </p>
       </div>
-      <div className="text-sm text-slate-600">
+      <p className="text-meta text-ink-muted">
         {v.courseCode} {v.courseTitle} · {v.semesterName}, {v.sessionCode}
         {v.lastCheckedAt === null ? null : (
           <>
@@ -186,26 +176,30 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
             · checked <Time value={v.lastCheckedAt} />
           </>
         )}
-      </div>
+      </p>
       {deleted && v.deleteAfter !== null ? (
-        <p className="text-sm text-slate-700">
-          {v.youtubeDeleteRemindedAt === null ? (
-            <>
-              Can be restored until <Time value={v.deleteAfter} />.
-            </>
-          ) : (
-            "Delete it in YouTube Studio too: anyone with its link can still watch it there."
-          )}
-        </p>
+        v.youtubeDeleteRemindedAt === null ? (
+          <p className="text-body-sm">
+            Can be restored until <Time value={v.deleteAfter} />.
+          </p>
+        ) : (
+          <Banner tone="warning">
+            Delete it in YouTube Studio too: anyone with its link can still watch it there.
+          </Banner>
+        )
       ) : null}
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <div className="flex flex-wrap gap-3 text-sm">
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
         {v.studioUrl === null ? null : (
           <a
             href={v.studioUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-blue-700 underline"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             YouTube Studio
           </a>
@@ -214,70 +208,72 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
           <Link
             to="/recordings/$videoId"
             params={{ videoId: v.id }}
-            className="text-blue-700 underline"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             Watch
           </Link>
         )}
         {deleted ? (
           v.youtubeDeleteRemindedAt === null ? (
-            <button
-              type="button"
-              disabled={busy}
-              className="underline"
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={busy && doing === "restore"}
+              disabled={busy && doing !== "restore"}
               onClick={() =>
-                void act(() =>
+                void act("restore", () =>
                   api<typeof video.restoreVideo>("POST", "/videos/:id/restore", { params }),
                 )
               }
             >
               Restore
-            </button>
+            </Button>
           ) : null
         ) : (
           <>
-            <button
-              type="button"
-              disabled={busy}
-              className="underline"
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={busy && doing === "recheck"}
+              disabled={busy && doing !== "recheck"}
               onClick={() =>
-                void act(() =>
+                void act("recheck", () =>
                   api<typeof video.recheckVideo>("POST", "/videos/:id/recheck", { params }),
                 )
               }
             >
               Recheck
-            </button>
-            <button
-              type="button"
-              className="underline"
+            </Button>
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-expanded={replacing}
               onClick={() => {
                 setReplacing(!replacing);
               }}
             >
               Replace link
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
               disabled={busy}
-              className="text-red-700 underline"
               onClick={() => {
-                if (!window.confirm(`Delete "${v.title}"? You can restore it for 7 days.`)) return;
-                void act(() => api<typeof video.deleteVideo>("DELETE", "/videos/:id", { params }));
+                setDeleting(true);
               }}
             >
               Delete
-            </button>
+            </Button>
           </>
         )}
       </div>
       {replacing && !deleted ? (
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="flex flex-col gap-3 md:flex-row md:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             const youtubeUrl = formText(new FormData(e.currentTarget), "youtubeUrl");
-            void act(async () => {
+            void act("replace", async () => {
               await api<typeof video.replaceVideoLink>("PUT", "/videos/:id/youtube-link", {
                 params,
                 body: { youtubeUrl },
@@ -286,24 +282,33 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
             });
           }}
         >
-          <label className="min-w-0 flex-1 space-y-1 text-sm">
-            <span className="block font-medium text-slate-700">New YouTube link</span>
-            <input
+          <div className="min-w-0 flex-1">
+            <TextField
               name="youtubeUrl"
+              label="New YouTube link"
               required
-              className="w-full rounded border border-slate-300 px-3 py-2"
-              aria-invalid={fieldErrors.youtubeUrl === undefined ? undefined : true}
+              error={fieldErrors.youtubeUrl}
             />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
-          >
+          </div>
+          <Button type="submit" variant="primary" loading={busy && doing === "replace"}>
             Replace
-          </button>
+          </Button>
         </form>
       ) : null}
-    </li>
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={`Delete "${v.title}"?`}
+        confirmLabel="Delete video"
+        tone="danger"
+        onConfirm={async () => {
+          await api<typeof video.deleteVideo>("DELETE", "/videos/:id", { params });
+          setDeleting(false);
+          await refresh();
+        }}
+      >
+        It is hidden from students at once. You can restore it for 7 days.
+      </ConfirmDialog>
+    </div>
   );
 }

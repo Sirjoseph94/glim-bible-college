@@ -1,4 +1,4 @@
-import type { audit, users } from "@glim/contracts";
+import type { users } from "@glim/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { api } from "./client";
 
@@ -23,15 +23,4 @@ export const userQuery = (id: string) =>
     queryKey: ["user", id],
     queryFn: ({ signal }) =>
       api<typeof users.getUser>("GET", "/users/:id", { signal, params: { id } }),
-  });
-
-export const auditQuery = (filter: {
-  resourceId?: string;
-  actorUserId?: string;
-  cursor?: string;
-}) =>
-  queryOptions({
-    queryKey: ["audit", filter],
-    queryFn: ({ signal }) =>
-      api<typeof audit.listAuditLogs>("GET", "/audit-logs", { signal, query: filter }),
   });

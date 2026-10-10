@@ -3,9 +3,18 @@ import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
-import { Alert, SubmitButton } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { useDetailBar } from "../components/app/shell-parts";
+import { CalendarDate } from "../components/time";
+import { Badge } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { DataTable, bodyCell, headCell } from "../components/ui/data-table";
+import { EmptyState } from "../components/ui/empty-state";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
-import { coursesQuery } from "./admin-academic";
+import { coursesQuery, CURRICULUM_STATUS } from "./admin-academic";
 
 const curriculumQuery = (id: string) =>
   queryOptions({
@@ -31,11 +40,29 @@ const toRows = (c: CurriculumDetail): Row[] =>
     creditOverride: p.creditOverride,
   }));
 
+/** A compact control for a table cell; its label is the cell's `aria-label`. */
+const CELL_CONTROL =
+  "min-h-tap rounded-sm border border-line-strong bg-surface-raised px-2 text-body-sm text-ink " +
+  "disabled:border-transparent disabled:bg-surface-sunken disabled:text-ink-muted " +
+  "aria-invalid:border-2 aria-invalid:border-danger";
+
 export function AdminCurriculumPage() {
   const { curriculumId } = useParams({ from: "/admin/curricula/$curriculumId" });
   const curriculum = useQuery(curriculumQuery(curriculumId));
-  if (curriculum.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (curriculum.isError) return <Alert tone="error">{curriculum.error.message}</Alert>;
+  useDetailBar({ back: { to: "/admin/academic", label: "Programmes and courses" } });
+  if (curriculum.isPending)
+    return (
+      <SkeletonGroup label="Loading the curriculum">
+        <Skeleton className="h-10 w-1/2" />
+        <Skeleton className="h-48" />
+      </SkeletonGroup>
+    );
+  if (curriculum.isError)
+    return isNotAvailable(curriculum.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="the curriculum" onRetry={() => void curriculum.refetch()} />
+    );
   return (
     <Editor
       key={`${curriculum.data.id}-${String(curriculum.data.version)}`}
@@ -49,38 +76,83 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
   const navigate = useNavigate();
   const courses = useQuery(coursesQuery(""));
   const [rows, setRows] = useState<Row[]>(toRows(curriculum));
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const [pending, setPending] = useState<"save" | "activate" | "clone" | null>(null);
+  const { busy, problem, fieldErrors, run } = useSubmit();
   const editable = !curriculum.locked;
   const courseName = new Map(courses.data?.items.map((c) => [c.id, `${c.code} ${c.title}`]) ?? []);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["curriculum", curriculum.id] });
+  const status = CURRICULUM_STATUS[curriculum.status];
+  const loading = (action: typeof pending) => busy && pending === action;
 
   const update = (i: number, change: Partial<Row>) => {
     setRows(rows.map((r, j) => (j === i ? { ...r, ...change } : r)));
   };
 
+  const activate = () => {
+    setPending("activate");
+    void run(async () => {
+      await api<typeof academic.activateCurriculum>("POST", "/curricula/:id/activate", {
+        params: { id: curriculum.id },
+      });
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["curricula"] });
+    });
+  };
+
+  const clone = () => {
+    setPending("clone");
+    void run(async () => {
+      const copy = await api<typeof academic.cloneCurriculum>("POST", "/curricula/:id/clone", {
+        params: { id: curriculum.id },
+        body: { effectiveFrom: new Date().toISOString().slice(0, 10) },
+      });
+      await queryClient.invalidateQueries({ queryKey: ["curricula"] });
+      await navigate({ to: "/admin/curricula/$curriculumId", params: { curriculumId: copy.id } });
+    });
+  };
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">
-        Curriculum v{curriculum.curriculumVersion}{" "}
-        <span className="text-base font-normal text-slate-600">
-          · {curriculum.status.toLowerCase()}
-        </span>
-      </h2>
-      <p className="text-sm text-slate-600">
-        Effective from {curriculum.effectiveFrom}. Students need {curriculum.minElectiveCredits}{" "}
-        elective credits for the award.
-      </p>
+    <div className="space-y-5">
+      <PageHeader
+        title={`Curriculum v${String(curriculum.curriculumVersion)}`}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <Badge tone={status.tone}>{status.word}</Badge>
+            <span>
+              Effective from <CalendarDate value={curriculum.effectiveFrom} />. Students need{" "}
+              {curriculum.minElectiveCredits} elective credits for the award.
+            </span>
+          </span>
+        }
+        actions={
+          <>
+            {curriculum.status === "DRAFT" ? (
+              <Button variant="primary" loading={loading("activate")} onClick={activate}>
+                Activate
+              </Button>
+            ) : null}
+            <Button variant="secondary" loading={loading("clone")} onClick={clone}>
+              Clone to a new version
+            </Button>
+          </>
+        }
+      />
       {curriculum.locked ? (
-        <Alert tone="error">
-          This curriculum is locked. Clone it to make a new version you can edit.
-        </Alert>
+        <Banner tone="info" title="This curriculum is locked">
+          Clone it to make a new version you can edit.
+        </Banner>
       ) : null}
-      {error ? <Alert tone="error">{error}</Alert> : null}
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
 
       <form
-        className="space-y-3"
+        className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
+          setPending("save");
           void run(async () => {
             await api<typeof academic.putPlacements>("PUT", "/curricula/:id/courses", {
               params: { id: curriculum.id },
@@ -91,131 +163,149 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
           });
         }}
       >
-        <div
-          role="region"
-          aria-label="Curriculum courses"
-          tabIndex={0}
-          className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-        >
-          <table className="w-full min-w-[36rem] border-collapse text-sm">
+        {rows.length === 0 ? (
+          <EmptyState icon="book" title="No courses placed yet">
+            {editable
+              ? "Add a course, choose its Level and semester, then save."
+              : "This version has no courses."}
+          </EmptyState>
+        ) : (
+          <DataTable caption="Curriculum courses" minWidth="min-w-160">
             <thead>
-              <tr className="text-left text-slate-600">
-                <th className="p-1">Course</th>
-                <th className="p-1">Level</th>
-                <th className="p-1">Semester</th>
-                <th className="p-1">Type</th>
-                <th className="p-1">Credit override</th>
-                <th className="p-1" />
+              <tr>
+                <th scope="col" className={headCell}>
+                  Course
+                </th>
+                <th scope="col" className={headCell}>
+                  Level
+                </th>
+                <th scope="col" className={headCell}>
+                  Semester
+                </th>
+                <th scope="col" className={headCell}>
+                  Type
+                </th>
+                <th scope="col" className={headCell}>
+                  Credit override
+                </th>
+                <th scope="col" className={headCell}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
-                <tr key={`${row.courseId}-${String(i)}`} className="border-t border-slate-200">
-                  <td className="p-1">
-                    <select
-                      aria-label={`Course ${String(i + 1)}`}
-                      disabled={!editable}
-                      value={row.courseId}
-                      onChange={(e) => {
-                        update(i, { courseId: e.target.value });
-                      }}
-                      className="w-full rounded border border-slate-300 px-1 py-1"
-                    >
-                      {courses.data?.items
-                        .filter((c) => c.status === "ACTIVE" || c.id === row.courseId)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {courseName.get(c.id)}
-                          </option>
-                        ))}
-                    </select>
-                    {fieldErrors[`placements.${String(i)}.courseId`] ? (
-                      <p className="text-red-700">
-                        {fieldErrors[`placements.${String(i)}.courseId`]}
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="p-1">
-                    <input
-                      aria-label={`Level ${String(i + 1)}`}
-                      type="number"
-                      min={1}
-                      max={4}
-                      disabled={!editable}
-                      value={row.levelNo}
-                      onChange={(e) => {
-                        update(i, { levelNo: Number(e.target.value) });
-                      }}
-                      className="w-16 rounded border border-slate-300 px-1 py-1"
-                    />
-                  </td>
-                  <td className="p-1">
-                    <select
-                      aria-label={`Semester ${String(i + 1)}`}
-                      disabled={!editable}
-                      value={row.semesterNo}
-                      onChange={(e) => {
-                        update(i, { semesterNo: e.target.value === "2" ? 2 : 1 });
-                      }}
-                      className="rounded border border-slate-300 px-1 py-1"
-                    >
-                      <option value={1}>1 (Sept–Jan)</option>
-                      <option value={2}>2 (Feb–June)</option>
-                    </select>
-                  </td>
-                  <td className="p-1">
-                    <select
-                      aria-label={`Type ${String(i + 1)}`}
-                      disabled={!editable}
-                      value={row.courseType}
-                      onChange={(e) => {
-                        update(i, {
-                          courseType: e.target.value === "ELECTIVE" ? "ELECTIVE" : "COMPULSORY",
-                        });
-                      }}
-                      className="rounded border border-slate-300 px-1 py-1"
-                    >
-                      <option value="COMPULSORY">Compulsory</option>
-                      <option value="ELECTIVE">Elective</option>
-                    </select>
-                  </td>
-                  <td className="p-1">
-                    <input
-                      aria-label={`Credit override ${String(i + 1)}`}
-                      disabled={!editable}
-                      inputMode="decimal"
-                      value={row.creditOverride ?? ""}
-                      onChange={(e) => {
-                        update(i, {
-                          creditOverride: e.target.value === "" ? null : e.target.value,
-                        });
-                      }}
-                      className="w-20 rounded border border-slate-300 px-1 py-1"
-                    />
-                  </td>
-                  <td className="p-1">
-                    {editable ? (
-                      <button
-                        type="button"
-                        className="text-red-700 underline"
-                        onClick={() => {
-                          setRows(rows.filter((_, j) => j !== i));
+              {rows.map((row, i) => {
+                const n = String(i + 1);
+                const courseError = fieldErrors[`placements.${String(i)}.courseId`];
+                return (
+                  <tr key={`${row.courseId}-${String(i)}`}>
+                    <td className={`${bodyCell} whitespace-normal`}>
+                      <select
+                        aria-label={`Course ${n}`}
+                        aria-invalid={courseError ? true : undefined}
+                        disabled={!editable}
+                        value={row.courseId}
+                        onChange={(e) => {
+                          update(i, { courseId: e.target.value });
                         }}
+                        className={`${CELL_CONTROL} w-full`}
                       >
-                        Remove
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
+                        {courses.data?.items
+                          .filter((c) => c.status === "ACTIVE" || c.id === row.courseId)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {courseName.get(c.id)}
+                            </option>
+                          ))}
+                      </select>
+                      {courseError ? (
+                        <p className="mt-1 text-body-sm text-danger">{courseError}</p>
+                      ) : null}
+                    </td>
+                    <td className={bodyCell}>
+                      <input
+                        aria-label={`Level ${n}`}
+                        type="number"
+                        min={1}
+                        max={4}
+                        disabled={!editable}
+                        value={row.levelNo}
+                        onChange={(e) => {
+                          update(i, { levelNo: Number(e.target.value) });
+                        }}
+                        className={`${CELL_CONTROL} w-16`}
+                      />
+                    </td>
+                    <td className={bodyCell}>
+                      <select
+                        aria-label={`Semester ${n}`}
+                        disabled={!editable}
+                        value={row.semesterNo}
+                        onChange={(e) => {
+                          update(i, { semesterNo: e.target.value === "2" ? 2 : 1 });
+                        }}
+                        className={CELL_CONTROL}
+                      >
+                        <option value={1}>1 (Sept–Jan)</option>
+                        <option value={2}>2 (Feb–June)</option>
+                      </select>
+                    </td>
+                    <td className={bodyCell}>
+                      <select
+                        aria-label={`Type ${n}`}
+                        disabled={!editable}
+                        value={row.courseType}
+                        onChange={(e) => {
+                          update(i, {
+                            courseType: e.target.value === "ELECTIVE" ? "ELECTIVE" : "COMPULSORY",
+                          });
+                        }}
+                        className={CELL_CONTROL}
+                      >
+                        <option value="COMPULSORY">Compulsory</option>
+                        <option value="ELECTIVE">Elective</option>
+                      </select>
+                    </td>
+                    <td className={bodyCell}>
+                      <input
+                        aria-label={`Credit override ${n}`}
+                        disabled={!editable}
+                        inputMode="decimal"
+                        value={row.creditOverride ?? ""}
+                        onChange={(e) => {
+                          update(i, {
+                            creditOverride: e.target.value === "" ? null : e.target.value,
+                          });
+                        }}
+                        className={`${CELL_CONTROL} w-20`}
+                      />
+                    </td>
+                    <td className={bodyCell}>
+                      {editable ? (
+                        // Not saved until "Save placements", so no confirmation is needed.
+                        <Button
+                          size="sm"
+                          variant="quiet"
+                          aria-label={`Remove course ${n}`}
+                          onClick={() => {
+                            setRows(rows.filter((_, j) => j !== i));
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
+        )}
         {editable ? (
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="underline"
+          <div className="flex flex-col gap-2 md:flex-row">
+            <Button
+              variant="secondary"
+              icon="book"
               onClick={() => {
                 const first = courses.data?.items.find((c) => c.status === "ACTIVE");
                 if (first)
@@ -232,56 +322,13 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
               }}
             >
               Add a course
-            </button>
-            <SubmitButton busy={busy}>Save placements</SubmitButton>
+            </Button>
+            <Button type="submit" variant="primary" loading={loading("save")}>
+              Save placements
+            </Button>
           </div>
         ) : null}
       </form>
-
-      <div className="flex flex-wrap gap-3">
-        {curriculum.status === "DRAFT" ? (
-          <button
-            type="button"
-            className="rounded bg-brand px-3 py-2 text-white"
-            disabled={busy}
-            onClick={() => {
-              void run(async () => {
-                await api<typeof academic.activateCurriculum>("POST", "/curricula/:id/activate", {
-                  params: { id: curriculum.id },
-                });
-                await refresh();
-                await queryClient.invalidateQueries({ queryKey: ["curricula"] });
-              });
-            }}
-          >
-            Activate
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="rounded border border-slate-300 px-3 py-2"
-          disabled={busy}
-          onClick={() => {
-            void run(async () => {
-              const copy = await api<typeof academic.cloneCurriculum>(
-                "POST",
-                "/curricula/:id/clone",
-                {
-                  params: { id: curriculum.id },
-                  body: { effectiveFrom: new Date().toISOString().slice(0, 10) },
-                },
-              );
-              await queryClient.invalidateQueries({ queryKey: ["curricula"] });
-              await navigate({
-                to: "/admin/curricula/$curriculumId",
-                params: { curriculumId: copy.id },
-              });
-            });
-          }}
-        >
-          Clone to a new version
-        </button>
-      </div>
     </div>
   );
 }

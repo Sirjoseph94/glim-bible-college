@@ -1,5 +1,6 @@
 import { linkToken } from "./mailbox";
 import { expect, test } from "./test";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-registrar@glim.test";
 const PASSWORD = "registrar passphrase 2026";
@@ -13,6 +14,7 @@ test("the Registrar manages grading schemes", async ({ page }) => {
   await page.getByLabel("New password (at least 12 characters)").fill(PASSWORD);
   await page.getByLabel("Confirm the new password").fill(PASSWORD);
   await page.getByRole("button", { name: "Set password and sign in" }).click();
+  await openArea(page, "Results");
   await page.getByRole("link", { name: "Grading schemes" }).click();
 
   const diploma = page.getByRole("listitem", { name: "GLIM Diploma", exact: true });
@@ -32,14 +34,17 @@ test("the Registrar manages grading schemes", async ({ page }) => {
   // An unused scheme changes in place.
   const certificate = page.getByRole("listitem", { name: "GLIM Certificate", exact: true });
   await certificate.getByRole("button", { name: "Edit" }).click();
-  const form = page.getByRole("form", { name: "Grading scheme" });
+  // The scheme opens in a Sheet; its submit button sits in the Sheet's footer, outside the form.
+  const sheet = page.getByRole("dialog", { name: "Edit GLIM Certificate" });
+  const form = sheet.getByRole("form", { name: "Grading scheme" });
   await form.getByLabel("Probation from CGPA (optional)").fill("0.5");
-  await form.getByRole("button", { name: "Save scheme" }).click();
+  await sheet.getByRole("button", { name: "Save scheme" }).click();
+  await expect(sheet).toBeHidden();
   await expect(certificate).toContainText("probation from 0.50");
 
   // A gap between B and C is refused with a reason.
   await certificate.getByRole("button", { name: "Edit" }).click();
   await form.getByRole("group", { name: "Band B" }).getByLabel("From").fill("61");
-  await form.getByRole("button", { name: "Save scheme" }).click();
+  await sheet.getByRole("button", { name: "Save scheme" }).click();
   await expect(form.getByRole("alert")).toContainText("without gaps");
 });

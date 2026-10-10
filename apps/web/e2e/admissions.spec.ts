@@ -1,6 +1,7 @@
 import { expect, test } from "./test";
 import { testPhoto } from "./images";
 import { lastEmail, linkToken, nextGoogleSignIn } from "./mailbox";
+import { openArea } from "./nav";
 
 const EMAIL = "e2e-admissions@glim.test";
 const PASSWORD = "admissions passphrase 2026";
@@ -15,7 +16,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await page.getByRole("button", { name: "Set password and sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome, Amaka Admissions" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Admissions" }).click();
+  await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Intakes" }).click();
   await page.getByLabel("Intake (year students start, e.g. 2027)").fill("2030");
   await page
@@ -72,7 +73,9 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await applicant.reload();
   await expect(applicant.getByRole("heading", { name: "1. Personal information" })).toBeVisible();
   await expect(applicant.getByLabel("First name")).toHaveValue("Chioma");
-  await expect(applicant.getByRole("link", { name: "My application" })).toBeVisible();
+  await expect(
+    applicant.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Application" }),
+  ).toBeVisible();
 
   // The passport photo is shrunk on the phone and uploads over a slow mobile connection.
   const network = await applicant.context().newCDPSession(applicant);
@@ -160,7 +163,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
     .toBe("We've received your application GLIM-APP-2030-00001");
 
   // The Admissions Officer opens it (marking it Under Review), sees every section, and admits.
-  await page.getByRole("link", { name: "Admissions" }).click();
+  await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Chioma Eze" }).click();
   await expect(page.getByText("Status: Under review")).toBeVisible();
   await expect(
@@ -188,6 +191,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
     })
     .toBe("Welcome to GLIM Online Bible College: your Matric Number is GLIM/DMIN/2030/0001");
   // As a student, their registration page waits for the semester to open.
+  await openArea(applicant, "Courses");
   await applicant.getByRole("link", { name: "Registration" }).click();
   await expect(
     applicant.getByText("Registration hasn't opened yet.", { exact: false }),
@@ -198,11 +202,11 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await expect(applicant.getByText(/^[A-HJ-NP-Z2-9]{7}$/)).toBeVisible();
 
   // The officer's reports count the application.
-  await page.getByRole("link", { name: "Admissions" }).click();
+  await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Reports" }).click();
   await expect(page.getByText("submitted applications")).toContainText("1");
 
-  await page.getByRole("link", { name: "Admissions" }).click();
+  await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Intakes" }).click();
   await page.getByRole("button", { name: "Close now" }).click();
   await expect(page.getByText("closed", { exact: true })).toBeVisible();

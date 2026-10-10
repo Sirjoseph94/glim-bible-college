@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import { designTokens } from "./apps/web/eslint/design-tokens.js";
 
 export default tseslint.config(
   {
@@ -70,6 +71,23 @@ export default tseslint.config(
             namespaceFrom: true,
           },
         },
+      ],
+    },
+  },
+  {
+    // Design tokens only in the web app (UI-1); warnings until WP-UI-12 (decision UI-Q16).
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    plugins: { glim: { rules: { "design-tokens": designTokens } } },
+    rules: { "glim/design-tokens": "warn" },
+  },
+  {
+    // Routes compose screens from components/ui and components/app, never primitives directly.
+    files: ["apps/web/src/routes/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "warn",
+        { patterns: [{ group: ["@radix-ui/*"], message: "Import UI from components/ui." }] },
       ],
     },
   },

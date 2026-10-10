@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { openCourse, openTeaching, signOut } from "./nav";
 
 const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphrase 2026" };
 const STUDENT = { email: "e2e-student2@glim.test", password: "student passphrase 2026" };
@@ -18,9 +19,8 @@ async function signIn(page: Page, who: { email: string; password: string }) {
  */
 test("a hybrid exam: paper scores and an online part in one gradebook column", async ({ page }) => {
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
-  await page.getByRole("link", { name: "Gradebook" }).click();
-  await page.getByText("Columns and weights").click();
+  await openTeaching(page, "Pastoral Care", "Gradebook");
+  await page.getByRole("button", { name: "Columns and weights" }).click();
   const add = page.getByRole("form", { name: "Add a column" });
   await add.getByLabel("Kind").selectOption("EXAM");
   await add.getByLabel("Title").fill("Semester exam");
@@ -30,8 +30,7 @@ test("a hybrid exam: paper scores and an online part in one gradebook column", a
   await expect(page.getByRole("columnheader", { name: /Semester exam/ })).toBeVisible();
 
   // The online part: one question worth 1 point, scaled to the exam's 20.
-  await page.getByRole("link", { name: "Back to teaching" }).click();
-  await page.getByRole("button", { name: "Quizzes" }).click();
+  await page.getByRole("tab", { name: "Work" }).click();
   await page.getByText(/^Question bank/).click();
   const bank = page.locator("form", { hasText: "Add a question" });
   await bank.getByLabel("Question").fill("Which city did Paul write Romans from?");
@@ -59,11 +58,10 @@ test("a hybrid exam: paper scores and an online part in one gradebook column", a
   await grant.getByLabel("Reason").fill("Travelling for a mission");
   await grant.getByRole("button", { name: "Let them sit online" }).click();
   await expect(page.getByText("(Travelling for a mission)")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   await signIn(page, STUDENT);
-  await page.getByRole("link", { name: "My courses" }).click();
-  await page.getByText("Quizzes", { exact: true }).click();
+  await openCourse(page, "Pastoral Care", "Work");
   await page.getByRole("link", { name: "Semester exam" }).click();
   await page.getByRole("button", { name: /^Start/ }).click();
   await page
@@ -73,19 +71,24 @@ test("a hybrid exam: paper scores and an online part in one gradebook column", a
   await expect(page.getByText("Answers saved")).toBeVisible();
   await page.getByRole("button", { name: "Submit" }).click();
   await expect(page.getByText("Score: 1.00 / 1.00")).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await signOut(page);
 
   // The paper score goes in by hand; Bola's online score is already there, scaled to 20.
   await signIn(page, LECTURER);
-  await page.getByRole("link", { name: "My offerings" }).click();
-  await page.getByRole("link", { name: "Gradebook" }).click();
+  await openTeaching(page, "Pastoral Care", "Gradebook");
   await expect(page.getByRole("button", { name: "Bola Online, Semester exam" })).toContainText(
     "20.00draft",
   );
+  // Typed straight into the cell (§9.19).
   await page.getByRole("button", { name: "Ada Campus, Semester exam" }).click();
-  const edit = page.getByRole("form", { name: "Edit grade" });
-  await edit.getByLabel(/Score/).fill("14.5");
-  await edit.getByRole("button", { name: "Save grade" }).click();
+  await page.getByLabel("Score for Ada Campus, Semester exam").fill("14.5");
+  await page.getByLabel("Score for Ada Campus, Semester exam").press("Escape");
+  await expect(page.getByRole("button", { name: "Ada Campus, Semester exam" })).not.toContainText(
+    "14.50",
+  );
+  await page.getByRole("button", { name: "Ada Campus, Semester exam" }).click();
+  await page.getByLabel("Score for Ada Campus, Semester exam").fill("14.5");
+  await page.getByLabel("Score for Ada Campus, Semester exam").press("Tab");
   await expect(page.getByRole("button", { name: "Ada Campus, Semester exam" })).toContainText(
     "14.50draft",
   );

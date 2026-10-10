@@ -1,0 +1,86 @@
+/* GLIM LMS — generated from tokens.json */
+:root,
+[data-theme="light"] {
+  --surface: #f5f7f5;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e9eeeb;
+  --line: #d6dfda;
+  --line-strong: #7f8a84;
+  --ink: #14201a;
+  --ink-muted: #4f5d56;
+  --glim-green: #01a958;
+  --glim-red: #ed3135;
+  --brand: #00753d;
+  --brand-strong: #005a2f;
+  --brand-soft: #dff3e8;
+  --on-brand: #ffffff;
+  --live: #c8202a;
+  --live-soft: #fde6e6;
+  --on-live: #ffffff;
+  --success: #0f6b85;
+  --success-soft: #e0f1f6;
+  --warning: #8a5a00;
+  --warning-soft: #fcf1d8;
+  --danger: #9b1c3a;
+  --danger-soft: #fbe5ea;
+  --info: #2c55a0;
+  --info-soft: #e5ecf8;
+  --focus: #2563c9;
+  --shadow-sheet: 0 -4px 16px rgba(24, 32, 28, 0.1);
+  --shadow-pop: 0 6px 20px rgba(24, 32, 28, 0.14);
+}
+[data-theme="dark"] {
+  --surface: #101513;
+  --surface-raised: #171e1b;
+  --surface-sunken: #0b0f0d;
+  --line: #28322d;
+  --line-strong: #66736c;
+  --ink: #ecf2ee;
+  --ink-muted: #a0aea7;
+  --brand: #3fd08a;
+  --brand-strong: #7fe2b0;
+  --brand-soft: #0f2e1f;
+  --on-brand: #04170d;
+  --live: #ff7a7d;
+  --live-soft: #3a1314;
+  --on-live: #1f0405;
+  --success: #7cc9e0;
+  --success-soft: #0e2b33;
+  --warning: #efbe5d;
+  --warning-soft: #33270a;
+  --danger: #ff9bb1;
+  --danger-soft: #3a1420;
+  --info: #9dbcf2;
+  --info-soft: #162544;
+  --focus: #8ab4f8;
+  --shadow-sheet: 0 -4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --tap-min: 44px;
+  --control-h: 48px;
+  --control-h-sm: 36px;
+  --nav-h: 64px;
+  --content-max: 1120px;
+  --bp-md: 640px;
+  --bp-lg: 1024px;
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-overlay: 40;
+  --z-sheet: 50;
+  --z-toast: 60;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+}

@@ -1,21 +1,13 @@
-import type {
-  attendance,
-  enrollment,
-  MyAttendance,
-  offerings,
-  SemesterRegistration,
-  video,
-} from "@glim/contracts";
+import type { enrollment, offerings, SemesterRegistration } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { CourseAssignments } from "../components/assignments";
-import { MyGrades } from "../components/grades";
-import { CourseQuizzes } from "../components/quizzes";
-import { CourseAnnouncements, CourseMaterials } from "../components/course-content";
 import { api } from "../api/client";
+import { CourseCard } from "../components/app/course-card";
 import { Alert } from "../components/form";
+import { CalendarDate } from "../components/time";
+import { Banner } from "../components/ui/banner";
+import { EmptyState } from "../components/ui/empty-state";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
-import { CalendarDate, Time } from "../components/time";
 
 const SELECTION: Record<string, string> = {
   COMPULSORY: "Compulsory",
@@ -35,7 +27,7 @@ export function RegistrationPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">My registration</h2>
+      <h1 className="text-title">My registration</h1>
       {mine.data.programmes.map((p) => (
         <section key={p.matricNumber} className="space-y-3">
           <div>
@@ -89,146 +81,36 @@ export function RegistrationPage() {
 }
 
 /** A student's courses: the offerings they're registered for (via v_offering_access). */
-const STATUS_LABEL: Record<string, string> = {
-  PRESENT: "Present",
-  PARTIAL: "Partly present",
-  ABSENT: "Absent",
-  EXCUSED: "Excused",
-};
-
-/** My attendance on one course (TRD §12): a summary, and each Class Meeting on request. */
-function MyCourseAttendance({ course }: { course: MyAttendance["courses"][number] }) {
-  const s = course.summary;
-  return (
-    <details className="text-sm">
-      <summary className="cursor-pointer text-slate-700">
-        Attendance: {s.present} present, {s.partial} partly, {s.absent} absent
-        {s.excused > 0 ? `, ${String(s.excused)} excused` : ""}
-        {s.late > 0 ? ` · ${String(s.late)} late` : ""}
-      </summary>
-      <ul className="mt-2 space-y-1">
-        {course.meetings.map((m) => (
-          <li key={m.meetingId} className="flex flex-wrap justify-between gap-2">
-            <span>
-              {m.title}, <Time value={m.scheduledStart} />
-            </span>
-            <span>
-              {STATUS_LABEL[m.status] ?? m.status}
-              {m.mode === "IN_PERSON" ? " in the room" : m.mode === "ONLINE" ? " online" : ""}
-              {m.late ? ", late" : ""}
-              {m.final ? "" : " (provisional)"}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-/** A course's published recordings (TRD §13.5). Watching comes with the player. */
-function CourseRecordings({ offeringId }: { offeringId: string }) {
-  const list = useQuery({
-    queryKey: ["videos", offeringId],
-    queryFn: ({ signal }) =>
-      api<typeof video.listVideos>("GET", "/course-offerings/:id/videos", {
-        params: { id: offeringId },
-        signal,
-      }),
-  });
-  const items = list.data?.items ?? [];
-  if (items.length === 0) return null;
-  return (
-    <details className="text-sm">
-      <summary className="cursor-pointer text-slate-700">Recordings ({items.length})</summary>
-      <ul className="mt-2 space-y-1">
-        {items.map((v) => (
-          <li key={v.id}>
-            <Link
-              to="/recordings/$videoId"
-              params={{ videoId: v.id }}
-              className="text-blue-700 underline"
-            >
-              {v.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
+/** The student's courses as cards, each opening the course page (§11.3, decision UI-Q5). */
 export function CoursesPage() {
   const list = useQuery({
     queryKey: ["offerings", "mine"],
     queryFn: ({ signal }) =>
       api<typeof offerings.listOfferings>("GET", "/course-offerings", { signal }),
   });
-  const myAttendance = useQuery({
-    queryKey: ["me", "attendance"],
-    queryFn: ({ signal }) =>
-      api<typeof attendance.getMyAttendance>("GET", "/me/attendance", { signal }),
-  });
-  if (list.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (list.isError) return <Alert tone="error">We couldn't load your courses.</Alert>;
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">My courses</h2>
-      {list.data.items.length === 0 ? (
-        <p className="text-slate-600">You aren't registered for any courses yet.</p>
-      ) : null}
-      <ul className="space-y-2">
-        {list.data.items.map((o) => (
-          <li key={o.id} className="rounded border border-slate-200 bg-white p-3">
-            <div className="font-medium">
-              {o.courseCode} {o.title}
-            </div>
-            <div className="text-sm text-slate-600">
-              {o.semesterName}, {o.sessionCode} · {o.credits} credits
-            </div>
-            {o.lecturers.length > 0 ? (
-              <div className="text-sm text-slate-600">
-                {o.lecturers.map((l) => l.lecturerName).join(", ")}
-              </div>
-            ) : null}
-            <details className="text-sm">
-              <summary className="cursor-pointer text-slate-700">Announcements</summary>
-              <div className="mt-2">
-                <CourseAnnouncements offeringId={o.id} manage={false} />
-              </div>
-            </details>
-            <details className="text-sm">
-              <summary className="cursor-pointer text-slate-700">Assignments</summary>
-              <div className="mt-2">
-                <CourseAssignments offeringId={o.id} manage={false} />
-              </div>
-            </details>
-            <details className="text-sm">
-              <summary className="cursor-pointer text-slate-700">Quizzes</summary>
-              <div className="mt-2">
-                <CourseQuizzes offeringId={o.id} manage={false} />
-              </div>
-            </details>
-            <details className="text-sm">
-              <summary className="cursor-pointer text-slate-700">Grades</summary>
-              <div className="mt-2">
-                <MyGrades offeringId={o.id} />
-              </div>
-            </details>
-            <details className="text-sm">
-              <summary className="cursor-pointer text-slate-700">Materials</summary>
-              <div className="mt-2">
-                <CourseMaterials offeringId={o.id} manage={false} />
-              </div>
-            </details>
-            <CourseRecordings offeringId={o.id} />
-            {myAttendance.data?.courses
-              .filter((c) => c.offeringId === o.id)
-              .map((c) => (
-                <MyCourseAttendance key={c.offeringId} course={c} />
-              ))}
-          </li>
-        ))}
-      </ul>
+      <h1 className="text-title">My courses</h1>
+      {list.isPending ? (
+        <SkeletonGroup label="Loading your courses">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-36" />
+            <Skeleton className="h-36" />
+          </div>
+        </SkeletonGroup>
+      ) : list.isError ? (
+        <Banner tone="danger">We couldn't load your courses.</Banner>
+      ) : list.data.items.length === 0 ? (
+        <EmptyState icon="book" title="No courses yet">
+          Your courses appear here once you are registered for a semester.
+        </EmptyState>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {list.data.items.map((o) => (
+            <CourseCard key={o.id} offering={o} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
