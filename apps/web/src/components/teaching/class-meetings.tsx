@@ -1,6 +1,6 @@
 import type { calendar, ClassMeeting, meetings, Offering, ScheduleWarning } from "@glim/contracts";
 import { zonedToInstant } from "@glim/shared/time";
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState, type SubmitEvent } from "react";
 import { api, ApiError } from "../../api/client";
@@ -70,10 +70,14 @@ function ProblemBanner({ problem }: { problem: Problem | null }) {
   );
 }
 
-/** The zone times are typed in: the institution's (TRD §5.1), named in the date's label. */
+/**
+ * The zone times are typed in: the institution's (TRD §5.1), named in the date's label. The
+ * route loaded `/me` before the page, so this never guesses; signed out, there is no form.
+ */
 function useInstitutionZone(): string {
-  const me = useQuery(meQuery);
-  return me.data?.institution.timezone ?? "Africa/Lagos";
+  const { data: me } = useSuspenseQuery(meQuery);
+  if (me === null) throw new Error("The schedule forms need a signed-in person.");
+  return me.institution.timezone;
 }
 
 const zoneName = (zone: string) => zone.split("/").pop()?.replaceAll("_", " ") ?? zone;
@@ -526,7 +530,9 @@ export function LecturerMeetingActions({ meeting }: { meeting: ClassMeeting }) {
                 });
               },
             },
-            ...(meeting.state === "ENDED" || meeting.state === "NO_SHOW"
+            ...(meeting.state === "ENDED" ||
+            meeting.state === "NO_SHOW" ||
+            meeting.state === "CANCELLED"
               ? []
               : [
                   {

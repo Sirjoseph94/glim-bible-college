@@ -32,6 +32,15 @@ import type { TeachTab } from "./teach-tabs";
 /** The gradebook loads only when its tab is opened: it is the largest part of the page. */
 const Gradebook = lazy(() => import("./gradebook").then((m) => ({ default: m.Gradebook })));
 
+/** The offering's status as a word, as the old teaching page showed it. */
+const OFFERING_STATUS: Record<Offering["status"], { tone: Tone; word: string }> = {
+  DRAFT: { tone: "neutral", word: "Draft" },
+  PUBLISHED: { tone: "info", word: "Published" },
+  ACTIVE: { tone: "success", word: "Active" },
+  COMPLETED: { tone: "neutral", word: "Completed" },
+  CANCELLED: { tone: "danger", word: "Cancelled" },
+};
+
 const myOfferingsQuery = queryOptions({
   queryKey: ["offerings", "mine"],
   queryFn: ({ signal }) =>
@@ -65,11 +74,9 @@ export function TeachPage() {
               offering={o}
               teaching
               badge={
-                o.status === "COMPLETED" || o.status === "CANCELLED" ? (
-                  <Badge tone="neutral">
-                    {o.status === "COMPLETED" ? "Completed" : "Cancelled"}
-                  </Badge>
-                ) : undefined
+                <Badge tone={OFFERING_STATUS[o.status].tone}>
+                  {OFFERING_STATUS[o.status].word}
+                </Badge>
               }
             />
           ))}
@@ -85,6 +92,11 @@ const PAST_BADGE: Partial<Record<ClassMeeting["state"], BadgeStatus>> = {
   CANCELLED: "cancelled",
   SCHEDULED: "scheduled",
 };
+
+function pastBadge(state: ClassMeeting["state"]) {
+  const status = PAST_BADGE[state];
+  return status ? <Badge status={status} /> : null;
+}
 
 /** The course's Class Meetings: coming up as cards with their actions, past ones as rows. */
 function Live({ offering }: { offering: Offering }) {
@@ -145,7 +157,11 @@ function Live({ offering }: { offering: Offering }) {
           <section className="space-y-3">
             <h2 className="text-heading">Coming up</h2>
             {upcoming.length === 0 ? (
-              <p className="text-body-sm text-ink-muted">No Class Meetings are scheduled.</p>
+              <EmptyState icon="calendar" title="No Class Meetings are scheduled.">
+                {closed
+                  ? "This course is closed."
+                  : "Schedule one, or a weekly series, with the button above."}
+              </EmptyState>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {upcoming.map((m) => (
@@ -183,9 +199,7 @@ function Live({ offering }: { offering: Offering }) {
                         <Time value={m.scheduledStart} />
                       </p>
                     </div>
-                    {PAST_BADGE[m.state] ? (
-                      <Badge status={PAST_BADGE[m.state] as BadgeStatus} />
-                    ) : null}
+                    {pastBadge(m.state)}
                     {m.state === "CANCELLED" ? null : (
                       <div className="flex gap-2">
                         <Link

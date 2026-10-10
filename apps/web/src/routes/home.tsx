@@ -189,16 +189,18 @@ function LecturerToday({ me }: { me: Me }) {
       ) : (
         <>
           {section("Happening now", plan.happeningNow)}
+          {plan.happeningNow.some((m) => m.state === "OPEN" && m.recordingMode !== "OFF") ? (
+            <Banner tone="info" title="Recording starts when you join">
+              Open the class on the room computer, signed in as you, so online students can see and
+              hear the room.
+            </Banner>
+          ) : null}
           {section("Later today", plan.laterToday)}
           {!started && plan.laterToday.length === 0 ? (
             <EmptyState icon="calendar" title="No classes today">
-              {plan.next ? (
-                <>
-                  Your next class is <Time value={plan.next.scheduledStart} />.
-                </>
-              ) : (
-                "No Class Meetings in the next two weeks."
-              )}
+              {plan.next
+                ? "Your next classes are under Coming up."
+                : "No Class Meetings in the next two weeks."}
             </EmptyState>
           ) : null}
           {section("Coming up", plan.comingUp)}

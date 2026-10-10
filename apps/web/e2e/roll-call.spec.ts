@@ -47,12 +47,14 @@ test("a Lecturer takes roll call on a phone, through a dropped connection", asyn
 
   // On-campus students come first.
   await expect(page.getByRole("heading", { name: "Roll call" })).toBeVisible();
-  await expect(page.getByRole("listitem")).toHaveText([/^Ada Campus/, /^Bola Online/]);
+  const rows = page.getByRole("listitem");
+  await expect(rows.nth(0)).toHaveAccessibleName("Ada Campus");
+  await expect(rows.nth(1)).toHaveAccessibleName("Bola Online");
 
   await page.getByRole("button", { name: "Mark all on-campus present" }).click();
   await expect(page.getByRole("status", { name: "Marks" })).toHaveText("Saved");
   const ada = page.getByRole("group", { name: "Mark Ada Campus" });
-  await expect(ada.getByRole("button", { name: "In room" })).toHaveAttribute(
+  await expect(ada.getByRole("button", { name: "In the room" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );

@@ -25,6 +25,7 @@ import {
 import { Sheet } from "../components/ui/dialog";
 import { Select, TextField } from "../components/ui/field";
 import { IconButton } from "../components/ui/icon-button";
+import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { cn } from "../design/cn";
 import { Icon } from "../design/icons";
@@ -52,17 +53,30 @@ function runImport(
 }
 
 /**
- * Why a cell can't be changed inline: a released grade or a choice between an online and a typed
- * score needs a reason (C-34), and an excused one is changed in the Sheet. Null when it can.
+ * The reason a change to this grade needs, or null: a released grade, or a choice between the
+ * online exam score and one typed by hand (C-34). The API refuses those changes without one.
  */
-function needsDetails(row: GradebookRow, column: GradebookColumn, cell: Cell | undefined): boolean {
+function reasonFor(
+  row: GradebookRow,
+  column: GradebookColumn,
+  cell: Cell | undefined,
+): string | null {
+  if (cell?.status === "RELEASED") return "Reason for changing a released grade";
   const online = row.onlineScores.some((o) => o.assessmentId === column.assessmentId);
-  return (
-    cell?.status === "RELEASED" ||
-    cell?.status === "EXCUSED" ||
-    cell?.source === "QUIZ" ||
-    (online && cell?.score != null)
-  );
+  if (cell?.source === "QUIZ" || (online && cell?.score != null))
+    return "Reason for choosing this score";
+  return null;
+}
+
+/** Whether a cell opens its Sheet rather than an inline input: it needs a reason, or is excused. */
+const needsDetails = (row: GradebookRow, column: GradebookColumn, cell: Cell | undefined) =>
+  cell?.status === "EXCUSED" || reasonFor(row, column, cell) !== null;
+
+/** A cell's value in words, for its accessible name. */
+function cellWords(cell: Cell | undefined): string {
+  if (cell?.status === "EXCUSED") return "excused";
+  if (cell?.score == null) return "no score";
+  return cell.status === "DRAFT" ? `${cell.score}, draft` : cell.score;
 }
 
 /**
@@ -128,17 +142,17 @@ export function Gradebook({ offeringId }: { offeringId: string }) {
       {g.weightsValid ? (
         <Banner tone="info">
           Students see a grade only after you release its column. Published columns' weights add up
-          to 100 %.
+          to 100%.
         </Banner>
       ) : (
-        <Banner tone="warning" title={`Weights add up to ${g.weightTotal} %`}>
-          Published columns' weights must add up to exactly 100 % before results can be finalized.
+        <Banner tone="warning" title="Weights must add up to 100%">
+          They add up to {g.weightTotal}% now. Results can be finalized once they add up to 100%.
         </Banner>
       )}
       {g.columns.length === 0 ? (
-        <p className="text-body-sm text-ink-muted">
-          No columns yet: add assignments or quizzes, or a column under Columns and weights.
-        </p>
+        <EmptyState icon="award" title="No columns yet">
+          Add assignments or quizzes in Work, or a column under Columns and weights.
+        </EmptyState>
       ) : (
         <GradeTable
           gradebook={g}
@@ -219,7 +233,16 @@ function GradeTable({
     });
   };
 
+  const [announcement, setAnnouncement] = useState("");
+  /** Back to a cell's button when editing ends with nowhere to move, so focus isn't lost. */
+  const focusCell = (a: Address) => {
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(`[data-cell="${keyOf(a)}"]`)?.focus();
+    });
+  };
+
   async function save(row: GradebookRow, column: GradebookColumn, value: string) {
+    const label = `${row.studentName}, ${column.title}`;
     const address = { studentId: row.studentId, assessmentId: column.assessmentId };
     const cell = row.grades.find((x) => x.assessmentId === column.assessmentId);
     const score = value.trim();
@@ -233,6 +256,7 @@ function GradeTable({
       });
       await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
       setState(address, { saved: true });
+      setAnnouncement(`Saved ${label}.`);
       window.setTimeout(() => {
         setStates((current) =>
           "saved" in (current[keyOf(address)] ?? {})
@@ -242,14 +266,16 @@ function GradeTable({
       }, 1000);
     } catch (error) {
       const fields = error instanceof ApiError ? error.fieldErrors : {};
-      setState(address, { error: fields.score ?? errorText(error), draft: score });
+      const message = fields.score ?? errorText(error);
+      setState(address, { error: message, draft: score });
+      setAnnouncement(`${label} not saved: ${message}`);
       setEditing(address);
       if (error instanceof ApiError && error.status === 412)
         await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
     }
   }
 
-  /** The cell `by` rows down or `across` columns right, wrapping to the next row. */
+  /** The next cell down, or to the right (wrapping to the next row); null past the last. */
   function neighbour(from: Address, move: "down" | "right"): Address | null {
     const r = g.rows.findIndex((x) => x.studentId === from.studentId);
     const c = g.columns.findIndex((x) => x.assessmentId === from.assessmentId);
@@ -261,86 +287,95 @@ function GradeTable({
   }
 
   return (
-    <DataTable caption="Gradebook" minWidth="min-w-205">
-      <thead>
-        <tr>
-          <th scope="col" className={cn(headCell, stickyCell, "bg-surface-sunken")}>
-            Student
-          </th>
-          {g.columns.map((c) => (
-            <th key={c.assessmentId} scope="col" className={cn(headCell, "min-w-32")}>
-              <span className="block text-ink">{c.title}</span>
-              <span className="block font-normal">
-                / {c.maxScore} · {c.weight} %{c.status === "DRAFT" ? " · draft" : ""}
-              </span>
-              <ReleaseButton column={c} offeringId={offeringId} />
+    <>
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
+      <DataTable caption="Gradebook" minWidth="min-w-205">
+        <thead>
+          <tr>
+            <th scope="col" className={cn(headCell, stickyCell, "bg-surface-sunken")}>
+              Student
             </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {g.rows.map((r) => (
-          <tr key={r.studentId}>
-            <th scope="row" className={cn(bodyCell, stickyCell, "text-left font-normal")}>
-              <span className="block text-subhead">{r.studentName}</span>
-              <span className="block text-meta text-ink-muted">
-                {[r.matricNumber, r.studyMode === "ONLINE" ? "Online" : "On campus"]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-            </th>
-            {g.columns.map((c) => {
-              const address = { studentId: r.studentId, assessmentId: c.assessmentId };
-              const cell = r.grades.find((x) => x.assessmentId === c.assessmentId);
-              const state = states[keyOf(address)];
-              const label = `${r.studentName}, ${c.title}`;
-              return (
-                <td key={c.assessmentId} className={cn(bodyCell, numericCell, "py-1.5")}>
-                  {sameCell(editing, address) ? (
-                    <InlineScore
-                      label={label}
-                      initial={state && "draft" in state ? state.draft : (cell?.score ?? "")}
-                      error={state && "error" in state ? state.error : null}
-                      onDetails={() => {
-                        setEditing(null);
-                        onDetails(address);
-                      }}
-                      onCancel={() => {
-                        setEditing(null);
-                        setState(address, null);
-                      }}
-                      onCommit={(value, move) => {
-                        setEditing(move ? neighbour(address, move) : null);
-                        void save(r, c, value);
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label={label}
-                      className="flex min-h-tap w-full items-center justify-end gap-1 rounded-sm px-2 hover:bg-brand-soft"
-                      onClick={() => {
-                        if (needsDetails(r, c, cell)) onDetails(address);
-                        else setEditing(address);
-                      }}
-                    >
-                      <CellText cell={cell} />
-                      {state && "saving" in state ? (
-                        <span className="glim-spinner size-4 rounded-pill border-2 border-line border-t-brand" />
-                      ) : state && "saved" in state ? (
-                        <span className="text-success">
-                          <Icon name="check" size={16} label="Saved" />
-                        </span>
-                      ) : null}
-                    </button>
-                  )}
-                </td>
-              );
-            })}
+            {g.columns.map((c) => (
+              <th key={c.assessmentId} scope="col" className={cn(headCell, "min-w-32")}>
+                <span className="block text-ink">{c.title}</span>
+                <span className="block font-normal">
+                  / {c.maxScore} · {c.weight}%{c.status === "DRAFT" ? " · draft" : ""}
+                </span>
+                <ReleaseButton column={c} offeringId={offeringId} />
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </DataTable>
+        </thead>
+        <tbody>
+          {g.rows.map((r) => (
+            <tr key={r.studentId}>
+              <th scope="row" className={cn(bodyCell, stickyCell, "text-left font-normal")}>
+                <span className="block text-subhead">{r.studentName}</span>
+                <span className="block text-meta text-ink-muted">
+                  {[r.matricNumber, r.studyMode === "ONLINE" ? "Online" : "On campus"]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </th>
+              {g.columns.map((c) => {
+                const address = { studentId: r.studentId, assessmentId: c.assessmentId };
+                const cell = r.grades.find((x) => x.assessmentId === c.assessmentId);
+                const state = states[keyOf(address)];
+                const label = `${r.studentName}, ${c.title}`;
+                return (
+                  <td key={c.assessmentId} className={cn(bodyCell, numericCell, "py-1.5")}>
+                    {sameCell(editing, address) ? (
+                      <InlineScore
+                        label={label}
+                        initial={state && "draft" in state ? state.draft : (cell?.score ?? "")}
+                        error={state && "error" in state ? state.error : null}
+                        onDetails={() => {
+                          setEditing(null);
+                          onDetails(address);
+                        }}
+                        onCancel={() => {
+                          setEditing(null);
+                          setState(address, null);
+                          focusCell(address);
+                        }}
+                        onCommit={(value, move) => {
+                          const next = move ? neighbour(address, move) : null;
+                          setEditing(next);
+                          if (move && next === null) focusCell(address);
+                          void save(r, c, value);
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`${label}, ${cellWords(cell)}`}
+                        data-cell={keyOf(address)}
+                        className="flex min-h-tap w-full items-center justify-end gap-1 rounded-sm px-2 hover:bg-brand-soft"
+                        onClick={() => {
+                          if (needsDetails(r, c, cell)) onDetails(address);
+                          else setEditing(address);
+                        }}
+                      >
+                        <CellText cell={cell} />
+                        {state && "saving" in state ? (
+                          <span className="glim-spinner size-4 rounded-pill border-2 border-line border-t-brand" />
+                        ) : state && "saved" in state ? (
+                          <span className="text-success">
+                            <Icon name="check" size={16} label="Saved" />
+                          </span>
+                        ) : null}
+                      </button>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </>
   );
 }
 
@@ -383,7 +418,7 @@ function InlineScore({
           defaultValue={initial}
           aria-invalid={error === null ? undefined : true}
           aria-describedby={error === null ? undefined : errorId}
-          className="h-control-sm w-20 rounded-sm border border-line-strong bg-surface px-2 text-right text-body text-ink"
+          className="h-control w-24 rounded-sm border border-line-strong bg-surface px-2 text-right text-body text-ink"
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -438,7 +473,7 @@ function ReleaseButton({ column: c, offeringId }: { column: GradebookColumn; off
     <span className="mt-1 block font-normal">
       <Button
         size="sm"
-        variant="quiet"
+        variant="secondary"
         loading={busy}
         aria-label={`Release ${String(c.unreleased)} grades for ${c.title}`}
         onClick={() =>
@@ -451,7 +486,7 @@ function ReleaseButton({ column: c, offeringId }: { column: GradebookColumn; off
           })
         }
       >
-        Release {c.unreleased}
+        Release grades
       </Button>
       {problem ? <span className="block text-danger">{problem.title}</span> : null}
     </span>
@@ -474,14 +509,8 @@ function EditGrade({
   const { busy, problem, fieldErrors, run } = useSubmit();
   const [excused, setExcused] = useState(cell?.status === "EXCUSED");
   const [saved, setSaved] = useState(false);
-  const released = cell?.status === "RELEASED";
   const online = row.onlineScores.find((o) => o.assessmentId === column.assessmentId);
-  // Moving between the online score and one typed by hand needs a reason (C-34).
-  const reasonLabel = released
-    ? "Reason for changing a released grade"
-    : cell?.source === "QUIZ" || (online !== undefined && cell?.score != null)
-      ? "Reason for choosing this score"
-      : null;
+  const reasonLabel = reasonFor(row, column, cell);
   const refresh = () => queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
   return (
     <form
@@ -616,7 +645,6 @@ function Columns({
 }) {
   const queryClient = useQueryClient();
   const { busy, problem, fieldErrors, run } = useSubmit();
-  const [formKey, setFormKey] = useState(0);
   return (
     <div className="space-y-5">
       {columns.length > 0 ? (
@@ -631,7 +659,6 @@ function Columns({
         </ul>
       ) : null}
       <form
-        key={formKey}
         aria-label="Add a column"
         className="space-y-4 border-t border-line pt-4"
         onSubmit={(e) => {
@@ -657,7 +684,6 @@ function Columns({
                 { params: { id: offeringId }, body, headers },
               );
             await queryClient.invalidateQueries({ queryKey: gradebookKey(offeringId) });
-            setFormKey((k) => k + 1);
             onAdded();
           });
         }}

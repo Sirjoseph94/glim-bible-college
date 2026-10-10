@@ -37,10 +37,10 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
   await signIn(page, LECTURER);
   await openTeaching(page, "Pastoral Care", "Gradebook");
   const note = await page
-    .getByText(/[Ww]eights add up to/)
+    .getByText(/add up to [\d.]+% now|weights add up to 100%/)
     .first()
     .textContent();
-  const total = /add up to ([\d.]+) %/.exec(note ?? "")?.[1] ?? "100";
+  const total = /add up to ([\d.]+)%/.exec(note ?? "")?.[1] ?? "100";
   const remaining = (Math.round((100 - Number(total)) * 100) / 100).toFixed(2);
   await page.getByRole("button", { name: "Columns and weights" }).click();
   const add = page.getByRole("form", { name: "Add a column" });
@@ -48,7 +48,7 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
   await add.getByLabel("Out of").fill("100");
   await add.getByLabel("Weight (%)").fill(remaining);
   await add.getByRole("button", { name: "Add column" }).click();
-  await expect(page.getByText("Published columns' weights add up to 100 %.")).toBeVisible();
+  await expect(page.getByText("Published columns' weights add up to 100%.")).toBeVisible();
   await score(page, "Bola Online, Final project", "70");
   await score(page, "Ada Campus, Final project", "45");
 

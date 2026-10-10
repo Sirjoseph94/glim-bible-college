@@ -7,8 +7,8 @@ import type {
   RollCallMark,
 } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
-import { useEffect, useId, useMemo, useRef, useState, type SubmitEvent } from "react";
+import { Link, useParams } from "@tanstack/react-router";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type SubmitEvent } from "react";
 import { api, ApiError } from "../api/client";
 import { describeError, type ErrorCopy } from "../api/error-copy";
 import { PageHeader } from "../components/app/page-header";
@@ -18,12 +18,12 @@ import { AttendanceRow } from "../components/teaching/attendance-row";
 import { Time } from "../components/time";
 import { Badge, type BadgeStatus, type Tone } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
-import { Button } from "../components/ui/button";
+import { Button, buttonClass } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Checkbox, Radio } from "../components/ui/choice";
 import { Sheet } from "../components/ui/dialog";
 import { TextField } from "../components/ui/field";
-import { IconButton } from "../components/ui/icon-button";
+import { EmptyState } from "../components/ui/empty-state";
 import { OfflineBanner, QueuedPill, useOnline } from "../components/ui/offline";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { cn } from "../design/cn";
@@ -103,7 +103,7 @@ const same = (a: Mark | null | undefined, b: Mark | null | undefined) =>
   a?.present === b?.present && a?.late === b?.late && a?.mode === b?.mode;
 
 const CHOICES = [
-  ["IN_PERSON", "In room"],
+  ["IN_PERSON", "In the room"],
   ["ONLINE", "Online"],
   ["ABSENT", "Absent"],
 ] as const;
@@ -135,17 +135,18 @@ export function RollCallPage() {
   const [everSaved, setEverSaved] = useState(false);
   const [refused, setRefused] = useState<ErrorCopy | null>(null);
   const localRef = useRef(local);
-  localRef.current = local;
   const version = useRef<number | null>(null);
-  version.current = rollCall.data?.version ?? version.current;
+  useEffect(() => {
+    localRef.current = local;
+  }, [local]);
+  useEffect(() => {
+    if (rollCall.data) version.current = rollCall.data.version;
+  }, [rollCall.data]);
   const loaded = rollCall.data !== undefined;
 
-  // Gather taps for a moment, then hand them to the queue as one batch.
-  useEffect(() => {
-    if (Object.keys(local).length === 0 || !loaded) return;
-    const timer = window.setTimeout(() => {
-      const batch = localRef.current;
-      void queueWork({
+  const queueBatch = useCallback(
+    (batch: Record<string, Mark>) =>
+      queueWork({
         key: crypto.randomUUID(),
         group,
         steps: [
@@ -159,7 +160,25 @@ export function RollCallPage() {
             ifMatch: { version: version.current ?? 0, refreshFrom: rollCallPath },
           },
         ],
-      }).then(() => {
+      }),
+    [group, meetingId],
+  );
+
+  // Leaving the page with taps not yet batched: queue them now rather than lose them.
+  useEffect(
+    () => () => {
+      const batch = localRef.current;
+      if (Object.keys(batch).length > 0 && version.current !== null) void queueBatch(batch);
+    },
+    [queueBatch],
+  );
+
+  // Gather taps for a moment, then hand them to the queue as one batch.
+  useEffect(() => {
+    if (Object.keys(local).length === 0 || !loaded) return;
+    const timer = window.setTimeout(() => {
+      const batch = localRef.current;
+      void queueBatch(batch).then(() => {
         // Keep anything tapped again while the batch was being stored.
         setLocal((current) =>
           Object.fromEntries(
@@ -171,7 +190,7 @@ export function RollCallPage() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [local, loaded, group, meetingId]);
+  }, [local, loaded, queueBatch]);
 
   // After a send, show the server's marks; a refused batch is said once.
   useEffect(() => {
@@ -272,7 +291,7 @@ export function RollCallPage() {
                       disabled={!view.open}
                       aria-pressed={on(choice)}
                       className={cn(
-                        "h-control-sm rounded-md border px-3 text-body-sm font-semibold",
+                        "min-h-tap rounded-md border px-3 text-body-sm font-semibold",
                         "disabled:cursor-not-allowed disabled:opacity-55",
                         on(choice)
                           ? choice === "ABSENT"
@@ -336,11 +355,6 @@ function recordMeta(r: AttendanceRecord): string {
     .join(" · ");
 }
 
-interface QueuedOverride {
-  studentId: string;
-  status: Status;
-}
-
 /** Overrides waiting in the queue, by student. */
 function queuedOverrides(items: QueuedWork[]): Record<string, Status> {
   const out: Record<string, Status> = {};
@@ -361,12 +375,10 @@ function OverrideSheet({
   meetingId,
   record,
   onClose,
-  onQueued,
 }: {
   meetingId: string;
   record: AttendanceRecord | null;
   onClose: () => void;
-  onQueued: (change: QueuedOverride) => void;
 }) {
   const queryClient = useQueryClient();
   const formId = useId();
@@ -427,7 +439,6 @@ function OverrideSheet({
             },
           ],
         });
-        onQueued({ studentId: record.studentId, status });
         onClose();
       }
     } finally {
@@ -528,7 +539,6 @@ export function MeetingAttendancePage() {
   const queued = useQueued(group);
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<AttendanceRecord | null>(null);
-  const [lastQueued, setLastQueued] = useState<QueuedOverride | null>(null);
   const [refused, setRefused] = useState<ErrorCopy | null>(null);
 
   useEffect(() => {
@@ -584,62 +594,76 @@ export function MeetingAttendancePage() {
           {refused.title}. {refused.body}
         </Banner>
       ) : null}
-      {view.records.length === 0 ? (
-        <p className="text-body-sm text-ink-muted">
-          No attendance yet. Take roll call to record it.
-        </p>
-      ) : (
-        <>
-          <ul aria-label="Summary" className="flex flex-wrap gap-2">
-            {counts.map(({ status, count }) => (
-              <li key={status}>
-                <Badge tone={STATUS[status].tone}>
-                  {count} {STATUS[status].word}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-          <QueuedPill count={queued.count} noun={["change", "changes"]} />
-          {lastQueued && queued.count > 0 ? (
-            <p className="sr-only" role="status">
-              Change saved on this phone. It will send when you reconnect.
-            </p>
-          ) : null}
-          <Card list role="list">
-            {sorted.map((r) => {
-              const status = statusOf(r);
-              return (
-                <AttendanceRow
-                  key={r.studentId}
-                  name={r.name}
-                  meta={pending[r.studentId] ? `${recordMeta(r)} · waiting to send` : recordMeta(r)}
-                  status={STATUS[status].badge}
-                  edited={r.overrideStatus !== null || pending[r.studentId] !== undefined}
-                  action={
-                    <IconButton
-                      icon="chevronRight"
-                      label={`Change attendance for ${r.name}`}
-                      onClick={() => {
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          {view.records.length === 0 ? (
+            <EmptyState icon="users" title="No attendance yet">
+              Take roll call to record it.
+            </EmptyState>
+          ) : (
+            <>
+              <ul aria-label="Summary" className="flex flex-wrap gap-2">
+                {counts.map(({ status, count }) => (
+                  <li key={status}>
+                    <Badge tone={STATUS[status].tone}>
+                      {count} {STATUS[status].word}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+              <span role="status">
+                <QueuedPill count={queued.count} noun={["change", "changes"]} />
+              </span>
+              <Card list role="list">
+                {sorted.map((r) => (
+                  <AttendanceRow
+                    key={r.studentId}
+                    name={r.name}
+                    meta={
+                      pending[r.studentId] ? `${recordMeta(r)} · waiting to send` : recordMeta(r)
+                    }
+                    status={STATUS[statusOf(r)].badge}
+                    edited={r.overrideStatus !== null || pending[r.studentId] !== undefined}
+                    onSelect={{
+                      label: `Change attendance for ${r.name}`,
+                      run: () => {
                         setEditing(r);
-                      }}
-                    />
-                  }
-                />
-              );
-            })}
-          </Card>
-          <p className="text-body-sm text-ink-muted">
-            Tap a student to change their status; a reason is required.
-          </p>
-        </>
-      )}
+                      },
+                    }}
+                  />
+                ))}
+              </Card>
+              <p className="text-body-sm text-ink-muted">
+                Tap a student to change their status; a reason is required.
+              </p>
+            </>
+          )}
+        </div>
+        {/* Desktop: the class's facts beside the list (§11.8). */}
+        <aside aria-label="About this class" className="space-y-3">
+          <Link
+            to="/teach/meetings/$meetingId/roll-call"
+            params={{ meetingId }}
+            className={buttonClass({ variant: "secondary", block: true })}
+          >
+            Roll call
+          </Link>
+          {meeting.data ? (
+            <a
+              href={`/api/v1/reports/attendance?offeringId=${meeting.data.courseOfferingId}&format=csv`}
+              className={buttonClass({ variant: "secondary", block: true })}
+            >
+              Course attendance (CSV)
+            </a>
+          ) : null}
+        </aside>
+      </div>
       <OverrideSheet
         meetingId={meetingId}
         record={editing}
         onClose={() => {
           setEditing(null);
         }}
-        onQueued={setLastQueued}
       />
     </div>
   );
