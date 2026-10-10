@@ -396,6 +396,7 @@ function Roster({ offeringId, open }: { offeringId: string; open: boolean }) {
       </ul>
       {open ? (
         <form
+          // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, form grid columns
           className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]"
           onSubmit={(event) => {
             event.preventDefault();

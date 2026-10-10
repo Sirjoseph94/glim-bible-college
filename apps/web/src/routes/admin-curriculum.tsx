@@ -97,6 +97,7 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
           tabIndex={0}
           className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
+          {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, table min width so columns never squash */}
           <table className="w-full min-w-[36rem] border-collapse text-sm">
             <thead>
               <tr className="text-left text-slate-600">

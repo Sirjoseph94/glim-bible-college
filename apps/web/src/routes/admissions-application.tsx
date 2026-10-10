@@ -41,6 +41,7 @@ const yesNo = (v: boolean | null) => (v === null ? null : v ? "Yes" : "No");
 
 function Rows({ rows }: { rows: [string, ReactNode][] }) {
   return (
+    // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width
     <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[12rem_1fr]">
       {rows.map(([term, value]) => (
         <div key={term} className="contents">
@@ -121,6 +122,7 @@ export function AdmissionsApplicationPage() {
         <img
           src={a.photo.downloadPath}
           alt="Applicant's passport photo"
+          // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, passport-photo aspect ratio
           className="h-48 w-[149px] rounded border border-slate-200 object-cover"
         />
       ) : null}

@@ -1,0 +1,114 @@
+/*
+ * The Tailwind v4 equivalent of the handoff's preset (docs/ui-design-handoff.md, Appendix B.1).
+ * Utilities resolve to the CSS variables in styles/tokens.css, so both themes work without
+ * `dark:` variants.
+ *
+ * `inline reference`: the utility uses the value as written (`var(--surface)`) and Tailwind
+ * emits no theme variable of its own. Where our token already has Tailwind's name
+ * (--radius-sm/md/lg, --font-sans, --font-mono), the unlayered token wins over Tailwind's
+ * theme layer, so `rounded-md` and `font-sans` already read the token.
+ *
+ * Tailwind's default palette and scales stay available until WP-UI-12 removes them
+ * (decision UI-Q16), so unmigrated screens keep working.
+ */
+@theme inline reference {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-glim-green: var(--glim-green);
+  --color-glim-red: var(--glim-red);
+  /* Replaces the old navy brand: every existing `bg-brand`/`text-brand` turns GLIM green. */
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-on: var(--on-brand);
+  --color-live: var(--live);
+  --color-live-soft: var(--live-soft);
+  --color-live-on: var(--on-live);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-focus: var(--focus);
+
+  /* Steps 1–4 already equal Tailwind's; 5, 6 and 8 move to the token values. */
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-tap: var(--tap-min);
+  --spacing-control: var(--control-h);
+  --spacing-control-sm: var(--control-h-sm);
+  --spacing-nav: var(--nav-h);
+
+  --radius-pill: var(--radius-pill);
+  --shadow-sheet: var(--shadow-sheet);
+  --shadow-pop: var(--shadow-pop);
+  --container-content: var(--content-max);
+}
+
+/*
+ * Values a CSS variable can't express: media queries can't read var(), and the type scale is
+ * part of the preset rather than tokens.css (Appendix B.1). `md`/`lg` follow bp-md and bp-lg
+ * (no code uses Tailwind's `md:`/`lg:` yet); `sm` stays at Tailwind's 640px.
+ */
+@theme {
+  --breakpoint-md: 640px;
+  --breakpoint-lg: 1024px;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-caption--font-weight: 600;
+  --text-caption--letter-spacing: 0.02em;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 20px;
+  --text-label: 14px;
+  --text-label--line-height: 20px;
+  --text-label--font-weight: 600;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-heading: 18px;
+  --text-heading--line-height: 24px;
+  --text-heading--font-weight: 600;
+  --text-title: 22px;
+  --text-title--line-height: 28px;
+  --text-title--font-weight: 650;
+  --text-display: 28px;
+  --text-display--line-height: 34px;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: -0.01em;
+  --text-code: 14px;
+  --text-code--line-height: 20px;
+  --text-code--font-weight: 500;
+  --text-figure: 32px;
+  --text-figure--line-height: 36px;
+  --text-figure--font-weight: 600;
+}
+
+/* §4.2 z-index scale. */
+@utility z-sticky {
+  z-index: var(--z-sticky);
+}
+@utility z-nav {
+  z-index: var(--z-nav);
+}
+@utility z-overlay {
+  z-index: var(--z-overlay);
+}
+@utility z-sheet {
+  z-index: var(--z-sheet);
+}
+@utility z-toast {
+  z-index: var(--z-toast);
+}

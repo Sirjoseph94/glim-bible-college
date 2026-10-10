@@ -1,0 +1,50 @@
+/*
+ * Base styles for the design system (docs/ui-design-handoff.md, Appendix A and §8, §9).
+ * Every value comes from tokens.css; this file only applies them.
+ */
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The one focus ring (§9): 2px, offset so it always lands on the page surface. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+    color: var(--ink);
+  }
+}
+
+/*
+ * §8: with reduced motion, transitions are instant and decorative animation stops. Components
+ * whose motion carries meaning (the button spinner slows to 2400 ms; sheets fade instead of
+ * sliding) override this with important `motion-reduce:!…` utilities.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -586,6 +586,7 @@ export function VerifyPage() {
               longer valid.
             </Alert>
           )}
+          {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width */}
           <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1">
             <dt className="text-slate-600">Issued by</dt>
             <dd>{check.data.institutionName}</dd>

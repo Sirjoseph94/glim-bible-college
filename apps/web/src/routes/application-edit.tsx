@@ -842,6 +842,7 @@ function PhotoField({
         <img
           src={src}
           alt="Your passport photo"
+          // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, passport-photo aspect ratio
           className="h-48 w-[149px] rounded border border-slate-200 object-cover"
         />
       )}

@@ -24,6 +24,7 @@ export function ProfilePage() {
       {search.error ? (
         <Alert tone="error">{GOOGLE_ERRORS[search.error] ?? "Something went wrong."}</Alert>
       ) : null}
+      {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width */}
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 rounded border border-slate-200 bg-white p-4">
         <dt className="text-slate-600">Name</dt>
         <dd>{me.user.displayName}</dd>
