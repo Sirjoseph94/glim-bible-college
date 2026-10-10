@@ -7,7 +7,7 @@ describe("Crest", () => {
     const html = renderToStaticMarkup(<Crest />);
     expect(html).toContain('alt="GLIM crest"');
     expect(html).toContain('height="28"');
-    expect(html).toContain("bg-white");
+    expect(html).toContain("glim-chip");
     expect(html).toContain("padding:2px");
     expect(html).toContain("border-radius:6px");
   });

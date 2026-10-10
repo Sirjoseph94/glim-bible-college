@@ -99,8 +99,8 @@
 
 /*
  * Values a CSS variable can't express: media queries can't read var(), and the type scale is
- * part of the preset rather than tokens.css (Appendix B.1). `md`/`lg` follow bp-md and bp-lg
- * (no code uses Tailwind's `md:`/`lg:` yet); `sm` stays at Tailwind's 640px.
+ * part of the preset rather than tokens.css (Appendix B.1). `md`/`lg` follow bp-md and bp-lg;
+ * `sm` stays at Tailwind's 640px.
  */
 @theme {
   --breakpoint-md: 640px;
@@ -131,12 +131,15 @@
   --text-code--line-height: 20px;
   --text-code--font-weight: 500;
   /* Proposed steps the handoff's component specs use without naming (WP-UI-03; see
-     docs/implementation-notes.md): 15/22 row titles, 13/18 metadata, 20/28 the greeting. */
+     docs/implementation-notes.md): 15/22 row titles, 13/18 metadata, 17/24 the top-bar name, 20/28 the greeting. */
   --text-subhead: 15px;
   --text-subhead--line-height: 22px;
   --text-subhead--font-weight: 600;
   --text-meta: 13px;
   --text-meta--line-height: 18px;
+  --text-wordmark: 17px;
+  --text-wordmark--line-height: 24px;
+  --text-wordmark--font-weight: 700;
   --text-greeting: 20px;
   --text-greeting--line-height: 28px;
   --text-greeting--font-weight: 700;

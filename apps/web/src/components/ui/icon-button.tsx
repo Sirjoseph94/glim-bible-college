@@ -3,6 +3,11 @@ import { cn } from "../../design/cn";
 import { Icon, type IconName } from "../../design/icons";
 import { NotificationDot } from "./notification-dot";
 
+/** The icon button's look, for a link that must look the same (Notifications in the top bar). */
+export const iconButtonClass =
+  "relative inline-flex size-tap shrink-0 items-center justify-center rounded-pill text-ink-muted " +
+  "transition-colors duration-120 hover:bg-surface-sunken";
+
 /** An icon-only button: 44 × 44 hit area and a required label (§9.2, §13). */
 export function IconButton({
   icon,
@@ -19,16 +24,7 @@ export function IconButton({
   dot?: boolean;
 }) {
   return (
-    <button
-      type={type}
-      aria-label={label}
-      className={cn(
-        "relative inline-flex size-tap shrink-0 items-center justify-center rounded-pill text-ink-muted",
-        "transition-colors duration-120 hover:bg-surface-sunken",
-        className,
-      )}
-      {...rest}
-    >
+    <button type={type} aria-label={label} className={cn(iconButtonClass, className)} {...rest}>
       <Icon name={icon} />
       {dot ? <NotificationDot className="absolute top-2 right-2" /> : null}
     </button>

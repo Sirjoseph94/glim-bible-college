@@ -38,4 +38,13 @@ describe("Button", () => {
     expect(html).toContain("border-line-strong");
     expect(html).not.toContain("<button");
   });
+
+  it("keeps its leading icon when styled onto a link", () => {
+    const html = renderToStaticMarkup(
+      <Button asChild icon="play">
+        <a href="/recordings/1">Watch recording</a>
+      </Button>,
+    );
+    expect(html).toMatch(/^<a [^>]*><svg[^>]*>.*M8 5v14l11-7z.*<\/svg>Watch recording<\/a>$/);
+  });
 });

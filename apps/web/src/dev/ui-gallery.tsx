@@ -10,6 +10,8 @@ import { Card } from "../components/ui/card";
 import { Checkbox, Radio, Switch } from "../components/ui/choice";
 import { ConfirmDialog, Sheet } from "../components/ui/dialog";
 import { Disclosure } from "../components/ui/disclosure";
+import { Divider } from "../components/ui/divider";
+import { PageHeader } from "../components/app/page-header";
 import { EmptyState } from "../components/ui/empty-state";
 import { Select, TextField } from "../components/ui/field";
 import { IconButton } from "../components/ui/icon-button";
@@ -156,7 +158,21 @@ function Specimens({ theme }: { theme: "light" | "dark" }) {
         <OfflineBanner />
         <QueuedPill count={1} noun={["submission", "submissions"]} />
       </Section>
+      <Section title={`Page header (${theme})`}>
+        <PageHeader
+          overline="PAS 101 · 01"
+          title="Pastoral Care"
+          headingLevel={2}
+          meta="26 students · you are the primary Lecturer"
+          actions={
+            <Button variant="secondary" size="sm" icon="download">
+              Import scores (CSV)
+            </Button>
+          }
+        />
+      </Section>
       <Section title={`Form controls (${theme})`}>
+        <Divider label="or use your email" />
         <TextField id={id("email")} label="Email" type="email" autoComplete="username" />
         <TextField id={id("middle")} label="Middle name" optional />
         <TextField
@@ -242,7 +258,7 @@ function Interactive() {
             setSheet(true);
           }}
         >
-          Choose quality
+          Filter recordings
         </Button>
         <Button
           variant="danger"
@@ -264,8 +280,8 @@ function Interactive() {
       <Sheet
         open={sheet}
         onOpenChange={setSheet}
-        title="Video quality"
-        description="Lower quality uses less data."
+        title="Show recordings"
+        description="Choose which recordings to list."
         footer={
           <Button
             variant="primary"
@@ -278,8 +294,8 @@ function Interactive() {
           </Button>
         }
       >
-        <Radio label="Auto (saves data)" name="quality" defaultChecked />
-        <Radio label="144p · about 40 MB per hour" name="quality" />
+        <Radio label="All recordings" name="filter" defaultChecked />
+        <Radio label="Not watched yet" name="filter" />
       </Sheet>
       <ConfirmDialog
         open={confirm}

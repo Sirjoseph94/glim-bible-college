@@ -1,5 +1,6 @@
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { useId, useRef, useState, type ReactNode } from "react";
+import { Banner } from "./banner";
 import { Button } from "./button";
 import { TextField } from "./field";
 
@@ -124,6 +125,7 @@ export function ConfirmDialog({
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const minLength = reason?.minLength ?? 5;
 
   async function confirm() {
@@ -136,8 +138,16 @@ export function ConfirmDialog({
       }
     }
     setBusy(true);
+    setFailure(null);
     try {
       await onConfirm(text.trim());
+    } catch (error) {
+      // The dialog stays open with what was typed, and says what happened (§10.1, §12.3).
+      setFailure(
+        error instanceof Error && error.message !== ""
+          ? error.message
+          : "Something went wrong on our side. Try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -150,12 +160,13 @@ export function ConfirmDialog({
         if (!next) {
           setText("");
           setProblem(null);
+          setFailure(null);
         }
         onOpenChange(next);
       }}
     >
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="glim-scrim fixed inset-0 z-overlay" />
+        <RadixDialog.Overlay className="glim-scrim glim-scrim-dialog fixed inset-0 z-overlay" />
         <RadixDialog.Content
           {...returnFocus}
           className={
@@ -167,6 +178,11 @@ export function ConfirmDialog({
           <RadixDialog.Description className="mt-2 text-body text-ink">
             {children}
           </RadixDialog.Description>
+          {failure ? (
+            <Banner tone="danger" className="mt-4">
+              {failure}
+            </Banner>
+          ) : null}
           {reason ? (
             <div className="mt-4">
               <TextField

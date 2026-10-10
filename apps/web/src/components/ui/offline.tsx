@@ -11,7 +11,10 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/** Whether the browser thinks it is online. Requests that fail with a network error also count. */
+/**
+ * Whether the browser thinks it is online. §9.20 also counts requests that fail with a network
+ * error; that signal comes with the offline queue (WP-UI-07).
+ */
 export function useOnline(): boolean {
   return useSyncExternalStore(
     subscribe,

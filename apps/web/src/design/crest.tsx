@@ -16,7 +16,7 @@ const CHIP = {
 /** The GLIM crest: 28 in the phone top bar, 36 in the desktop rail, 72 on sign-in. */
 export function Crest({ size = 28 }: { size?: keyof typeof CHIP }) {
   return (
-    <span className="inline-flex shrink-0 bg-white" style={CHIP[size]}>
+    <span className="glim-chip inline-flex shrink-0" style={CHIP[size]}>
       <img src={crestUrl} alt="GLIM crest" height={size} width={Math.round(size * ASPECT)} />
     </span>
   );

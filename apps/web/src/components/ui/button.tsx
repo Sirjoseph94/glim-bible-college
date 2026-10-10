@@ -4,6 +4,7 @@ import {
   isValidElement,
   type ButtonHTMLAttributes,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { cn } from "../../design/cn";
 import { Icon, type IconName } from "../../design/icons";
@@ -16,8 +17,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary:
     "border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken active:bg-surface-sunken",
   quiet: "text-brand hover:bg-brand-soft active:bg-brand-soft",
-  // "Live bg + 6% black overlay" on hover (§9.1).
-  live: "bg-live text-live-on hover:brightness-94 active:brightness-94",
+  live: "glim-live-hover bg-live text-live-on",
   danger:
     "border border-danger bg-surface-raised text-danger hover:bg-danger-soft active:bg-danger-soft",
 };
@@ -97,12 +97,16 @@ export function Button({
   const classes = cn(buttonClass({ variant, size, block }), className);
   const iconSize = size === "md" ? 20 : 16;
   if (asChild) {
+    // A link styled as a button: it keeps its leading icon; `loading` doesn't apply to links.
     const child = Children.only(children);
-    if (!isValidElement<{ className?: string }>(child))
+    if (!isValidElement<{ className?: string; children?: ReactNode }>(child))
       throw new Error("Button asChild needs one element child");
-    return cloneElement(child as ReactElement<{ className?: string }>, {
-      className: cn(classes, child.props.className),
-    });
+    return cloneElement(
+      child as ReactElement<{ className?: string; children?: ReactNode }>,
+      { className: cn(classes, child.props.className) },
+      icon ? <Icon name={icon} size={iconSize} /> : null,
+      child.props.children,
+    );
   }
   return (
     <button

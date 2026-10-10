@@ -22,7 +22,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center gap-3 p-8 text-center">
       <span className="flex size-12 items-center justify-center rounded-pill bg-surface-sunken text-ink-muted">
-        <Icon name={icon} size={22} />
+        <Icon name={icon} size={24} />
       </span>
       <Heading className="text-heading text-ink">{title}</Heading>
       {children ? <p className="max-w-prose text-body-sm text-ink-muted">{children}</p> : null}

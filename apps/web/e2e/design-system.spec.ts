@@ -27,18 +27,18 @@ test("the page and its overlays pass axe in the dark theme", async ({ page }) =>
   await page.getByRole("button", { name: "Dark page" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expectAccessible(page);
-  await page.getByRole("button", { name: "Choose quality" }).click();
-  await expect(page.getByRole("dialog", { name: "Video quality" })).toBeVisible();
+  await page.getByRole("button", { name: "Filter recordings" }).click();
+  await expect(page.getByRole("dialog", { name: "Show recordings" })).toBeVisible();
   await expectAccessible(page, '[role="dialog"]');
 });
 
 test("a sheet traps focus, closes on Escape and gives focus back", async ({ page }) => {
   await page.goto("/dev/ui");
-  const opener = page.getByRole("button", { name: "Choose quality" });
+  const opener = page.getByRole("button", { name: "Filter recordings" });
   // Keyboard users are the ones who need focus back; a tap on a phone doesn't focus a button.
   await opener.focus();
   await page.keyboard.press("Enter");
-  const sheet = page.getByRole("dialog", { name: "Video quality" });
+  const sheet = page.getByRole("dialog", { name: "Show recordings" });
   await expect(sheet).toBeVisible();
   for (let i = 0; i < 6; i += 1) {
     await page.keyboard.press("Tab");

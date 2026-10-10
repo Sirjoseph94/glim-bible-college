@@ -33,10 +33,14 @@ interface Area extends NavItem {
   pages?: Page[];
 }
 
+function holdsAny(roles: Roles, wanted: StaffRole[]): boolean {
+  return roles.staff.some((role) => wanted.includes(role));
+}
+
 const staff =
   (...wanted: StaffRole[]) =>
   (roles: Roles) =>
-    roles.staff.some((role) => wanted.includes(role));
+    holdsAny(roles, wanted);
 
 /**
  * The main navigation (docs/ui-design-handoff.md §6.3, decisions UI-Q6 and D-UI-01): an area
@@ -195,7 +199,7 @@ export function activeItem(pathname: string, items: NavItem[]): NavItem | undefi
 /** The other pages of the page's area that the person may open; empty when there are none. */
 export function sectionLinks(pathname: string, roles: Roles): SectionLink[] {
   const pages = (areaFor(pathname, visibleAreas(roles))?.pages ?? []).filter(
-    (page) => page.staff === undefined || page.staff.some((role) => roles.staff.includes(role)),
+    (page) => page.staff === undefined || holdsAny(roles, page.staff),
   );
   return pages.length > 1 ? pages.map(({ label, to }) => ({ label, to })) : [];
 }

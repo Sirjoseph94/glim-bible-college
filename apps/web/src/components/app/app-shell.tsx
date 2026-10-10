@@ -1,23 +1,55 @@
 import type { Me } from "@glim/contracts";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { cn } from "../../design/cn";
 import { Crest } from "../../design/crest";
-import { Icon } from "../../design/icons";
+import { Icon, type IconName } from "../../design/icons";
 import { Avatar } from "../ui/avatar";
+import { iconButtonClass } from "../ui/icon-button";
 import { Sheet } from "../ui/dialog";
 import { Menu } from "../ui/menu";
 import { NotificationDot } from "../ui/notification-dot";
+import { BackLink } from "./back-link";
 import { activeItem, navItems, sectionLinks, type NavItem } from "./nav";
+
+/** A detail page's top bar (§6.2): back to the parent by name, and the course code. */
+export interface DetailBar {
+  back: { to: Parameters<typeof BackLink>[0]["to"]; label: string };
+  code?: string;
+}
+
+const DetailBarContext = createContext<(bar: DetailBar | null) => void>(() => undefined);
+
+/**
+ * Turns the top bar into a detail bar while the calling page is shown: the back link replaces
+ * the crest and name, and the course code sits on the right.
+ */
+export function useDetailBar(bar: DetailBar): void {
+  const setBar = useContext(DetailBarContext);
+  const { to, label } = bar.back;
+  const { code } = bar;
+  useEffect(() => {
+    setBar({ back: { to, label }, ...(code === undefined ? {} : { code }) });
+    return () => {
+      setBar(null);
+    };
+  }, [setBar, to, label, code]);
+}
+
+function CourseCode({ code }: { code: string }) {
+  return <span className="shrink-0 font-mono text-code text-brand">{code}</span>;
+}
 
 /** The bottom bar holds this many items; beyond it the rest go under "More". */
 const BOTTOM_NAV_MAX = 5;
 
 function InstitutionName({ name, testId }: { name: string | undefined; testId?: string }) {
   return name === undefined ? (
-    <span className="block h-6 w-40 rounded-sm bg-surface-sunken" aria-label="Loading" />
+    <span className="block h-6 w-40 rounded-sm bg-surface-sunken">
+      <span className="sr-only">Loading</span>
+    </span>
   ) : (
-    <span data-testid={testId} className="truncate text-heading font-bold text-ink">
+    <span data-testid={testId} className="truncate text-wordmark text-ink">
       {name}
     </span>
   );
@@ -28,7 +60,7 @@ function NotificationsLink({ unread }: { unread: boolean }) {
     <Link
       to="/notifications"
       aria-label={unread ? "Notifications, something new" : "Notifications"}
-      className="relative inline-flex size-tap shrink-0 items-center justify-center rounded-pill text-ink-muted transition-colors duration-120 hover:bg-surface-sunken"
+      className={iconButtonClass}
     >
       <Icon name="bell" />
       {unread ? <NotificationDot className="absolute top-2 right-2" /> : null}
@@ -63,26 +95,37 @@ function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void 
   );
 }
 
-/** One navigation link: icon in a pill over its label (bottom bar), or stacked (rail). */
-function NavLink({ item, current }: { item: NavItem; current: boolean }) {
+const navTargetClass = (current: boolean) =>
+  cn(
+    "flex min-h-tap flex-1 flex-col items-center justify-center gap-1 text-caption",
+    current ? "text-brand" : "text-ink-muted",
+  );
+
+/** The icon in its 56 × 30 pill over the label (§9.8); the pill fills in when current. */
+function NavPill({ icon, label, current }: { icon: IconName; label: string; current: boolean }) {
   return (
-    <Link
-      to={item.to}
-      aria-current={current ? "page" : undefined}
-      className={cn(
-        "flex min-h-tap flex-1 flex-col items-center justify-center gap-1 text-caption",
-        current ? "text-brand" : "text-ink-muted",
-      )}
-    >
+    <>
       <span
         className={cn(
           "flex h-7.5 w-14 items-center justify-center rounded-pill",
           current && "bg-brand-soft",
         )}
       >
-        <Icon name={item.icon} size={22} />
+        <Icon name={icon} size={22} />
       </span>
-      {item.label}
+      {label}
+    </>
+  );
+}
+
+function NavLink({ item, current }: { item: NavItem; current: boolean }) {
+  return (
+    <Link
+      to={item.to}
+      aria-current={current ? "page" : undefined}
+      className={navTargetClass(current)}
+    >
+      <NavPill icon={item.icon} label={item.label} current={current} />
     </Link>
   );
 }
@@ -105,23 +148,14 @@ function BottomNav({ items, current }: { items: NavItem[]; current: NavItem | un
         {overflow ? (
           <button
             type="button"
+            aria-haspopup="dialog"
+            aria-expanded={more}
             onClick={() => {
               setMore(true);
             }}
-            className={cn(
-              "flex min-h-tap flex-1 flex-col items-center justify-center gap-1 text-caption",
-              moreIsCurrent ? "text-brand" : "text-ink-muted",
-            )}
+            className={navTargetClass(moreIsCurrent)}
           >
-            <span
-              className={cn(
-                "flex h-7.5 w-14 items-center justify-center rounded-pill",
-                moreIsCurrent && "bg-brand-soft",
-              )}
-            >
-              <Icon name="menu" size={22} />
-            </span>
-            More
+            <NavPill icon="menu" label="More" current={moreIsCurrent} />
           </button>
         ) : null}
       </div>
@@ -171,7 +205,7 @@ function SectionNav({ pathname, me }: { pathname: string; me: Me }) {
   const links = sectionLinks(pathname, me.roles);
   if (links.length === 0) return null;
   return (
-    <nav aria-label="Section" className="-mx-4 overflow-x-auto px-4">
+    <nav aria-label="Section" className="overflow-x-auto">
       <div className="flex gap-1 border-b border-line">
         {links.map((link) => {
           const current = pathname === link.to;
@@ -214,6 +248,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { pathname } = useLocation();
+  const [detail, setDetail] = useState<DetailBar | null>(null);
   const items = navItems(me.roles);
   const current = activeItem(pathname, items);
   const actions = (
@@ -223,29 +258,50 @@ export function AppShell({
     </div>
   );
   return (
-    <div className="flex h-dvh bg-surface text-ink">
-      <NavRail items={items} current={current} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-nav flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line bg-surface-raised pr-1 pl-4 lg:hidden">
-          <Link to="/" className="flex min-w-0 items-center gap-2">
-            <Crest size={28} />
-            <InstitutionName name={institutionName} testId="institution-name" />
-          </Link>
-          {actions}
-        </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-content space-y-5 px-4 pt-4 pb-6 lg:px-6 lg:pt-6 lg:pb-8">
-            <div className="hidden items-center justify-between gap-4 lg:flex">
-              <InstitutionName name={institutionName} />
-              {actions}
+    <DetailBarContext.Provider value={setDetail}>
+      <div className="flex h-dvh bg-surface text-ink">
+        <NavRail items={items} current={current} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="glim-safe-top z-nav shrink-0 border-b border-line bg-surface-raised lg:hidden">
+            <div className="flex h-14 items-center justify-between gap-2 pr-1 pl-4">
+              {detail ? (
+                <>
+                  <BackLink to={detail.back.to} label={detail.back.label} />
+                  {detail.code ? (
+                    <span className="pr-3">
+                      <CourseCode code={detail.code} />
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Link to="/" className="flex min-w-0 items-center gap-2">
+                    <Crest size={28} />
+                    <InstitutionName name={institutionName} testId="institution-name" />
+                  </Link>
+                  {actions}
+                </>
+              )}
             </div>
-            <SectionNav pathname={pathname} me={me} />
-            {children}
-          </div>
-        </main>
-        <BottomNav items={items} current={current} />
+          </header>
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <div className="glim-gutter mx-auto w-full max-w-content space-y-5 pt-4 pb-5 lg:pt-6 lg:pb-8">
+              <div className="hidden items-center justify-between gap-4 lg:flex">
+                {detail ? (
+                  <BackLink to={detail.back.to} label={detail.back.label} />
+                ) : (
+                  <InstitutionName name={institutionName} />
+                )}
+                {actions}
+              </div>
+              <SectionNav pathname={pathname} me={me} />
+              {children}
+            </div>
+          </main>
+          <BottomNav items={items} current={current} />
+        </div>
       </div>
-    </div>
+    </DetailBarContext.Provider>
   );
 }
 
@@ -259,11 +315,11 @@ export function SignedOutShell({
 }) {
   return (
     <div className="min-h-dvh bg-surface text-ink">
-      <header className="flex h-14 items-center gap-2 border-b border-line bg-surface-raised px-4">
+      <header className="glim-safe-top flex h-14 items-center gap-2 border-b border-line bg-surface-raised px-4">
         <Crest size={28} />
         <InstitutionName name={institutionName} testId="institution-name" />
       </header>
-      <main className="mx-auto w-full max-w-3xl px-4 py-6">{children}</main>
+      <main className="glim-gutter mx-auto w-full max-w-3xl py-6">{children}</main>
     </div>
   );
 }

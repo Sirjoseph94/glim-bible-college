@@ -37,8 +37,11 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-/** 16 inline with small text, 20 default, 22 navigation, 30 the player's play glyph (§7.1). */
-export type IconSize = 16 | 20 | 22 | 30;
+/**
+ * 16 inline with small text, 20 default, 22 navigation, 24 empty states, 30 the player's play
+ * glyph (§7.1, §9.12).
+ */
+export type IconSize = 16 | 20 | 22 | 24 | 30;
 
 /**
  * Decorative by default (the visible word next to it carries the meaning). Give `label` only
