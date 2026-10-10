@@ -4,6 +4,7 @@ import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { Alert } from "../components/form";
+import { Icon } from "../design/icons";
 
 /** The parts of the YouTube IFrame API the player uses. */
 interface YouTubePlayer {
@@ -190,7 +191,7 @@ function Player({ playback }: { playback: VideoPlayback }) {
   src.searchParams.set("origin", window.location.origin);
   return (
     <div className="space-y-2">
-      <div className="relative aspect-video w-full overflow-hidden rounded bg-black">
+      <div className="glim-stage relative aspect-video w-full overflow-hidden rounded">
         <iframe
           ref={frame}
           title={playback.title}
@@ -249,7 +250,7 @@ export function RecordingPage() {
       ) : (
         <button
           type="button"
-          className="group relative block aspect-video w-full overflow-hidden rounded bg-black"
+          className="glim-stage group relative block aspect-video w-full overflow-hidden rounded"
           onClick={() => {
             setStarted(true);
           }}
@@ -262,9 +263,9 @@ export function RecordingPage() {
             height={180}
             className="h-full w-full object-cover opacity-90"
           />
-          <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-2xl shadow group-hover:bg-red-700">
-              ▶
+          <span className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <span className="glim-stage-chip flex size-16 items-center justify-center rounded-pill">
+              <Icon name="play" size={30} />
             </span>
             {p.resumeMs > 0 ? (
               <span className="rounded bg-black/70 px-2 py-0.5 text-sm">

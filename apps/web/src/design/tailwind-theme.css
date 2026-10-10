@@ -59,6 +59,45 @@
 }
 
 /*
+ * TEMPORARY BRIDGE (WP-UI-04a): Tailwind palette names still used by unmigrated screens point at
+ * the tokens, so every page follows the theme (and dark mode can be on) before its own
+ * migration. Each screen WP replaces these classes with token names; WP-UI-12 deletes this block
+ * together with Tailwind's default palette (decision UI-Q16). Do not use these names in new code.
+ */
+@theme inline reference {
+  --color-white: var(--surface-raised);
+  --color-slate-50: var(--surface);
+  --color-slate-100: var(--surface-sunken);
+  --color-slate-200: var(--line);
+  --color-slate-300: var(--line-strong);
+  --color-slate-400: var(--ink-muted);
+  --color-slate-500: var(--ink-muted);
+  --color-slate-600: var(--ink-muted);
+  --color-slate-700: var(--ink-muted);
+  --color-slate-800: var(--ink);
+  --color-slate-900: var(--ink);
+  --color-red-50: var(--danger-soft);
+  --color-red-100: var(--danger-soft);
+  --color-red-200: var(--danger);
+  --color-red-300: var(--danger);
+  --color-red-600: var(--danger);
+  --color-red-700: var(--danger);
+  --color-red-800: var(--danger);
+  --color-amber-50: var(--warning-soft);
+  --color-amber-100: var(--warning-soft);
+  --color-amber-200: var(--warning);
+  --color-amber-700: var(--warning);
+  --color-amber-800: var(--warning);
+  --color-amber-900: var(--warning);
+  --color-green-50: var(--success-soft);
+  --color-green-200: var(--success);
+  --color-green-700: var(--success);
+  --color-green-800: var(--success);
+  /* Links were blue; links are brand (§4.1). */
+  --color-blue-700: var(--brand);
+}
+
+/*
  * Values a CSS variable can't express: media queries can't read var(), and the type scale is
  * part of the preset rather than tokens.css (Appendix B.1). `md`/`lg` follow bp-md and bp-lg
  * (no code uses Tailwind's `md:`/`lg:` yet); `sm` stays at Tailwind's 640px.

@@ -22,11 +22,11 @@ test("every primitive passes axe, in the light and the dark theme", async ({ pag
   await expectAccessible(page);
 });
 
-test("overlays pass axe on a dark page", async ({ page }) => {
-  // Only the overlay is checked: the current app shell is light-only until WP-UI-04.
+test("the page and its overlays pass axe in the dark theme", async ({ page }) => {
   await page.goto("/dev/ui");
   await page.getByRole("button", { name: "Dark page" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expectAccessible(page);
   await page.getByRole("button", { name: "Choose quality" }).click();
   await expect(page.getByRole("dialog", { name: "Video quality" })).toBeVisible();
   await expectAccessible(page, '[role="dialog"]');

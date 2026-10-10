@@ -64,3 +64,26 @@ test("the System Admin's pages", async ({ page }) => {
   for (const path of ["/admin/users", "/admin/ops", "/admin/jobs", "/admin/audit"])
     await expectAccessible(page, path);
 });
+
+test.describe("in the dark theme", () => {
+  // The theme follows the device (UI-2); these pages are checked again with a dark device.
+  test.use({ colorScheme: "dark" });
+
+  test("public pages", async ({ page }) => {
+    for (const path of ["/login", "/apply", "/forgot", "/verify/NOTACODE"])
+      await expectAccessible(page, path);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
+  test("a Lecturer's pages", async ({ page }) => {
+    await signIn(page, LECTURER);
+    for (const path of ["/", "/teach", "/notifications", "/profile"])
+      await expectAccessible(page, path);
+  });
+
+  test("the Registrar's results pages", async ({ page }) => {
+    await signIn(page, REGISTRAR);
+    for (const path of ["/results/courses", "/results/semesters", "/results/transcripts"])
+      await expectAccessible(page, path);
+  });
+});

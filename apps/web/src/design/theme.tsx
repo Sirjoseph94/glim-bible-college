@@ -50,6 +50,14 @@ function safeLocalStorage(): Storage | undefined {
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
+/** Sets the theme before the first render, so a dark device never flashes light. */
+export function applyInitialTheme(): void {
+  document.documentElement.dataset.theme = resolveTheme(
+    readThemePreference(safeLocalStorage()),
+    window.matchMedia(DARK_QUERY).matches,
+  );
+}
+
 interface ThemeContextValue {
   preference: ThemePreference;
   theme: Theme;

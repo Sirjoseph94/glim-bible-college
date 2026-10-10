@@ -142,3 +142,15 @@
     animation-duration: 120ms !important;
   }
 }
+
+/*
+ * The video stage (§9.16): always black with light controls, in both themes. A documented
+ * exception to tokens-only.
+ */
+.glim-stage {
+  background: #0b0f0d;
+  color: #ecf2ee;
+}
+.glim-stage-chip {
+  background: rgb(255 255 255 / 0.18);
+}

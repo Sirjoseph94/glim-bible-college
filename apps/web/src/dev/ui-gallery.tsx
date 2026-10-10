@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Crest } from "../design/crest";
 import { Icon, type IconName } from "../design/icons";
+import { useTheme } from "../design/theme";
 import { Avatar } from "../components/ui/avatar";
 import { Badge, type BadgeStatus } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
@@ -310,13 +311,7 @@ function Interactive() {
 }
 
 export function DevUiPage() {
-  const [pageTheme, setPageTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    document.documentElement.dataset.theme = pageTheme;
-    return () => {
-      document.documentElement.dataset.theme = "light";
-    };
-  }, [pageTheme]);
+  const { theme, setPreference } = useTheme();
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -324,10 +319,10 @@ export function DevUiPage() {
         <Button
           size="sm"
           onClick={() => {
-            setPageTheme(pageTheme === "light" ? "dark" : "light");
+            setPreference(theme === "light" ? "dark" : "light");
           }}
         >
-          {pageTheme === "light" ? "Dark page" : "Light page"}
+          {theme === "light" ? "Dark page" : "Light page"}
         </Button>
       </div>
       <Interactive />
