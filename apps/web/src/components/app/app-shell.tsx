@@ -231,7 +231,11 @@ export function AppShell({
             <div className="flex h-14 items-center justify-between gap-2 pr-1 pl-4">
               {detail ? (
                 <>
-                  <BackLink to={detail.back.to} label={detail.back.label} />
+                  <BackLink
+                    to={detail.back.to}
+                    label={detail.back.label}
+                    {...(detail.back.params ? { params: detail.back.params } : {})}
+                  />
                   {detail.code ? (
                     <span className="pr-3">
                       <CourseCode code={detail.code} />
@@ -253,7 +257,11 @@ export function AppShell({
             <div className="glim-gutter mx-auto w-full max-w-content space-y-5 pt-4 pb-5 lg:pt-6 lg:pb-8">
               <div className="hidden items-center justify-between gap-4 lg:flex">
                 {detail ? (
-                  <BackLink to={detail.back.to} label={detail.back.label} />
+                  <BackLink
+                    to={detail.back.to}
+                    label={detail.back.label}
+                    {...(detail.back.params ? { params: detail.back.params } : {})}
+                  />
                 ) : (
                   <InstitutionName name={institutionName} />
                 )}

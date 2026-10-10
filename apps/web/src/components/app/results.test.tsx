@@ -47,7 +47,19 @@ describe("ResultRow (handoff §9.17)", () => {
     expect(text(html)).toContain("BTH 301 · 3 credits");
     expect(text(html)).toContain("Kings of Judah");
     expect(html).toMatch(/<strong[^>]*>A<\/strong>/);
-    expect(text(html)).toContain("83.50%");
+    expect(text(html)).toContain("84%");
+  });
+
+  it("rounds percentages to whole numbers, keeping decimals only under 1% (§10.6)", () => {
+    const pct = (pctX100: number) =>
+      text(
+        renderToStaticMarkup(
+          <ResultRow code="X" title="Y" creditsX10={10} letter="F" pctX100={pctX100} />,
+        ),
+      );
+    expect(pct(8349)).toContain("83%");
+    expect(pct(10000)).toContain("100%");
+    expect(pct(50)).toContain("0.50%");
   });
 
   it("marks a result that isn't in yet as Awaiting", () => {

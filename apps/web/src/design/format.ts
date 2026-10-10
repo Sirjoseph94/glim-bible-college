@@ -34,6 +34,13 @@ export function hundredths(value: number | null): string {
   return `${String(Math.trunc(value / 100))}.${String(value % 100).padStart(2, "0")}`;
 }
 
+/** A percentage from hundredths (§10.6): whole numbers, two decimals only under 1%. */
+export function percent(valueX100: number): string {
+  return valueX100 < 100
+    ? `${hundredths(valueX100)}%`
+    : `${String(Math.floor((valueX100 + 50) / 100))}%`;
+}
+
 /** Tenths of a credit, e.g. 30 → "3", 25 → "2.5". */
 export function credits(tenths: number): string {
   return tenths % 10 === 0

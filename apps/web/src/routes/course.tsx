@@ -5,13 +5,13 @@ import { api } from "../api/client";
 import { useDetailBar } from "../components/app/shell-parts";
 import { ClassMeetingCard } from "../components/app/class-meeting-card";
 import { PageHeader } from "../components/app/page-header";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { CourseAssignments } from "../components/assignments";
 import { CourseAnnouncements, CourseMaterials } from "../components/course-content";
 import { MyGrades } from "../components/grades";
 import { CourseQuizzes } from "../components/quizzes";
 import { Time } from "../components/time";
 import { Badge, type BadgeStatus } from "../components/ui/badge";
-import { Banner } from "../components/ui/banner";
 import { Card } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
@@ -27,32 +27,11 @@ const ATTENDANCE_BADGE: Record<string, BadgeStatus> = {
 };
 
 function Overview({ offeringId }: { offeringId: string }) {
-  const mine = useQuery({
-    queryKey: ["me", "attendance"],
-    queryFn: ({ signal }) =>
-      api<typeof attendance.getMyAttendance>("GET", "/me/attendance", { signal }),
-  });
-  const course = mine.data?.courses.find((c) => c.offeringId === offeringId);
   return (
-    <div className="space-y-5">
-      {course ? (
-        <section className="space-y-2">
-          <h2 className="text-heading">Your attendance</h2>
-          <div className="flex flex-wrap gap-2">
-            <Badge tone="success">{course.summary.present} Present</Badge>
-            <Badge tone="warning">{course.summary.partial} Partial</Badge>
-            <Badge tone="danger">{course.summary.absent} Absent</Badge>
-            {course.summary.excused > 0 ? (
-              <Badge tone="info">{course.summary.excused} Excused</Badge>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-      <section className="space-y-2">
-        <h2 className="text-heading">Announcements</h2>
-        <CourseAnnouncements offeringId={offeringId} manage={false} />
-      </section>
-    </div>
+    <section className="space-y-2">
+      <h2 className="text-heading">Announcements</h2>
+      <CourseAnnouncements offeringId={offeringId} manage={false} />
+    </section>
   );
 }
 
@@ -78,7 +57,8 @@ function Live({ offeringId }: { offeringId: string }) {
         <Skeleton className="h-32" />
       </SkeletonGroup>
     );
-  if (list.isError) return <Banner tone="danger">We couldn't load the Class Meetings.</Banner>;
+  if (list.isError)
+    return <LoadFailed what="the Class Meetings" onRetry={() => void list.refetch()} />;
   const now = Date.now();
   const upcoming = list.data.items.filter(
     (m) => m.state !== "ENDED" && m.state !== "NO_SHOW" && new Date(m.scheduledEnd).getTime() > now,
@@ -129,6 +109,15 @@ function Live({ offeringId }: { offeringId: string }) {
   );
 }
 
+/** "Mon 12 Oct" (§10.6), on the device's calendar. */
+function shortDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(iso));
+}
+
 function minutes(ms: number | null): string | null {
   return ms === null ? null : `${String(Math.max(1, Math.round(ms / 60_000)))} min`;
 }
@@ -142,7 +131,7 @@ function Recordings({ offeringId }: { offeringId: string }) {
         <Skeleton className="h-16" />
       </SkeletonGroup>
     );
-  if (list.isError) return <Banner tone="danger">We couldn't load the recordings.</Banner>;
+  if (list.isError) return <LoadFailed what="the recordings" onRetry={() => void list.refetch()} />;
   if (list.data.items.length === 0)
     return (
       <EmptyState icon="video" title="No recordings yet">
@@ -163,9 +152,11 @@ function Recordings({ offeringId }: { offeringId: string }) {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-subhead text-ink">{v.title}</span>
-            {minutes(v.durationMs) ? (
-              <span className="block text-meta text-ink-muted">{minutes(v.durationMs)}</span>
-            ) : null}
+            <span className="block text-meta text-ink-muted">
+              {[shortDate(v.publishedAt ?? v.addedAt), minutes(v.durationMs)]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
           </span>
           <Badge status="available" />
         </Link>
@@ -216,16 +207,10 @@ export function CoursePage() {
       </SkeletonGroup>
     );
   if (offering.isError)
-    return (
-      <EmptyState
-        icon="info"
-        title="This page isn't available to you"
-        action={
-          <Link to="/" className="text-brand underline">
-            Go to Home
-          </Link>
-        }
-      />
+    return isNotAvailable(offering.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="this course" onRetry={() => void offering.refetch()} />
     );
   const o = offering.data;
   const lecturers = o.lecturers

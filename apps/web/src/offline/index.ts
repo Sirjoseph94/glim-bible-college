@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { reportNetworkSuccess } from "../api/network";
+import { reportNetworkSuccess, requestsFailing, subscribeNetwork } from "../api/network";
 import {
   memoryStore,
   OfflineQueue,
   type FlushResult,
   type QueuedStep,
+  type QueuedWork,
   type QueueStore,
 } from "./queue";
 
@@ -38,6 +39,7 @@ function indexedDbStore(): QueueStore {
         resolve(req.result);
       };
       req.onerror = () => {
+        db = null; // let a later call try again
         reject(req.error ?? new Error("IndexedDB unavailable"));
       };
     });
@@ -56,13 +58,27 @@ function indexedDbStore(): QueueStore {
   };
 }
 
+/**
+ * IndexedDB when it opens; otherwise (some private windows refuse it) memory, so queued work at
+ * least lasts until the tab closes. The switch happens on the first failure and sticks.
+ */
 function availableStore(): QueueStore {
-  try {
-    if (typeof indexedDB !== "undefined") return indexedDbStore();
-  } catch {
-    // Some private windows block IndexedDB; the work then lasts until the tab closes.
-  }
-  return memoryStore();
+  const memory = memoryStore();
+  if (typeof indexedDB === "undefined") return memory;
+  let store: QueueStore = indexedDbStore();
+  const use = async <T>(call: (s: QueueStore) => Promise<T>): Promise<T> => {
+    try {
+      return await call(store);
+    } catch {
+      store = memory;
+      return call(store);
+    }
+  };
+  return {
+    all: () => use((s) => s.all()),
+    put: (work) => use((s) => s.put(work)),
+    remove: (key) => use((s) => s.remove(key)),
+  };
 }
 
 const send = async (step: QueuedStep, key: string) => {
@@ -77,13 +93,43 @@ const send = async (step: QueuedStep, key: string) => {
 /** The app's one queue of offline work (§9.20). */
 export const offlineQueue = new OfflineQueue(availableStore(), send);
 
-/** Sends queued work when the app starts and whenever the device comes back online. */
+const RETRY_MS = 30_000;
+let retryTimer: number | undefined;
+
+/** Sends what is queued; while anything is left, tries again every 30 s with the tab visible. */
+async function flushAndRetry(): Promise<void> {
+  window.clearTimeout(retryTimer);
+  await offlineQueue.flush();
+  if ((await offlineQueue.count()) > 0)
+    retryTimer = window.setTimeout(() => {
+      if (document.visibilityState === "visible") void flushAndRetry();
+      else retryTimer = undefined;
+    }, RETRY_MS);
+}
+
+/**
+ * Sends queued work (§9.20 "on reconnect: send"): when the app starts, when the browser comes
+ * back online, when a request gets an answer again after failing, when the tab comes back into
+ * view, and every 30 s while something is waiting.
+ */
 export function startOfflineQueue(): void {
   window.addEventListener("online", () => {
     reportNetworkSuccess();
-    void offlineQueue.flush();
+    void flushAndRetry();
   });
-  void offlineQueue.flush();
+  subscribeNetwork(() => {
+    if (!requestsFailing()) void flushAndRetry();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void flushAndRetry();
+  });
+  void flushAndRetry();
+}
+
+/** Queues work and tries to send it straight away (the connection may already be back). */
+export async function queueWork(work: QueuedWork): Promise<void> {
+  await offlineQueue.enqueue(work);
+  void flushAndRetry();
 }
 
 /** A screen's queued work: how much is waiting, and the outcome of the last send. */

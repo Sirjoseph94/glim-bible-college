@@ -16,6 +16,9 @@
 | Results-published notice for 24 h | §11.2 | Publication timestamp on the student's semester result | Check `GET /me/results` before building; may already be derivable. |
 | The recording page's course (BackLink "Recordings" and course code) | §11.4 | `courseOfferingId` and course code in `GET /videos/:id/play` | The player goes back to My courses until then. |
 | Class of degree on the GPA summary ("Second Class Upper") | §9.17 | The class band for the current CGPA under the programme's grading scheme | `GET /me/results` has GPA/CGPA and standing, not the class; awards carry it only once proposed. |
+| Cancellation reason on a cancelled Class Meeting card | §9.14 | The reason given when a meeting is cancelled, in `classMeetingSchema` | Cancel takes no reason today. |
+| "Work" tab to-do count | §11.3 | Per-offering count of work the student hasn't submitted | — |
+| Retry countdown when the class link is being prepared | §9.14 | The `Retry-After` header on `PROVIDER_NOT_READY` exposed to the client (`ApiError` keeps the body only) | Client-side change; small. |
 | Late-submission warning before confirm | §11.5 | Due date vs. cutoff | Probably available on the assignment; confirm in WP-UI-07. |
 
 Rows marked "check" or "confirm" may already be possible. The WP that reaches them verifies against the contracts and builds them if the data exists.

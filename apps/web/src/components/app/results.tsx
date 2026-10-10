@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { credits, hundredths } from "../../design/format";
+import { credits, hundredths, percent } from "../../design/format";
 import { Badge } from "../ui/badge";
 
 function Figure({ label, value }: { label: string; value: number | null }) {
@@ -92,7 +92,7 @@ export function ResultRow({
       <div className="shrink-0 text-right">
         <strong className="block font-mono text-title">{letter ?? "—"}</strong>
         <span className="text-meta text-ink-muted tabular-nums">
-          {pending ? "Awaiting" : pctX100 === null ? null : `${hundredths(pctX100)}%`}
+          {pending ? "Awaiting" : pctX100 === null ? null : percent(pctX100)}
         </span>
       </div>
     </div>

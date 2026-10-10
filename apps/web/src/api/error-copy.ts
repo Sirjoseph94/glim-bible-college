@@ -44,6 +44,12 @@ const COPY: Partial<Record<ErrorCode, ErrorCopy>> = {
   },
 };
 
+/** The copy as one sentence pair, for inline status text. */
+export function errorText(error: unknown): string {
+  const copy = describeError(error);
+  return copy.body ? `${copy.title}. ${copy.body}` : copy.title;
+}
+
 /** What to tell the person about a failed request: a short title and, where useful, a body. */
 export function describeError(error: unknown): ErrorCopy {
   if (!(error instanceof ApiError))

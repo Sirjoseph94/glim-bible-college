@@ -5,7 +5,9 @@ import { api } from "../api/client";
 import { meQuery } from "../api/session";
 import { ClassMeetingCard } from "../components/app/class-meeting-card";
 import { CourseCard } from "../components/app/course-card";
+import { LoadFailed } from "../components/app/page-states";
 import { planToday, type ScheduledMeeting } from "../components/app/today";
+import { Time } from "../components/time";
 import { myScheduleQuery, UpcomingMeetings } from "../components/meetings";
 import { Badge } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
@@ -39,7 +41,8 @@ function MyCourses({ schedule }: { schedule: ScheduledMeeting[] }) {
         <Skeleton className="h-36" />
       </SkeletonGroup>
     );
-  if (list.isError || list.data.items.length === 0) return null;
+  if (list.isError) return <LoadFailed what="your courses" onRetry={() => void list.refetch()} />;
+  if (list.data.items.length === 0) return null;
   return (
     <section className="space-y-3">
       <h2 className="text-heading">My courses</h2>
@@ -112,16 +115,20 @@ function StudentToday({ me }: { me: Me }) {
           <Skeleton className="h-32" />
         </SkeletonGroup>
       ) : schedule.isError ? (
-        <Banner tone="danger">We couldn't load your classes.</Banner>
+        <LoadFailed what="your classes" onRetry={() => void schedule.refetch()} />
       ) : (
         <>
           <MeetingSection title="Happening now" items={plan.happeningNow} />
           <MeetingSection title="Later today" items={plan.laterToday} />
           {!started && plan.laterToday.length === 0 ? (
             <EmptyState icon="calendar" title="No classes today">
-              {plan.next
-                ? "Your next class is below."
-                : "No Class Meetings are scheduled for the next two weeks."}
+              {plan.next ? (
+                <>
+                  Your next class is <Time value={plan.next.scheduledStart} />.
+                </>
+              ) : (
+                "No Class Meetings are scheduled for the next two weeks."
+              )}
             </EmptyState>
           ) : null}
           {plan.next ? <MeetingSection title="Next class" items={[plan.next]} /> : null}

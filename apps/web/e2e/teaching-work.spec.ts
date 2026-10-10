@@ -48,7 +48,8 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await page.getByRole("link", { name: "Essay on John 1" }).click();
   await expect(page.getByText("300 words")).toBeVisible();
   await page.getByLabel("Answer").fill("In the beginning was the Word.");
-  await expect(page.getByText("Draft saved")).toBeVisible();
+  // Drafts save five seconds after the last keystroke (§10.3).
+  await expect(page.getByText("Draft saved")).toBeVisible({ timeout: 15_000 });
   await page.getByLabel(/Attach a file/).setInputFiles({
     name: "essay.pdf",
     mimeType: "application/pdf",
@@ -67,7 +68,7 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await expect(
     page.getByText(/^Sent\. Your assignment was submitted at \d\d:\d\d\.$/),
   ).toBeVisible();
-  await expect(page.getByText(/Attempt 1 of 1 · Submitted/)).toHaveCount(1);
+  await expect(page.getByText(/Submitted .* · Attempt 1 of 1/)).toHaveCount(1);
   await expect(page.getByText("You've used all your attempts.")).toBeVisible();
   await signOut(page);
 

@@ -70,8 +70,8 @@ export async function api<E extends EndpointSpec>(
       ...(init.keepalive === true ? { keepalive: true } : {}),
     });
   } catch (error) {
-    // No answer at all (not an abort): the device or the network is offline (§9.20).
-    if (!(error instanceof DOMException && error.name === "AbortError")) reportNetworkFailure();
+    // No answer at all, and not because the caller gave up: the device or network is offline.
+    if (init.signal?.aborted !== true) reportNetworkFailure();
     throw error;
   }
   reportNetworkSuccess();

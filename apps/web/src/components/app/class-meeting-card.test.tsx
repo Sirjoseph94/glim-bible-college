@@ -48,6 +48,20 @@ describe("ClassMeetingCard for a student (handoff §9.14)", () => {
     expect(render("NO_SHOW")).toContain("Didn&#x27;t take place");
   });
 
+  it("says how soon a scheduled class starts, within the day (§10.6)", () => {
+    const soon = new Date(Date.now() + (3 * 60 + 20) * 60_000 + 30_000).toISOString();
+    const html = render("SCHEDULED", { scheduledStart: soon });
+    expect(html).toContain("Starts in 3 h 20 min");
+    expect(render("SCHEDULED", { scheduledStart: "2099-01-01T09:00:00Z" })).not.toContain(
+      "Starts in",
+    );
+  });
+
+  it("expects a recording after a class that was recorded", () => {
+    expect(render("ENDED", { recordingMode: "AUTO" })).toContain("Recording expected");
+    expect(render("ENDED", { recordingMode: "OFF" })).not.toContain("Recording expected");
+  });
+
   it("strikes through a cancelled class and offers nothing", () => {
     const html = render("CANCELLED");
     expect(html).toContain("line-through");

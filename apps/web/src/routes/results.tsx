@@ -16,6 +16,7 @@ import { Alert, formText } from "../components/form";
 import { useSubmit } from "../components/use-submit";
 import { credits, hundredths } from "../design/format";
 import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
 import { GpaSummary, ResultRow } from "../components/app/results";
 import { Banner } from "../components/ui/banner";
 import { Card } from "../components/ui/card";
@@ -275,12 +276,7 @@ export function MyResultsPage() {
         <Skeleton className="h-48" />
       </SkeletonGroup>
     );
-  if (mine.isError)
-    return (
-      <Banner tone="danger" title="We couldn't load your results">
-        Check your connection and try again.
-      </Banner>
-    );
+  if (mine.isError) return <LoadFailed what="your results" onRetry={() => void mine.refetch()} />;
   const programmes = mine.data.programmes;
   const matric = programmes.length === 1 ? programmes[0]?.matricNumber : undefined;
   return (

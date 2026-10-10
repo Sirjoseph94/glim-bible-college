@@ -6,7 +6,8 @@ import { api, ApiError } from "../api/client";
 import { meQuery } from "../api/session";
 import { useDetailBar } from "../components/app/shell-parts";
 import { Banner } from "../components/ui/banner";
-import { EmptyState } from "../components/ui/empty-state";
+import { Button } from "../components/ui/button";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { Icon } from "../design/icons";
 
@@ -136,7 +137,7 @@ function useProgressReporter(videoId: string, enabled: boolean) {
   };
 }
 
-function Player({ playback }: { playback: VideoPlayback }) {
+function Player({ playback, onRetry }: { playback: VideoPlayback; onRetry: () => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [failed, setFailed] = useState(false);
   const report = useProgressReporter(playback.videoId, playback.tracksProgress);
@@ -215,8 +216,17 @@ function Player({ playback }: { playback: VideoPlayback }) {
         />
       </div>
       {failed ? (
-        <Banner tone="danger" title="This recording didn't load">
-          Can't reach YouTube. Try another network or Wi-Fi.
+        <Banner
+          tone="danger"
+          title="This recording didn't load"
+          action={
+            <Button size="sm" variant="secondary" onClick={onRetry}>
+              Try again
+            </Button>
+          }
+        >
+          Can't reach YouTube. Try another network or Wi-Fi, or choose a lower quality in the
+          player.
         </Banner>
       ) : null}
     </div>
@@ -232,6 +242,8 @@ export function RecordingPage() {
   const { videoId } = useParams({ strict: false });
   const me = useQuery(meQuery);
   const [started, setStarted] = useState(false);
+  // Remounts the player for "Try again" after YouTube failed to load.
+  const [attempt, setAttempt] = useState(0);
   const playback = useQuery({
     queryKey: ["videos", videoId, "play"],
     queryFn: ({ signal }) =>
@@ -258,12 +270,10 @@ export function RecordingPage() {
       </SkeletonGroup>
     );
   if (playback.isError)
-    return playback.error instanceof ApiError && playback.error.status === 404 ? (
-      <EmptyState icon="video" title="This recording isn't available to you" />
+    return isNotAvailable(playback.error) ? (
+      <NotAvailable />
     ) : (
-      <Banner tone="danger" title="We couldn't load this recording">
-        Check your connection and try again.
-      </Banner>
+      <LoadFailed what="this recording" onRetry={() => void playback.refetch()} />
     );
   const p = playback.data;
   const dataSaver = saveData();
@@ -272,7 +282,13 @@ export function RecordingPage() {
     <div className="space-y-4">
       {dataSaver ? <DataSaverTip durationMs={p.durationMs} /> : null}
       {started ? (
-        <Player playback={p} />
+        <Player
+          key={attempt}
+          playback={p}
+          onRetry={() => {
+            setAttempt((n) => n + 1);
+          }}
+        />
       ) : (
         <button
           type="button"

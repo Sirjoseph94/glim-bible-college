@@ -15,7 +15,11 @@ export function InstitutionName({ name, testId }: { name: string | undefined; te
 
 /** A detail page's top bar (§6.2): back to the parent by name, and the course code. */
 export interface DetailBar {
-  back: { to: Parameters<typeof BackLink>[0]["to"]; label: string };
+  back: {
+    to: Parameters<typeof BackLink>[0]["to"];
+    params?: Record<string, string>;
+    label: string;
+  };
   code?: string;
 }
 
@@ -27,12 +31,14 @@ export const DetailBarContext = createContext<(bar: DetailBar | null) => void>((
  */
 export function useDetailBar(bar: DetailBar): void {
   const setBar = useContext(DetailBarContext);
-  const { to, label } = bar.back;
+  const { to, label, params } = bar.back;
   const { code } = bar;
+  const paramsKey = JSON.stringify(params ?? {});
   useEffect(() => {
-    setBar({ back: { to, label }, ...(code === undefined ? {} : { code }) });
+    const parsed = JSON.parse(paramsKey) as Record<string, string>;
+    setBar({ back: { to, label, params: parsed }, ...(code === undefined ? {} : { code }) });
     return () => {
       setBar(null);
     };
-  }, [setBar, to, label, code]);
+  }, [setBar, to, label, paramsKey, code]);
 }

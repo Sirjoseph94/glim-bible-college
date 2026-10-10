@@ -3,9 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import { describeError } from "../api/error-copy";
+import { errorText } from "../api/error-copy";
 import { meQuery } from "../api/session";
 import { PageHeader } from "../components/app/page-header";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { useDetailBar } from "../components/app/shell-parts";
 import { Alert, formText } from "../components/form";
 import { Time } from "../components/time";
@@ -13,7 +14,6 @@ import { Badge } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
 import { Button, buttonClass } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { EmptyState } from "../components/ui/empty-state";
 import { TextField } from "../components/ui/field";
 import { OfflineBanner, QueuedPill, useOnline } from "../components/ui/offline";
 import { ProgressBar } from "../components/ui/progress-bar";
@@ -22,9 +22,10 @@ import { uploadFile } from "../components/upload";
 import { useSubmit } from "../components/use-submit";
 import { dueState, fileSize, wordCount } from "../design/format";
 import { Icon } from "../design/icons";
-import { offlineQueue, useQueued } from "../offline";
+import { queueWork, useQueued } from "../offline";
 
-const AUTOSAVE_MS = 2000;
+/** §10.3: drafts save 5–10 s after the last keystroke, and when the page is hidden. */
+const AUTOSAVE_MS = 5000;
 
 function SubmissionFiles({ submission }: { submission: Submission }) {
   if (submission.files.length === 0) return null;
@@ -65,9 +66,12 @@ function writeLocalDraft(assignmentId: string, text: string | null) {
   }
 }
 
-const clockTime = (iso: string, zone: string) =>
+/** The queue group for an assignment's submissions (its "waiting to send" pill). */
+const queueGroup = (assignmentId: string) => `assignment:${assignmentId}`;
+
+const clockTime = (when: Date, zone: string) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit" }).format(
-    new Date(iso),
+    when,
   );
 
 /**
@@ -93,27 +97,42 @@ export function AssignmentPage() {
         signal,
       }),
   });
-  useDetailBar({ back: { to: "/courses", label: "My courses" } });
+  useDetailBar(
+    assignment.data
+      ? {
+          back: {
+            to: "/courses/$offeringId",
+            params: { offeringId: assignment.data.courseOfferingId },
+            label: "Course",
+          },
+        }
+      : { back: { to: "/courses", label: "My courses" } },
+  );
   const queryClient = useQueryClient();
   const me = useQuery(meQuery);
-  const zone = me.data?.user.timezone ?? "Africa/Lagos";
-  const queued = useQueued(`assignment:${id}`);
+  const zone = useRef("Africa/Lagos");
+  zone.current = me.data?.user.timezone ?? "Africa/Lagos";
+  const queued = useQueued(queueGroup(id));
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   // A fresh editor after a queued submission is sent, so the next attempt starts empty.
   const [editorKey, setEditorKey] = useState(0);
+  const [resubmitting, setResubmitting] = useState(false);
 
-  // When queued work for this assignment is sent (or refused), say so and refresh (§9.20). This
-  // lives on the page: the editor goes away once no attempts are left.
+  // When queued work for this assignment is sent (or refused), say so once and refresh (§9.20).
+  // This lives on the page: the editor goes away once the work is in.
   const { last } = queued;
+  const handled = useRef<typeof last>(null);
   useEffect(() => {
-    if (last === null) return undefined;
+    if (last === null || handled.current === last) return undefined;
+    handled.current = last;
     const refused = last.rejected[0];
     if (last.sent.length > 0) {
       writeLocalDraft(id, null);
       setEditorKey((k) => k + 1);
+      setResubmitting(false);
       setNotice({
         tone: "success",
-        text: `Sent. Your assignment was submitted at ${clockTime(new Date().toISOString(), zone)}.`,
+        text: `Sent. Your assignment was submitted at ${clockTime(new Date(), zone.current)}.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["assignment", id, "mine"] });
       const timer = window.setTimeout(() => {
@@ -123,12 +142,9 @@ export function AssignmentPage() {
         window.clearTimeout(timer);
       };
     }
-    if (refused) {
-      const copy = describeError(refused.error);
-      setNotice({ tone: "danger", text: copy.body ? `${copy.title}. ${copy.body}` : copy.title });
-    }
+    if (refused) setNotice({ tone: "danger", text: errorText(refused.error) });
     return undefined;
-  }, [last, id, zone, queryClient]);
+  }, [last, id, queryClient]);
 
   if (assignment.isPending)
     return (
@@ -138,12 +154,20 @@ export function AssignmentPage() {
       </SkeletonGroup>
     );
   if (assignment.isError)
-    return <EmptyState icon="file" title="This assignment isn't available to you" />;
+    return isNotAvailable(assignment.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="this assignment" onRetry={() => void assignment.refetch()} />
+    );
   const a = assignment.data;
   const attempts = mine.data?.attempts ?? [];
   const submitted = attempts.filter((s) => s.status !== "DRAFT");
   const draft = attempts.find((s) => s.status === "DRAFT") ?? null;
   const due = dueState(a.dueAt, a.closesAt, new Date());
+  // After a submission the form gives way to it (§11.5); Resubmit brings the form back.
+  const showEditor =
+    mine.data?.open === true &&
+    (submitted.length === 0 || draft !== null || resubmitting || queued.count > 0);
   return (
     <div className="space-y-5">
       {online ? null : <OfflineBanner />}
@@ -184,8 +208,8 @@ export function AssignmentPage() {
             {submitted.map((s) => (
               <div key={s.id} className="space-y-2 px-4 py-3.5">
                 <p className="text-subhead">
-                  Attempt {s.attemptNo} of {a.maxAttempts} · Submitted{" "}
-                  <Time value={s.submittedAt} />
+                  Submitted <Time value={s.submittedAt} /> · Attempt {s.attemptNo} of{" "}
+                  {a.maxAttempts}
                   {s.isLate ? (
                     <>
                       {" "}
@@ -202,7 +226,7 @@ export function AssignmentPage() {
           </Card>
         </section>
       ) : null}
-      {mine.data?.open === true ? (
+      {showEditor && mine.data ? (
         <DraftEditor
           key={editorKey}
           assignmentId={id}
@@ -214,6 +238,15 @@ export function AssignmentPage() {
           maxFileMb={a.maxFileMb}
           attemptsLeft={mine.data.attemptsLeft}
         />
+      ) : mine.data?.open === true ? (
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setResubmitting(true);
+          }}
+        >
+          Resubmit
+        </Button>
       ) : mine.isSuccess ? (
         <p className="text-body-sm text-ink-muted">
           {mine.data.attemptsLeft === 0 && submitted.length > 0
@@ -247,71 +280,94 @@ function DraftEditor({
 }) {
   const queryClient = useQueryClient();
   const online = useOnline();
+  const me = useQuery(meQuery);
+  const zone = me.data?.user.timezone ?? "Africa/Lagos";
   const { busy, problem, run } = useSubmit();
-  const group = `assignment:${assignmentId}`;
   const [text, setText] = useState(() => readLocalDraft(assignmentId) ?? draft?.textBody ?? "");
-  const [saved, setSaved] = useState<"saved" | "saving" | "phone" | null>(null);
+  const [saved, setSaved] = useState<{ state: "saving" | "server" | "phone"; at: Date } | null>(
+    null,
+  );
   const [progress, setProgress] = useState<number | null>(null);
+  // Set the moment work is queued, so a second tap can't queue it again before the count updates.
+  const [queuedHere, setQueuedHere] = useState(false);
+  const locked = queuedHere || queuedCount > 0;
   const lastSaved = useRef(draft?.textBody ?? "");
+  const pending = useRef<number | undefined>(undefined);
+  // The one draft save in flight; a submit waits for it so an old save can't land after it.
+  const inflight = useRef<Promise<unknown>>(Promise.resolve());
+  const latest = useRef(text);
+  latest.current = text;
+  // One key per submission, so a retry or a queued replay is applied once.
+  const key = useRef(crypto.randomUUID());
   const mineKey = ["assignment", assignmentId, "mine"];
 
-  // Autosave two seconds after the student stops typing: on this phone at once, then the server.
+  const saveDraftText = (body: { textBody?: string; fileIds?: string[] }) => {
+    const request = inflight.current
+      .catch(() => undefined)
+      .then(() =>
+        api<typeof assessment.saveDraft>("PUT", "/assignments/:id/my-submissions/draft", {
+          params: { id: assignmentId },
+          body,
+        }),
+      );
+    inflight.current = request;
+    return request;
+  };
+
+  const autosave = () => {
+    window.clearTimeout(pending.current);
+    pending.current = undefined;
+    const value = latest.current;
+    if (value === lastSaved.current || locked) return;
+    setSaved({ state: "saving", at: new Date() });
+    saveDraftText({ textBody: value })
+      .then(() => {
+        lastSaved.current = value;
+        setSaved({ state: "server", at: new Date() });
+      })
+      .catch(() => {
+        setSaved({ state: "phone", at: new Date() });
+      });
+  };
+  const autosaveRef = useRef(autosave);
+  autosaveRef.current = autosave;
+
+  // Typing: on this phone at once, on the server five seconds after the last keystroke.
   useEffect(() => {
     if (text === lastSaved.current) return;
     writeLocalDraft(assignmentId, text);
-    const timer = window.setTimeout(() => {
-      setSaved("saving");
-      api<typeof assessment.saveDraft>("PUT", "/assignments/:id/my-submissions/draft", {
-        params: { id: assignmentId },
-        body: { textBody: text },
-      })
-        .then(() => {
-          lastSaved.current = text;
-          setSaved("saved");
-        })
-        .catch(() => {
-          setSaved("phone");
-        });
+    window.clearTimeout(pending.current);
+    pending.current = window.setTimeout(() => {
+      autosaveRef.current();
     }, AUTOSAVE_MS);
-    return () => {
-      window.clearTimeout(timer);
-    };
   }, [text, assignmentId]);
 
-  // One key per submission, so a retry or a queued replay is applied once.
-  const key = useRef(crypto.randomUUID());
+  // Leaving the page or the app: save now (§10.3).
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") autosaveRef.current();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.clearTimeout(pending.current);
+    };
+  }, []);
 
-  const submitNow = async () => {
-    if (acceptsText && text !== lastSaved.current) {
-      await api<typeof assessment.saveDraft>("PUT", "/assignments/:id/my-submissions/draft", {
-        params: { id: assignmentId },
-        body: { textBody: text },
-      });
-      lastSaved.current = text;
-    }
-    await api<typeof assessment.submitDraft>("POST", "/assignments/:id/my-submissions/submit", {
-      params: { id: assignmentId },
-      headers: { "idempotency-key": key.current },
-    });
-    writeLocalDraft(assignmentId, null);
-    setText("");
-    lastSaved.current = "";
-    setSaved(null);
-    key.current = crypto.randomUUID();
-    await queryClient.invalidateQueries({ queryKey: mineKey });
-  };
-  const queue = async () => {
-    await offlineQueue.enqueue({
+  /** Queues what the server hasn't confirmed: the draft text (unless saved) and the submit. */
+  const queue = async (draftConfirmed: boolean) => {
+    setQueuedHere(true);
+    await queueWork({
       key: key.current,
-      group,
+      group: queueGroup(assignmentId),
       steps: [
-        ...(acceptsText
+        ...(acceptsText && !draftConfirmed
           ? [
               {
                 method: "PUT" as const,
                 path: "/assignments/:id/my-submissions/draft",
                 params: { id: assignmentId },
-                body: { textBody: text },
+                body: { textBody: latest.current },
               },
             ]
           : []),
@@ -322,21 +378,53 @@ function DraftEditor({
         },
       ],
     });
+  };
+
+  const submit = async () => {
+    window.clearTimeout(pending.current);
+    pending.current = undefined;
+    if (!online) {
+      await queue(false);
+      return;
+    }
+    let draftConfirmed = !acceptsText;
+    try {
+      await inflight.current.catch(() => undefined);
+      if (acceptsText) {
+        if (latest.current !== lastSaved.current) await saveDraftText({ textBody: latest.current });
+        lastSaved.current = latest.current;
+        draftConfirmed = true;
+      }
+      await api<typeof assessment.submitDraft>("POST", "/assignments/:id/my-submissions/submit", {
+        params: { id: assignmentId },
+        headers: { "idempotency-key": key.current },
+      });
+    } catch (error) {
+      // No answer from the server: keep what it hasn't confirmed and send it later, with the
+      // same key, so a submit that did arrive isn't applied twice (§10.4).
+      if (error instanceof ApiError) throw error;
+      await queue(draftConfirmed);
+      return;
+    }
+    writeLocalDraft(assignmentId, null);
+    setText("");
+    lastSaved.current = "";
+    setSaved(null);
     key.current = crypto.randomUUID();
+    await queryClient.invalidateQueries({ queryKey: mineKey });
   };
 
   const files = draft?.files ?? [];
   const words = wordCount(text);
-  const status =
-    queuedCount > 0
-      ? "Your submission is saved on this phone and will send when you reconnect."
-      : saved === "saving"
-        ? "Saving…"
-        : saved === "saved"
-          ? "Draft saved"
-          : saved === "phone"
-            ? "Saved on this phone. It will save to the college when you reconnect."
-            : null;
+  const status = locked
+    ? "Your submission is saved on this phone and will send when you reconnect."
+    : saved === null
+      ? null
+      : {
+          saving: "Saving…",
+          server: `Draft saved at ${clockTime(saved.at, zone)}`,
+          phone: "Saved on this phone. It will save to the college when you reconnect.",
+        }[saved.state];
   return (
     <section className="space-y-4">
       <div className="flex items-baseline justify-between gap-2">
@@ -364,7 +452,14 @@ function DraftEditor({
           multiline
           rows={8}
           value={text}
-          hint={words === 1 ? "1 word" : `${String(words)} words`}
+          readOnly={locked}
+          hint={
+            locked
+              ? "This answer is waiting to send, so it can't change now."
+              : words === 1
+                ? "1 word"
+                : `${String(words)} words`
+          }
           onChange={(e) => {
             setText(e.target.value);
           }}
@@ -395,6 +490,7 @@ function DraftEditor({
               name="file"
               type="file"
               className="sr-only"
+              disabled={locked}
               onChange={(e) => {
                 const input = e.currentTarget;
                 const file = input.files?.[0];
@@ -412,14 +508,7 @@ function DraftEditor({
                     },
                     setProgress,
                   );
-                  await api<typeof assessment.saveDraft>(
-                    "PUT",
-                    "/assignments/:id/my-submissions/draft",
-                    {
-                      params: { id: assignmentId },
-                      body: { fileIds: [...files.map((f) => f.id), fileId] },
-                    },
-                  );
+                  await saveDraftText({ fileIds: [...files.map((f) => f.id), fileId] });
                   input.value = "";
                   await queryClient.invalidateQueries({ queryKey: mineKey });
                 }).finally(() => {
@@ -445,20 +534,8 @@ function DraftEditor({
           block
           loading={busy}
           onClick={() => {
-            if (queuedCount > 0) return; // already waiting to send
-            void run(async () => {
-              if (!online) {
-                await queue();
-                return;
-              }
-              try {
-                await submitNow();
-              } catch (error) {
-                // No answer from the server: keep the submission and send it later (§10.4).
-                if (error instanceof ApiError) throw error;
-                await queue();
-              }
-            });
+            if (locked) return; // already waiting to send
+            void run(submit);
           }}
         >
           Submit assignment
