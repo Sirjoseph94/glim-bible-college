@@ -18,6 +18,7 @@ import {
   ScheduleMeetingSheet,
 } from "../components/teaching/class-meetings";
 import { Time } from "../components/time";
+import { OfferingStatusBadge } from "../components/app/offering-status";
 import { Badge, type BadgeStatus, type Tone } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
 import { Button, buttonClass } from "../components/ui/button";
@@ -31,15 +32,6 @@ import type { TeachTab } from "./teach-tabs";
 
 /** The gradebook loads only when its tab is opened: it is the largest part of the page. */
 const Gradebook = lazy(() => import("./gradebook").then((m) => ({ default: m.Gradebook })));
-
-/** The offering's status as a word, as the old teaching page showed it. */
-const OFFERING_STATUS: Record<Offering["status"], { tone: Tone; word: string }> = {
-  DRAFT: { tone: "neutral", word: "Draft" },
-  PUBLISHED: { tone: "info", word: "Published" },
-  ACTIVE: { tone: "success", word: "Active" },
-  COMPLETED: { tone: "neutral", word: "Completed" },
-  CANCELLED: { tone: "danger", word: "Cancelled" },
-};
 
 const myOfferingsQuery = queryOptions({
   queryKey: ["offerings", "mine"],
@@ -73,11 +65,7 @@ export function TeachPage() {
               key={o.id}
               offering={o}
               teaching
-              badge={
-                <Badge tone={OFFERING_STATUS[o.status].tone}>
-                  {OFFERING_STATUS[o.status].word}
-                </Badge>
-              }
+              badge={<OfferingStatusBadge status={o.status} />}
             />
           ))}
         </div>

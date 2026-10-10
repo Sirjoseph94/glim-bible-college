@@ -1,11 +1,27 @@
 import type { ImportJob, ImportKind, imports } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { api } from "../api/client";
-import { Alert } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
 import { Time } from "../components/time";
+import { Badge, type Tone } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import {
+  DataTable,
+  bodyCell,
+  headCell,
+  numericCell,
+  stickyCell,
+} from "../components/ui/data-table";
+import { EmptyState } from "../components/ui/empty-state";
+import { Select } from "../components/ui/field";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { uploadFile } from "../components/upload";
 import { useSubmit } from "../components/use-submit";
+import { Icon } from "../design/icons";
 
 // The web client imports only types from the contracts (no Zod in the bundle), so the kinds are
 // listed here; the Record type keeps the list in step with the contract.
@@ -14,6 +30,21 @@ const KIND_LABELS: Record<ImportKind, string> = {
   LECTURERS: "Lecturers",
   COURSE_ENROLLMENTS: "Course enrollments",
   COURSE_RESULTS: "Past course results (count toward CGPA)",
+};
+
+/** Short names for the recent-imports table. */
+const KIND_SHORT: Record<ImportKind, string> = {
+  STUDENTS: "Students",
+  LECTURERS: "Lecturers",
+  COURSE_ENROLLMENTS: "Course enrollments",
+  COURSE_RESULTS: "Past course results",
+};
+
+const JOB_STATUS: Record<ImportJob["status"], { tone: Tone; word: string }> = {
+  QUEUED: { tone: "neutral", word: "Waiting" },
+  RUNNING: { tone: "info", word: "Running" },
+  COMPLETED: { tone: "success", word: "Done" },
+  FAILED: { tone: "danger", word: "Failed" },
 };
 
 const startImport = (kind: ImportKind, fileId: string, dryRun: boolean) =>
@@ -38,23 +69,31 @@ function useImport(id: string | null) {
 
 function Outcome({ job }: { job: ImportJob }) {
   if (job.status === "FAILED")
-    return <Alert tone="error">The import failed: {job.stats.failure ?? "unknown error"}.</Alert>;
+    return (
+      <Banner tone="danger" title="The import failed">
+        {job.stats.failure ?? "unknown error"}.
+      </Banner>
+    );
   if (job.status !== "COMPLETED")
     return (
-      <p className="text-sm text-slate-600">
+      <p role="status" className="text-body-sm text-ink-muted">
         {job.dryRun ? "Checking" : "Importing"}… {job.rowsDone} of {job.stats.total || "?"} rows
       </p>
     );
   const s = job.stats;
   return (
-    <div className="space-y-1 text-sm">
-      <p>
+    <div className="space-y-3">
+      <p className="text-body">
         {job.dryRun ? "Checked" : "Imported"} {s.total} rows: <strong>{s.valid} valid</strong>,{" "}
         {s.invalid} with errors. {job.dryRun ? "Would create" : "Created"} {s.created}, update{" "}
         {s.updated}, leave {s.unchanged} unchanged.
       </p>
       {job.errorFile ? (
-        <a href={job.errorFile.downloadPath} className="text-brand underline">
+        <a
+          href={job.errorFile.downloadPath}
+          className={buttonClass({ variant: "secondary", size: "sm" })}
+        >
+          <Icon name="download" size={16} />
           Download the rows with errors
         </a>
       ) : null}
@@ -65,7 +104,8 @@ function Outcome({ job }: { job: ImportJob }) {
 /** CSV imports of existing GLIM data: dry run, then commit (TRD §15.2, D-04). */
 export function AdminImportsPage() {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const fileFieldId = useId();
+  const { busy, problem, run } = useSubmit();
   const [kind, setKind] = useState<ImportKind>("STUDENTS");
   const [fileId, setFileId] = useState<string | null>(null);
   const [checkId, setCheckId] = useState<string | null>(null);
@@ -88,36 +128,52 @@ export function AdminImportsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-title">Import data</h1>
-      <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
-        <label className="block space-y-1">
-          <span className="text-sm font-medium text-slate-700">What are you importing?</span>
-          <select
-            value={kind}
-            onChange={(e) => {
-              setKind(e.target.value as ImportKind);
-              reset();
-            }}
-            className="block w-full rounded border border-slate-300 bg-white px-2 py-2"
-          >
-            {(Object.keys(KIND_LABELS) as ImportKind[]).map((k) => (
-              <option key={k} value={k}>
-                {KIND_LABELS[k]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <a href={`/api/v1/imports/templates/${kind}`} className="text-sm text-brand underline">
+    <div className="space-y-8">
+      <PageHeader
+        title="Import data"
+        meta="Check a CSV file first; nothing changes until you import the valid rows."
+      />
+      <Card className="space-y-4">
+        <Select
+          label="What are you importing?"
+          value={kind}
+          onChange={(e) => {
+            setKind(e.target.value as ImportKind);
+            reset();
+          }}
+        >
+          {(Object.keys(KIND_LABELS) as ImportKind[]).map((k) => (
+            <option key={k} value={k}>
+              {KIND_LABELS[k]}
+            </option>
+          ))}
+        </Select>
+        <a
+          href={`/api/v1/imports/templates/${kind}`}
+          className={buttonClass({ variant: "quiet", size: "sm" })}
+        >
+          <Icon name="download" size={16} />
           Download the CSV template
         </a>
-        {error ? <Alert tone="error">{error}</Alert> : null}
-        <label className="block space-y-1">
-          <span className="text-sm font-medium text-slate-700">CSV file</span>
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        <div className="space-y-1">
+          <label htmlFor={fileFieldId} className="block text-label text-ink">
+            CSV file
+          </label>
           <input
+            id={fileFieldId}
             type="file"
             accept=".csv,text/csv"
             disabled={busy}
+            className={
+              "block w-full text-body-sm text-ink-muted file:mr-3 file:min-h-tap file:rounded-md " +
+              "file:border file:border-line-strong file:bg-surface-raised file:px-4 " +
+              "file:text-body-sm file:font-semibold file:text-ink"
+            }
             onChange={(event) => {
               const input = event.currentTarget;
               const file = input.files?.[0];
@@ -134,18 +190,19 @@ export function AdminImportsPage() {
               });
             }}
           />
-        </label>
+        </div>
         {check.data ? (
-          <div className="space-y-2 rounded bg-slate-50 p-3">
-            <h3 className="font-medium">Check (nothing has been changed yet)</h3>
+          <section className="space-y-3 rounded-md bg-surface-sunken p-4">
+            <h2 className="text-subhead">Check (nothing has been changed yet)</h2>
             <Outcome job={check.data} />
             {check.data.status === "COMPLETED" &&
             check.data.stats.valid > 0 &&
             commitId === null ? (
-              <button
-                type="button"
-                disabled={busy || fileId === null}
-                className="rounded bg-brand px-4 py-2 font-medium text-white"
+              <Button
+                variant="primary"
+                icon="upload"
+                loading={busy}
+                disabled={fileId === null}
                 onClick={() =>
                   void run(async () => {
                     setCommitId((await startImport(kind, fileId ?? "", false)).id);
@@ -153,29 +210,76 @@ export function AdminImportsPage() {
                 }
               >
                 Import {check.data.stats.valid} valid rows
-              </button>
+              </Button>
             ) : null}
-          </div>
+          </section>
         ) : null}
         {commit.data ? (
-          <div className="space-y-2 rounded bg-green-50 p-3">
-            <h3 className="font-medium">Import</h3>
+          <section className="space-y-3 rounded-md bg-success-soft p-4">
+            <h2 className="text-subhead">Import</h2>
             <Outcome job={commit.data} />
-          </div>
+          </section>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="space-y-2">
-        <h3 className="font-semibold">Recent imports</h3>
-        <ul className="space-y-1 text-sm">
-          {recent.data?.items.map((job) => (
-            <li key={job.id}>
-              <Time value={job.createdAt} /> · {job.fileName} · {job.kind.toLowerCase()} ·{" "}
-              {job.dryRun ? "check" : "import"} · {job.status.toLowerCase()} · {job.stats.valid}{" "}
-              valid, {job.stats.invalid} errors
-            </li>
-          ))}
-        </ul>
+      <section className="space-y-3">
+        <h2 className="text-heading">Recent imports</h2>
+        {recent.isPending ? (
+          <SkeletonGroup label="Loading recent imports">
+            <Skeleton className="h-32" />
+          </SkeletonGroup>
+        ) : recent.isError ? (
+          <LoadFailed what="the recent imports" onRetry={() => void recent.refetch()} />
+        ) : recent.data.items.length === 0 ? (
+          <EmptyState icon="upload" title="No imports yet">
+            Checks and imports you run appear here.
+          </EmptyState>
+        ) : (
+          <DataTable caption="Recent imports" minWidth="min-w-180">
+            <thead>
+              <tr>
+                <th scope="col" className={`${headCell} ${stickyCell}`}>
+                  File
+                </th>
+                <th scope="col" className={headCell}>
+                  Started
+                </th>
+                <th scope="col" className={headCell}>
+                  Kind
+                </th>
+                <th scope="col" className={headCell}>
+                  Run
+                </th>
+                <th scope="col" className={headCell}>
+                  Status
+                </th>
+                <th scope="col" className={`${headCell} ${numericCell}`}>
+                  Valid
+                </th>
+                <th scope="col" className={`${headCell} ${numericCell}`}>
+                  Errors
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.data.items.map((job) => (
+                <tr key={job.id}>
+                  <td className={`${bodyCell} ${stickyCell}`}>{job.fileName}</td>
+                  <td className={bodyCell}>
+                    <Time value={job.createdAt} />
+                  </td>
+                  <td className={bodyCell}>{KIND_SHORT[job.kind]}</td>
+                  <td className={bodyCell}>{job.dryRun ? "Check" : "Import"}</td>
+                  <td className={bodyCell}>
+                    <Badge tone={JOB_STATUS[job.status].tone}>{JOB_STATUS[job.status].word}</Badge>
+                  </td>
+                  <td className={`${bodyCell} ${numericCell}`}>{job.stats.valid}</td>
+                  <td className={`${bodyCell} ${numericCell}`}>{job.stats.invalid}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
       </section>
     </div>
   );
