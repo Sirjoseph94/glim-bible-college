@@ -449,7 +449,20 @@ const admissionsIntakesRoute = createRoute({
   ),
 });
 
+/** The design-system gallery: built only when VITE_DEV_UI=true (the e2e build), never shipped. */
+const devUiRoutes =
+  import.meta.env.VITE_DEV_UI === "true"
+    ? [
+        createRoute({
+          getParentRoute: () => rootRoute,
+          path: "/dev/ui",
+          component: lazyRouteComponent(() => import("./dev/ui-gallery"), "DevUiPage"),
+        }),
+      ]
+    : [];
+
 const routeTree = rootRoute.addChildren([
+  ...devUiRoutes,
   homeRoute,
   rollCallRoute,
   meetingAttendanceRoute,

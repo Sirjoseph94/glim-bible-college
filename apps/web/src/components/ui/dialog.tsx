@@ -13,6 +13,24 @@ export function reasonProblem(reason: string, minLength: number): string | null 
 
 const SWIPE_TO_CLOSE = 80;
 
+/**
+ * Radix returns focus only to its own Dialog.Trigger. Our overlays are opened by ordinary
+ * buttons, so remember whatever had focus when one opened and give focus back to it on close.
+ */
+function useReturnFocus() {
+  const opener = useRef<HTMLElement | null>(null);
+  return {
+    onOpenAutoFocus: () => {
+      opener.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    },
+    onCloseAutoFocus: (event: Event) => {
+      event.preventDefault();
+      opener.current?.focus();
+    },
+  };
+}
+
 const SHEET = [
   // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, sheets stop at 90% of the screen (§9.11)
   "glim-sheet fixed inset-x-0 bottom-0 z-sheet flex max-h-[90dvh] flex-col rounded-t-lg",
@@ -42,11 +60,12 @@ export function Sheet({
   footer?: ReactNode;
 }) {
   const swipeFrom = useRef<number | null>(null);
+  const returnFocus = useReturnFocus();
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="glim-scrim fixed inset-0 z-overlay" />
-        <RadixDialog.Content className={SHEET}>
+        <RadixDialog.Content className={SHEET} {...returnFocus}>
           <div
             aria-hidden="true"
             className="mx-auto mb-3 h-1 w-10 shrink-0 touch-none rounded-pill bg-line-strong md:hidden"
@@ -101,6 +120,7 @@ export function ConfirmDialog({
   onConfirm: (reason: string) => Promise<void> | void;
 }) {
   const reasonId = useId();
+  const returnFocus = useReturnFocus();
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -137,6 +157,7 @@ export function ConfirmDialog({
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="glim-scrim fixed inset-0 z-overlay" />
         <RadixDialog.Content
+          {...returnFocus}
           className={
             "glim-dialog fixed inset-x-4 top-1/2 z-sheet -translate-y-1/2 rounded-lg bg-surface-raised p-5 " +
             "text-ink shadow-pop md:inset-x-auto md:left-1/2 md:w-full md:max-w-110 md:-translate-x-1/2"
