@@ -29,9 +29,12 @@ export function AuthLayout({
             {institution.data.name}
           </p>
         ) : (
-          <span className="block h-8 w-56 rounded-sm bg-surface-sunken">
-            <span className="sr-only">Loading</span>
-          </span>
+          // A line of display text, so the name replaces it without moving anything (CLS).
+          <p className="text-display">
+            <span className="inline-block w-56 rounded-sm bg-surface-sunken">
+              <span className="sr-only">Loading</span>&nbsp;
+            </span>
+          </p>
         )}
         <h1 className={showTitle ? "text-title" : "sr-only"}>{title}</h1>
         {intro ? <p className="text-body text-ink-muted">{intro}</p> : null}

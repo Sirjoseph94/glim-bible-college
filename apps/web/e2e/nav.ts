@@ -10,7 +10,14 @@ export async function openArea(page: Page, label: string): Promise<void> {
   await main.getByRole("link", { name: "Home", exact: true }).waitFor();
   const link = main.getByRole("link", { name: label, exact: true });
   if (!(await link.isVisible())) await main.getByRole("button", { name: "More" }).click();
-  await page.getByRole("link", { name: label, exact: true }).click();
+  const target = page.getByRole("link", { name: label, exact: true });
+  const href = (await target.first().getAttribute("href")) ?? "";
+  await target.first().click();
+  // Wait for the area itself. The URL changes first; the previous page (a Home with a link to
+  // every area) stays on screen until the area's code and data have loaded, and the caller's
+  // next locator could match it.
+  await page.waitForURL((url) => url.pathname === href);
+  await page.waitForLoadState("networkidle");
 }
 
 /** Signs out from the account menu (a detail page's bar has none, so from Home). */

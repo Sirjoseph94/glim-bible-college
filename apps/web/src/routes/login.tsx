@@ -35,7 +35,14 @@ export function LoginPage() {
       showTitle={false}
       intro="Live classes, recordings and results in one place."
     >
-      {institution.data?.googleSignIn ? (
+      {institution.isPending ? (
+        // Google's button and the divider take this space once the settings arrive, so the
+        // form doesn't jump down under the person's thumb (CLS, §14).
+        <div aria-hidden="true" className="invisible space-y-5">
+          <div className="h-control" />
+          <Divider label="or use your email" />
+        </div>
+      ) : institution.data?.googleSignIn ? (
         <>
           <GoogleButton
             href="/api/v1/auth/google/start?intent=signin"

@@ -223,8 +223,7 @@ const AREA_HINTS: Record<string, string> = {
   "/results": "Your results and transcripts.",
   "/admissions": "Applications, intakes and reports.",
   "/admin/academic": "Programmes, the calendar, Course Offerings, Lecturers and imports.",
-  "/results/semesters":
-    "Course and semester results, transcript requests, awards and grading schemes.",
+  "/results/semesters": "Course and semester results.",
   "/admin/users": "Accounts and roles.",
   "/admin/settings": "College details, videos and the audit log.",
   "/admin/ops": "Failures and job queues.",
