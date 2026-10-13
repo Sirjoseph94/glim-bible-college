@@ -265,7 +265,12 @@ export function AppShell({
               )}
             </div>
           </header>
-          <main className="min-h-0 flex-1 overflow-y-auto">
+          {/* The page scrolls here, not the document, so keyboard users must be able to focus it
+              to scroll a page with no links or buttons (WCAG 2.1.1, axe scrollable-region-focusable). */}
+          <main
+            tabIndex={0}
+            className="min-h-0 flex-1 overflow-y-auto focus-visible:-outline-offset-2"
+          >
             <div className="glim-gutter mx-auto w-full max-w-content space-y-5 pt-4 pb-5 lg:pt-6 lg:pb-8">
               <div className="hidden items-center justify-between gap-4 lg:flex">
                 {detail ? (
