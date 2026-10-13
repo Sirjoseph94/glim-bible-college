@@ -3,11 +3,12 @@ import { NotificationsModule } from "@glim/modules/notifications";
 import { Module } from "@nestjs/common";
 import { BackupService } from "./backup.service";
 import { InboxService } from "./inbox.service";
+import { IntegrationsService } from "./integrations.service";
 import { OpsService } from "./ops.service";
 
 @Module({
   imports: [AuditModule, NotificationsModule],
-  providers: [BackupService, InboxService, OpsService],
-  exports: [BackupService, InboxService, OpsService],
+  providers: [BackupService, InboxService, IntegrationsService, OpsService],
+  exports: [BackupService, InboxService, IntegrationsService, OpsService],
 })
 export class OpsModule {}

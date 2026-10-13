@@ -143,6 +143,7 @@ export const ENDPOINTS = [
   video.deleteVideo,
   video.restoreVideo,
   video.recheckVideo,
+  video.retryIngest,
   meetings.getMySchedule,
   auth.login,
   auth.logout,

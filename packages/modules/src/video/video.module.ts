@@ -2,10 +2,12 @@ import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
 import { NotificationsModule } from "@glim/modules/notifications";
+import { OpsModule } from "@glim/modules/ops";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { AvailabilityService } from "./availability.service";
 import { PlaybackService } from "./playback.service";
+import { RecordingsService } from "./recordings.service";
 import { VideoAdminService } from "./video-admin.service";
 import { VideosService } from "./videos.service";
 
@@ -28,14 +30,21 @@ class VideoResources implements OnModuleInit {
 
 /** Course videos on YouTube (TRD §13, ADR-0003). */
 @Module({
-  imports: [AuditModule, AuthorizationModule, IdentityModule, NotificationsModule],
+  imports: [AuditModule, AuthorizationModule, IdentityModule, NotificationsModule, OpsModule],
   providers: [
+    RecordingsService,
     VideosService,
     PlaybackService,
     VideoAdminService,
     AvailabilityService,
     VideoResources,
   ],
-  exports: [VideosService, PlaybackService, VideoAdminService, AvailabilityService],
+  exports: [
+    VideosService,
+    PlaybackService,
+    VideoAdminService,
+    AvailabilityService,
+    RecordingsService,
+  ],
 })
 export class VideoModule {}

@@ -649,6 +649,11 @@ const SAMPLES: Record<string, Sample> = {
     offering: "O1",
     payload: { userId: "00000000-0000-4000-8000-000000000000" },
   }),
+  // A link video can't be re-ingested: allowed callers get 409; nothing changes.
+  "POST /videos/:id/retry-ingest": async (t) => ({
+    url: `/api/v1/videos/${await videoFixture(t)}/retry-ingest`,
+    offering: "O1",
+  }),
   "GET /class-meetings/:id/roll-call": async (t) => ({
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/roll-call`,
     offering: "O1",

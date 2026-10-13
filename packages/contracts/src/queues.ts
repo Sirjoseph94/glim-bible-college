@@ -67,6 +67,10 @@ export const QUEUES = {
     retryLimit: 3,
     expireInSeconds: 30 * MIN,
   },
+  /** Every 10 minutes: Meet recordings the events missed, and stuck uploads (§11.8). */
+  "recording.reconcile": { role: "google", retryLimit: 1, expireInSeconds: 10 * MIN },
+  /** A video's title changed in the app: change it on YouTube too (integration slice). */
+  "video.youtube-metadata": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN },
   "drive.cleanup": {
     role: "google",
     retryLimit: 5,
@@ -179,6 +183,7 @@ export const CRON_SCHEDULES = {
   "ops.queue-health": { queue: "ops.queue-health", cron: "* * * * *", tz: "UTC" },
   "meeting-reconciliation": { queue: "meeting.reconcile", cron: "*/3 * * * *", tz: "UTC" },
   "subscription-renewal": { queue: "subscription.renew", cron: "*/15 * * * *", tz: "UTC" },
+  "recording-reconciliation": { queue: "recording.reconcile", cron: "*/10 * * * *", tz: "UTC" },
 } as const satisfies Record<string, CronSpec>;
 
 export type CronName = keyof typeof CRON_SCHEDULES;

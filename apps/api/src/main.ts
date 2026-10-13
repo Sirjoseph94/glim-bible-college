@@ -32,7 +32,7 @@ const app = await buildApp({
   mailer: createMailer(config),
   identityProvider: createIdentityProvider(config),
   objectStorage: createObjectStorage(config),
-  videoHost: createVideoHost(),
+  videoHost: createVideoHost(config),
   liveProvider: createLiveProvider(config, { acquire: bucketAcquire(db.pool) }),
   transcriptRenderer: new ReactPdfTranscriptRenderer(),
 });

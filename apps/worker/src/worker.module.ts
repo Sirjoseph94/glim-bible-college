@@ -72,7 +72,7 @@ export function createWorkerContext(deps: {
       mailer: deps.mailer ?? createMailer(config),
       identityProvider: createIdentityProvider(config),
       objectStorage: deps.objectStorage ?? createObjectStorage(config),
-      videoHost: deps.videoHost ?? createVideoHost(),
+      videoHost: deps.videoHost ?? createVideoHost(config),
       liveProvider:
         deps.liveProvider === undefined
           ? createLiveProvider(config, { acquire: bucketAcquire(deps.db.pool) })

@@ -215,7 +215,10 @@ export class VideosService {
     return visible === undefined ? null : toView(visible);
   }
 
-  /** App-side metadata (§13.6); the YouTube title isn't changed in v1. */
+  /**
+   * App-side metadata (§13.6). With the YouTube channel connected, a new title or description
+   * is copied to YouTube by the `video.youtube-metadata` job.
+   */
   async update(
     id: string,
     expectedVersion: number,
@@ -375,6 +378,13 @@ export class VideosService {
           { videoId: id, offeringId: row.courseOfferingId },
           { occurredAt: now, actorUserId: actor.userId },
         );
+      // With the channel connected, YouTube's title follows the app's (integration slice).
+      if (
+        this.host.channelApi !== undefined &&
+        updated.youtubeVideoId !== null &&
+        ("title" in change || "description" in change)
+      )
+        await boss.send("video.youtube-metadata", { videoId: id });
       return ok(updated);
     });
     return result.ok ? ok(toView(result.value)) : result;

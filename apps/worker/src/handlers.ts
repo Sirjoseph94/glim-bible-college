@@ -14,7 +14,7 @@ import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService, InboxService, OpsService } from "@glim/modules/ops";
-import { AvailabilityService, VideoAdminService } from "@glim/modules/video";
+import { AvailabilityService, RecordingsService, VideoAdminService } from "@glim/modules/video";
 import { QuizAttemptsService } from "@glim/modules/assessment";
 import { SemesterResultsService } from "@glim/modules/results";
 import { TranscriptsService } from "@glim/modules/transcripts";
@@ -50,6 +50,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const meetEvents = deps.context.get(MeetEventsService);
   const subscriptions = deps.context.get(SubscriptionsService);
   const participants = deps.context.get(ParticipantsService);
+  const recordings = deps.context.get(RecordingsService);
   // Google Meet (integration slice): without a provider these queues get no handler, so their
   // cron schedules are removed and nothing polls Google.
   const google: HandlerRegistry =
@@ -65,6 +66,17 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
           "class-meeting.end": (job) =>
             provisioning.endConference((job.data as { meetingId: string }).meetingId),
           "meeting.reconcile": () => meetEvents.reconcile(),
+          "recording.discover": (job) =>
+            recordings.discover(
+              job.data as { meetingId: string; conferenceId: string; recordingId: string },
+            ),
+          "recording.ingest": (job) =>
+            recordings.ingest((job.data as { recordingId: string }).recordingId, {
+              final: job.retryCount >= QUEUES["recording.ingest"].retryLimit,
+            }),
+          "recording.reconcile": () => recordings.reconcile(),
+          "drive.cleanup": (job) =>
+            recordings.cleanup((job.data as { recordingId: string }).recordingId),
           "conference.sync": (job) =>
             participants.syncConference(
               (job.data as { conferenceRecordId: string }).conferenceRecordId,
@@ -100,6 +112,13 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
       });
     },
     "video.purge-deleted": () => videoAdmin.purgeDeleted(),
+    // The channel connection (integration slice); both skip when the app can't act as it.
+    "video.youtube-processing-sync": (job) => {
+      const { videoId, poll } = job.data as { videoId: string; poll?: number };
+      return recordings.processingSync(videoId, poll ?? 0);
+    },
+    "video.youtube-metadata": (job) =>
+      recordings.syncMetadata((job.data as { videoId: string }).videoId),
     "quiz.expire": (job) => quizAttempts.expire((job.data as { attemptId: string }).attemptId),
     "transcript.generate": (job) =>
       transcripts.generate((job.data as { transcriptId: string }).transcriptId),

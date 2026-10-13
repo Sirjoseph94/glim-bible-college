@@ -57,6 +57,9 @@ export async function createTestApp(
     /** Google Meet on (integration slice); off, meetings use pasted links as in v1. */
     liveProvider?: LiveProvider;
     phoneDialIn?: boolean;
+    /** Lets the app hold a YouTube channel grant (integration slice). */
+    tokenEncryptionKey?: Buffer;
+    driveCleanupMode?: "NONE" | "TRASH_AFTER_INGEST";
   } = {},
 ): Promise<TestApp> {
   const database: TestDatabase = await createTestDatabase(inject("glim").postgresAdminUrl);
@@ -68,6 +71,8 @@ export async function createTestApp(
     storage: { ...base.storage, endpoint: s3.endpoint },
     mail: { ...base.mail, sendgridWebhookPublicKey: options.sendgridWebhookPublicKey },
     features: { ...base.features, phoneDialIn: options.phoneDialIn ?? false },
+    tokenEncryptionKey: options.tokenEncryptionKey,
+    driveCleanupMode: options.driveCleanupMode ?? base.driveCleanupMode,
   };
   const storage = new S3ObjectStorage({
     endpoint: s3.endpoint,
