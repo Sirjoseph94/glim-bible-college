@@ -1,12 +1,18 @@
 import { Db, schema, type Database } from "@glim/db";
-import type { ChannelCredentials, ChannelInfo } from "@glim/integrations/video-host/port";
+import {
+  VIDEO_HOST,
+  type ChannelCredentials,
+  type ChannelInfo,
+  type VideoHost,
+} from "@glim/integrations/video-host/port";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { NotificationsService } from "@glim/modules/notifications";
-import { CLOCK, type Clock } from "@glim/shared";
+import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
 import { CONFIG, type Config } from "@glim/shared/config";
 import { openSecret, sealSecret } from "@glim/shared/secrets";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
+import { randomBytes } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 export type IntegrationProvider = "google_workspace" | "video_host";
@@ -38,7 +44,82 @@ export class IntegrationsService {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(VIDEO_HOST) private readonly videoHost: VideoHost,
   ) {}
+
+  /** Stores the latest result of an integration's test, for its admin page. */
+  async recordCheck(provider: string, ok: boolean, result: Record<string, unknown>): Promise<Date> {
+    const c = schema.integrationChecks;
+    const now = this.clock.now();
+    await this.db.withTx(({ db }) =>
+      db
+        .insert(c)
+        .values({ provider, checkedAt: now, ok, result })
+        .onConflictDoUpdate({ target: c.provider, set: { checkedAt: now, ok, result } }),
+    );
+    return now;
+  }
+
+  async latestCheck(
+    provider: string,
+  ): Promise<{ checkedAt: Date; ok: boolean; result: Record<string, unknown> } | null> {
+    const c = schema.integrationChecks;
+    const [row] = await this.db.read.select().from(c).where(eq(c.provider, provider));
+    return row ?? null;
+  }
+
+  /** The channel connection as the admin page shows it (never the grant). */
+  async youtubeChannel(): Promise<{
+    uploadsEnabled: boolean;
+    connected: boolean;
+    status: IntegrationStatus | null;
+    channel: ChannelInfo | null;
+    lastError: string | null;
+  }> {
+    const c = schema.integrationConfigs;
+    const [row] = await this.db.read.select().from(c).where(eq(c.provider, "video_host"));
+    return {
+      uploadsEnabled: this.videoHost.channelApi !== undefined,
+      connected: row?.secretCiphertext != null,
+      status: (row?.status as IntegrationStatus | undefined) ?? null,
+      channel: (row?.config.channel as ChannelInfo | undefined) ?? null,
+      lastError: row?.lastError ?? null,
+    };
+  }
+
+  /** Where to send the System Admin to consent, and the state to check on return. */
+  beginYoutubeConnect(redirectUri: string): DomainResult<{ url: string; state: string }> {
+    const api = this.videoHost.channelApi;
+    if (api === undefined || this.config.tokenEncryptionKey === undefined)
+      return err(
+        domainError(
+          "CONFLICT",
+          "Automatic upload isn't switched on (VIDEO_HOST=youtube_api and TOKEN_ENCRYPTION_KEY).",
+        ),
+      );
+    const state = randomBytes(24).toString("base64url");
+    return ok({ url: api.authorizationUrl({ redirectUri, state }), state });
+  }
+
+  /** Google's code → the channel's grant, sealed and stored. */
+  async completeYoutubeConnect(
+    code: string,
+    redirectUri: string,
+    actor: AuditActor,
+  ): Promise<DomainResult<ChannelInfo>> {
+    const api = this.videoHost.channelApi;
+    if (api === undefined)
+      return err(domainError("CONFLICT", "Automatic upload isn't switched on."));
+    try {
+      const { refreshToken, channel } = await api.exchangeCode({ code, redirectUri });
+      await this.connectYoutube(refreshToken, channel, actor);
+      return ok(channel);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn({ reason: message }, "youtube connect failed");
+      return err(domainError("PROVIDER_UNAVAILABLE", message.slice(0, 300)));
+    }
+  }
 
   async state(provider: IntegrationProvider): Promise<IntegrationState | null> {
     const c = schema.integrationConfigs;

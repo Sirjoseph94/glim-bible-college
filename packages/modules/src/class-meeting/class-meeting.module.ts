@@ -8,6 +8,7 @@ import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
 import { MeetingLifecycleService } from "./lifecycle.service";
+import { GoogleIntegrationService } from "./google-integration.service";
 import { MeetEventsService } from "./meet-events.service";
 import { MeetingWriter } from "./meeting-writer";
 import { ProvisioningService } from "./provisioning.service";
@@ -49,6 +50,7 @@ class ClassMeetingResources implements OnModuleInit {
     MeetingLifecycleService,
     MeetEventsService,
     SubscriptionsService,
+    GoogleIntegrationService,
     ClassMeetingResources,
   ],
   exports: [
@@ -58,6 +60,7 @@ class ClassMeetingResources implements OnModuleInit {
     ProvisioningService,
     MeetEventsService,
     SubscriptionsService,
+    GoogleIntegrationService,
   ],
 })
 export class ClassMeetingModule {}

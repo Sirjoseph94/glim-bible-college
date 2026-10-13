@@ -78,6 +78,8 @@ export class MeetWorld {
   readonly calls: string[] = [];
   dialIn: DialIn | null = { numbers: [{ region: "NG", phone: "+234 1 000 0000", pin: "123456" }] };
   subscriptionLifetimeMs = 7 * 86_400_000;
+  /** Permissions (scopes) the Workspace admin hasn't granted. */
+  readonly deniedPermissions = new Set<string>();
   private readonly failures = new Map<string, WorldFailure[]>();
   private seq = 0;
 

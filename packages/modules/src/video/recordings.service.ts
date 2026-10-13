@@ -247,8 +247,11 @@ export class RecordingsService {
       await db
         .update(v)
         .set({
+          // Back from FAILED when an ops replay or a retry uploaded it.
+          status: "PROCESSING",
           youtubeVideoId: uploaded.videoId,
           youtubeChannelUrl: connection.channel.url,
+          unavailableReason: null,
           updatedAt: now,
         })
         .where(eq(v.id, videoId));

@@ -274,6 +274,14 @@ export const ENDPOINTS = [
   ops.listQueues,
   ops.getYouTubeStatus,
   ops.testYouTube,
+  ops.connectYouTube,
+  ops.youTubeCallback,
+  ops.disconnectYouTube,
+  ops.getGoogleIntegration,
+  ops.saveGoogleIntegration,
+  ops.testGoogleIntegration,
+  ops.addHostAccount,
+  ops.updateHostAccount,
   privacy.getDataExport,
   privacy.eraseUser,
 ] as const;
@@ -347,7 +355,7 @@ export type {
 } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
 export type { Notification, NotificationPreference } from "./notifications";
-export type { OpsFailure, QueueStat, YouTubeStatus } from "./ops";
+export type { GoogleIntegration, HostAccount, OpsFailure, QueueStat, YouTubeStatus } from "./ops";
 export type { DataExport } from "./privacy";
 export type {
   Transcript,

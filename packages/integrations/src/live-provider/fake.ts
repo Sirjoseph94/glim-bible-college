@@ -1,4 +1,5 @@
 import { Readable } from "node:stream";
+import { DWD_SCOPES } from "../google/auth";
 import { MEET_EVENT_TYPES, parseMeetEnvelope } from "../google/events";
 import {
   ProviderNotFoundError,
@@ -39,6 +40,7 @@ function fail(op: string, failure: WorldFailure): never {
  */
 export class FakeLiveProvider implements LiveProvider {
   readonly name = "fake" as const;
+  readonly requiredPermissions = DWD_SCOPES;
 
   constructor(readonly world: MeetWorld = new MeetWorld()) {}
 
@@ -232,6 +234,22 @@ export class FakeLiveProvider implements LiveProvider {
       const { usedBytes, limitBytes } = this.world.host(hostEmail);
       return { usedBytes, limitBytes };
     });
+  }
+
+  checkPermissions(
+    hostEmail: string,
+  ): Promise<{ permission: string; granted: boolean; detail: string | null }[]> {
+    return this.run("checkPermissions", () => {
+      this.world.host(hostEmail);
+      return DWD_SCOPES.map((permission) => {
+        const granted = !this.world.deniedPermissions.has(permission);
+        return { permission, granted, detail: granted ? null : "unauthorized_client" };
+      });
+    });
+  }
+
+  circuitStates(): Record<string, "CLOSED" | "OPEN" | "HALF_OPEN"> {
+    return {};
   }
 
   health(hostEmail: string): Promise<ProviderHealth> {

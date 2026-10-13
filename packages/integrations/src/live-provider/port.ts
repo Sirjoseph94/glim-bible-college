@@ -166,6 +166,8 @@ export interface ProviderHealth {
 
 export interface LiveProvider {
   readonly name: "google_meet" | "fake";
+  /** What a workspace admin must grant the app (Google: the delegated scopes, Appendix A.2). */
+  readonly requiredPermissions: readonly string[];
   provisionSpace(input: ProvisionInput): Promise<ProvisionedSpace>;
   /** Makes the members exactly `cohosts` + `members` (idempotent). */
   syncAccess(input: SyncAccessInput): Promise<SyncAccessResult>;
@@ -197,6 +199,15 @@ export interface LiveProvider {
   storageUsage(hostEmail: string): Promise<{ usedBytes: number; limitBytes: number | null }>;
   /** Whether the provider can act as the host account at all (token + a cheap read). */
   health(hostEmail: string): Promise<ProviderHealth>;
+  /**
+   * Each permission the integration needs, and whether the host account grants it (Google: the
+   * domain-wide delegation scopes, §15.3 "scope diff").
+   */
+  checkPermissions(
+    hostEmail: string,
+  ): Promise<{ permission: string; granted: boolean; detail: string | null }[]>;
+  /** Per host account: whether calls are paused after repeated failures (§11.7 breaker). */
+  circuitStates(): Record<string, "CLOSED" | "OPEN" | "HALF_OPEN">;
 }
 
 /** The provider couldn't be asked (network, 5xx, 429 after retries): try again later. */

@@ -72,6 +72,7 @@ export async function createTestApp(
     mail: { ...base.mail, sendgridWebhookPublicKey: options.sendgridWebhookPublicKey },
     features: { ...base.features, phoneDialIn: options.phoneDialIn ?? false },
     tokenEncryptionKey: options.tokenEncryptionKey,
+    liveProvider: options.liveProvider === undefined ? base.liveProvider : ("fake" as const),
     driveCleanupMode: options.driveCleanupMode ?? base.driveCleanupMode,
   };
   const storage = new S3ObjectStorage({

@@ -24,7 +24,14 @@ import {
   type SyncAccessInput,
   type SyncAccessResult,
 } from "../live-provider/port";
-import { SCOPES, ServiceAccountTokens, type FetchLike, type ServiceAccount } from "./auth";
+import {
+  DWD_SCOPES,
+  SCOPES,
+  ServiceAccountTokens,
+  TokenError,
+  type FetchLike,
+  type ServiceAccount,
+} from "./auth";
 import type { BreakerState } from "./breaker";
 import { GoogleClient } from "./client";
 import { MEET_EVENT_TYPES, parseMeetEnvelope } from "./events";
@@ -123,16 +130,18 @@ const date = (value: string | undefined) => (value === undefined ? null : new Da
  */
 export class GoogleMeetProvider implements LiveProvider {
   readonly name = "google_meet" as const;
+  readonly requiredPermissions = DWD_SCOPES;
   private readonly client: GoogleClient;
+  private readonly tokens: ServiceAccountTokens;
   private readonly endpoints: GoogleEndpoints;
 
   constructor(private readonly options: GoogleMeetOptions) {
     this.endpoints = { ...GOOGLE_ENDPOINTS, ...options.endpoints };
-    const tokens = new ServiceAccountTokens(options.serviceAccount, {
+    const tokens = (this.tokens = new ServiceAccountTokens(options.serviceAccount, {
       tokenUrl: this.endpoints.token,
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       ...(options.now === undefined ? {} : { now: options.now }),
-    });
+    }));
     this.client = new GoogleClient(tokens, {
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       ...(options.limiter === undefined ? {} : { limiter: options.limiter }),
@@ -142,8 +151,27 @@ export class GoogleMeetProvider implements LiveProvider {
     });
   }
 
-  breakerStates(): Record<string, BreakerState> {
+  circuitStates(): Record<string, BreakerState> {
     return this.client.breakerStates();
+  }
+
+  /**
+   * The scope diff (§15.3): a token is asked for each delegated scope on its own; Google refuses
+   * one the Admin Console's domain-wide delegation entry doesn't list (`unauthorized_client`).
+   */
+  async checkPermissions(
+    hostEmail: string,
+  ): Promise<{ permission: string; granted: boolean; detail: string | null }[]> {
+    const out = [];
+    for (const scope of DWD_SCOPES)
+      try {
+        await this.tokens.token(hostEmail, [scope]);
+        out.push({ permission: scope, granted: true, detail: null });
+      } catch (error) {
+        if (!(error instanceof TokenError) || error.status >= 500) throw error;
+        out.push({ permission: scope, granted: false, detail: error.message });
+      }
+    return out;
   }
 
   private meet(path: string) {

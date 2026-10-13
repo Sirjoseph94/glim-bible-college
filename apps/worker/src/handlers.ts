@@ -7,6 +7,7 @@ import {
   MeetEventsService,
   MeetingLifecycleService,
   ProvisioningService,
+  GoogleIntegrationService,
   SeriesService,
   SubscriptionsService,
 } from "@glim/modules/class-meeting";
@@ -51,6 +52,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const subscriptions = deps.context.get(SubscriptionsService);
   const participants = deps.context.get(ParticipantsService);
   const recordings = deps.context.get(RecordingsService);
+  const googleIntegration = deps.context.get(GoogleIntegrationService);
   // Google Meet (integration slice): without a provider these queues get no handler, so their
   // cron schedules are removed and nothing polls Google.
   const google: HandlerRegistry =
@@ -75,6 +77,8 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
               final: job.retryCount >= QUEUES["recording.ingest"].retryLimit,
             }),
           "recording.reconcile": () => recordings.reconcile(),
+          "ops.google-check": () => googleIntegration.runCheck(),
+          "drive.storage-monitor": () => googleIntegration.monitorStorage(),
           "drive.cleanup": (job) =>
             recordings.cleanup((job.data as { recordingId: string }).recordingId),
           "conference.sync": (job) =>

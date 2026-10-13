@@ -126,6 +126,10 @@ export const QUEUES = {
   "db.logical-backup": { role: "scheduler", retryLimit: 2, expireInSeconds: HOUR },
   "ops.queue-health": { role: "general", retryLimit: 0, expireInSeconds: MIN },
   "ops.youtube-check": { role: "general", retryLimit: 2, expireInSeconds: 2 * MIN },
+  /** The admin's "Test Google": tokens, delegated scopes, Drive storage, subscriptions (§15.3). */
+  "ops.google-check": { role: "google", retryLimit: 1, expireInSeconds: 5 * MIN },
+  /** Hourly: the host accounts' Drive storage, alerting at 70 % and 85 % (§11.2). */
+  "drive.storage-monitor": { role: "google", retryLimit: 1, expireInSeconds: 5 * MIN },
   "idempotency.cleanup": {
     role: "scheduler",
     retryLimit: 2,
@@ -184,6 +188,7 @@ export const CRON_SCHEDULES = {
   "meeting-reconciliation": { queue: "meeting.reconcile", cron: "*/3 * * * *", tz: "UTC" },
   "subscription-renewal": { queue: "subscription.renew", cron: "*/15 * * * *", tz: "UTC" },
   "recording-reconciliation": { queue: "recording.reconcile", cron: "*/10 * * * *", tz: "UTC" },
+  "drive-storage-monitor": { queue: "drive.storage-monitor", cron: "20 * * * *", tz: "UTC" },
 } as const satisfies Record<string, CronSpec>;
 
 export type CronName = keyof typeof CRON_SCHEDULES;

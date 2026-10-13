@@ -7,6 +7,7 @@ import {
   type ProviderParticipantSession,
   type SpaceSettings,
 } from "./port";
+import { DWD_SCOPES } from "../google/auth";
 import type { MeetWorld } from "./world";
 
 export interface ContractSubject {
@@ -217,6 +218,17 @@ export function liveProviderContract(name: string, setup: () => Promise<Contract
       const usage = await s.provider.storageUsage(HOST);
       expect(usage.usedBytes).toBeGreaterThan(0);
       expect(await s.provider.health(HOST)).toEqual({ ok: true, detail: null });
+    });
+
+    it("reports which permissions the host account grants", async () => {
+      const [first, ...rest] = DWD_SCOPES;
+      s.world.deniedPermissions.add(first);
+      const permissions = await s.provider.checkPermissions("lms-host-09@glim.test");
+      expect(permissions.map((x) => [x.permission, x.granted])).toEqual([
+        [first, false],
+        ...rest.map((scope) => [scope, true]),
+      ]);
+      s.world.deniedPermissions.clear();
     });
 
     it("maps failures to transient, permanent and not-found errors", async () => {

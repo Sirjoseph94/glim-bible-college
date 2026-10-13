@@ -11,3 +11,4 @@ export { tickEvent, transition, type MeetingContext, type MeetingEvent } from ".
 export { ProvisioningService, type ProvisionOutcome } from "./provisioning.service";
 export { MeetEventsService } from "./meet-events.service";
 export { SubscriptionsService, type SubscriptionSweep } from "./subscriptions.service";
+export { GoogleIntegrationService } from "./google-integration.service";

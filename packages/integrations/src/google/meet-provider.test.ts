@@ -198,7 +198,7 @@ describe("CircuitBreaker", () => {
     const requests = t.server.requests.length;
     await expect(t.provider.getSpaceStatus(ref)).rejects.toThrow(/paused/);
     expect(t.server.requests.length).toBe(requests);
-    expect(t.provider.breakerStates()[HOST]).toBe("OPEN");
+    expect(t.provider.circuitStates()[HOST]).toBe("OPEN");
     await t.server.stop();
   });
 });

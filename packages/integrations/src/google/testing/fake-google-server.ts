@@ -93,12 +93,15 @@ export class FakeGoogleServer {
       const form = new URLSearchParams(raw);
       const claims = decodeJwt(form.get("assertion") ?? "");
       const failure = this.world.take("token");
+      const scopes = typeof claims.scope === "string" ? claims.scope.split(" ") : [];
+      if (scopes.some((x) => this.world.deniedPermissions.has(x)))
+        return error(400, "unauthorized_client");
       if (failure !== null)
         return error(failure === "unavailable" ? 503 : 400, "unauthorized_client");
       const token = `fake-token-${String(++this.tokensIssued)}`;
       this.tokens.set(token, {
         sub: typeof claims.sub === "string" ? claims.sub : null,
-        scopes: typeof claims.scope === "string" ? claims.scope.split(" ") : [],
+        scopes,
       });
       return send(200, { access_token: token, expires_in: 3600, token_type: "Bearer" });
     }

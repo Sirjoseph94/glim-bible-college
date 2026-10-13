@@ -275,6 +275,33 @@ const SAMPLES: Record<string, Sample> = {
     Promise.resolve({ url: "/api/v1/admin/integrations/youtube/status" }),
   "POST /admin/integrations/youtube/test": () =>
     Promise.resolve({ url: "/api/v1/admin/integrations/youtube/test" }),
+  // Redirects: to Google's consent (or back, when uploads are off) for allowed callers.
+  "GET /admin/integrations/youtube/connect": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/connect" }),
+  // No state cookie: allowed callers are sent back with youtube=failed; nothing is stored.
+  "GET /admin/integrations/youtube/callback": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/callback?code=x&state=y" }),
+  "POST /admin/integrations/youtube/disconnect": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/disconnect" }),
+  "GET /admin/integrations/google": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/google" }),
+  "POST /admin/integrations/google": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/google", payload: { primaryDomain: null } }),
+  // Google Meet is off here: allowed callers get 409; nothing is queued.
+  "POST /admin/integrations/google/test": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/google/test" }),
+  // A malformed Google id: allowed callers get 400; nothing is added.
+  "POST /admin/integrations/google/host-accounts": () =>
+    Promise.resolve({
+      url: "/api/v1/admin/integrations/google/host-accounts",
+      payload: { email: "authz-host@glim.test", providerUserId: "not-a-number" },
+    }),
+  // An out-of-range weight: allowed callers get 400; nothing changes.
+  "PATCH /admin/integrations/google/host-accounts/:id": () =>
+    Promise.resolve({
+      url: "/api/v1/admin/integrations/google/host-accounts/00000000-0000-4000-8000-000000000000",
+      payload: { weight: 99 },
+    }),
   // The Registrar holds a staff role, so allowed callers get 409 and nobody is erased.
   "POST /users/:id/erase": () =>
     Promise.resolve({

@@ -10,6 +10,7 @@ import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { RoleService } from "@glim/modules/authorization";
 import { PolicyService, SettingsService } from "@glim/modules/identity";
 import { NotificationsService } from "@glim/modules/notifications";
+import { IntegrationsService } from "@glim/modules/ops";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
@@ -54,6 +55,7 @@ export class ProvisioningService {
     @Inject(PolicyService) private readonly policies: PolicyService,
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(IntegrationsService) private readonly integrations: IntegrationsService,
   ) {}
 
   /** The provider new meetings get, or null when meetings use pasted links (v1). */
@@ -220,6 +222,9 @@ export class ProvisioningService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (error instanceof ProviderPermanentError || attempt.final) {
+        // A 403 is configuration (scopes, a suspended host): the integration needs attention.
+        if (error instanceof ProviderPermanentError)
+          await this.integrations.markDegraded("google_workspace", message, host.email);
         await this.fail(row, message);
         return "ERROR";
       }
