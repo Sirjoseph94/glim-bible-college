@@ -17,7 +17,7 @@ import { ProgressBar } from "../components/ui/progress-bar";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 import { Icon } from "../design/icons";
-import { currentIntakeQuery } from "./apply";
+import { currentIntakeQuery } from "../api/intake";
 
 /** Autosave interval (TRD §10.2: every 5–10 s). */
 const AUTOSAVE_MS = 5000;

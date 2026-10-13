@@ -1,7 +1,7 @@
-import type { admissions, CurrentIntake } from "@glim/contracts";
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import type { CurrentIntake } from "@glim/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { api } from "../api/client";
+import { currentIntakeQuery, programmeLength } from "../api/intake";
 import { meQuery } from "../api/session";
 import { PageHeader } from "../components/app/page-header";
 import { LoadFailed } from "../components/app/page-states";
@@ -12,19 +12,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 
-export const currentIntakeQuery = queryOptions({
-  queryKey: ["intake", "current"],
-  queryFn: ({ signal }) =>
-    api<typeof admissions.getCurrentIntake>("GET", "/public/intakes/current", { signal }),
-  staleTime: 10 * 60 * 1000,
-});
-
-const LENGTH: Record<string, string> = {
-  CERTIFICATE: "1 year · Year 1",
-  DIPLOMA: "2 years · Years 1 and 2",
-};
-
-/** The public landing page for applicants (TRD §10.2, spec stories 1, 3, 19). */
+/** The public page for applicants (TRD §10.2, spec stories 1, 3, 19). */
 export function ApplyPage() {
   const current = useQuery(currentIntakeQuery);
   const me = useQuery(meQuery);
@@ -56,9 +44,7 @@ export function ApplyPage() {
               <li key={p.id}>
                 <Card className="h-full space-y-1">
                   <h2 className="text-heading text-ink">{p.name}</h2>
-                  <p className="text-body-sm text-ink-muted">
-                    {LENGTH[p.awardType] ?? `${String(p.levels)} year(s)`}
-                  </p>
+                  <p className="text-body-sm text-ink-muted">{programmeLength(p)}</p>
                 </Card>
               </li>
             ))}

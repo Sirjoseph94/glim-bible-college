@@ -18,6 +18,8 @@ export function SignedOutShell({
   children: ReactNode;
 }) {
   const { pathname } = useLocation();
+  // The landing page (routes/landing.tsx) is full width and draws its own top bar and footer.
+  if (pathname === "/") return <>{children}</>;
   const authPage = AUTH_PAGES.some((page) =>
     page.endsWith("/") ? pathname.startsWith(page) : pathname === page,
   );

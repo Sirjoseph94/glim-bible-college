@@ -7,6 +7,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { meQuery } from "./api/session";
+import { IndexRoute } from "./routes/index-route";
 import { LoginPage } from "./routes/login";
 import { RootLayout } from "./routes/root";
 import { TEACH_TABS, type TeachTab } from "./routes/teach-tabs";
@@ -22,10 +23,11 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({ component: RootL
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
+  // Signed in or not decides Home or the landing page, so know it before the first paint.
   beforeLoad: async ({ context }) => {
-    if ((await context.queryClient.query(meQuery)) === null) throw redirect({ to: "/login" });
+    await context.queryClient.query(meQuery);
   },
-  component: lazyRouteComponent(() => import("./routes/home"), "HomePage"),
+  component: IndexRoute,
 });
 
 const signedOutOnly = async ({ context }: { context: RouterContext }) => {

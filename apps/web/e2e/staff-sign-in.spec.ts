@@ -52,7 +52,7 @@ test("an invited System Admin sets a password, signs out, signs in, and resets t
   await expect(page.getByRole("heading", { name: "Welcome, Esther Admin" })).toBeVisible();
 });
 
-test("a signed-out visitor to / is sent to sign in", async ({ page }) => {
-  await page.goto("/");
+test("a signed-out visitor to a signed-in page is sent to sign in", async ({ page }) => {
+  await page.goto("/schedule");
   await expect(page).toHaveURL(/\/login$/);
 });
