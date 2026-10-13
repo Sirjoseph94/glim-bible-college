@@ -30,13 +30,15 @@ test("a student reads notifications and chooses what comes by email", async ({ p
   await expect(page.getByRole("link", { name: "Notifications", exact: true })).toBeVisible();
 
   await page.getByText("What you get").click();
-  const announcements = page.getByLabel("Course announcements by email");
+  const byEmail = (page: Page, kind: string) =>
+    page.getByRole("group", { name: kind, exact: true }).getByRole("switch", { name: "By email" });
+  const announcements = byEmail(page, "Course announcements");
   await expect(announcements).toBeChecked();
-  await announcements.uncheck();
+  await announcements.click();
   await expect(announcements).not.toBeChecked();
   await page.reload();
   await page.getByText("What you get").click();
-  await expect(page.getByLabel("Course announcements by email")).not.toBeChecked();
+  await expect(byEmail(page, "Course announcements")).not.toBeChecked();
   // Critical kinds can't be turned off by email.
-  await expect(page.getByRole("row", { name: /Transcript issued/ })).toContainText("Always");
+  await expect(page.getByRole("group", { name: /Transcript issued/ })).toContainText("Always");
 });

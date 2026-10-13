@@ -1,6 +1,6 @@
 import { expect, test } from "./test";
 import { linkToken } from "./mailbox";
-import { openTeaching } from "./nav";
+import { openArea, openTeaching } from "./nav";
 
 const EMAIL = "e2e-lecturer@glim.test";
 const PASSWORD = "lecturer passphrase 2026";
@@ -48,6 +48,13 @@ test("a Lecturer schedules a Class Meeting in a Room and sees it on their schedu
   // A Lecturer's Today lists it under Coming up (§11.7).
   await page.getByRole("link", { name: "Home" }).click();
   await expect(page.getByRole("heading", { name: "Coming up" })).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "PAS101 Week 1: Caring for the flock" }),
+  ).toBeVisible();
+
+  // And on the Schedule (§11.11).
+  await openArea(page, "Schedule");
+  await expect(page.getByRole("heading", { name: "Schedule", level: 1 })).toBeVisible();
   await expect(
     page.getByRole("article", { name: "PAS101 Week 1: Caring for the flock" }),
   ).toBeVisible();

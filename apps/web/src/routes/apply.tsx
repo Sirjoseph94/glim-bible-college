@@ -1,11 +1,16 @@
-import type { admissions } from "@glim/contracts";
+import type { admissions, CurrentIntake } from "@glim/contracts";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import { api } from "../api/client";
 import { meQuery } from "../api/session";
-import { Alert } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
 import { GOOGLE_ERRORS, GoogleButton } from "../components/google";
 import { CalendarDate } from "../components/time";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 
 export const currentIntakeQuery = queryOptions({
   queryKey: ["intake", "current"],
@@ -24,44 +29,69 @@ export function ApplyPage() {
   const current = useQuery(currentIntakeQuery);
   const me = useQuery(meQuery);
   const { error } = useSearch({ from: "/apply" });
-  if (current.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
-  if (current.isError)
-    return (
-      <Alert tone="error">We couldn't load the admissions information. Please try again.</Alert>
-    );
-  const { intake, programmes, statementOfFaithUrl } = current.data;
 
   return (
     <div className="space-y-6">
       {error ? (
-        <Alert tone="error">{GOOGLE_ERRORS[error] ?? GOOGLE_ERRORS.GOOGLE_SIGN_IN_FAILED}</Alert>
+        <Banner tone="danger">{GOOGLE_ERRORS[error] ?? GOOGLE_ERRORS.GOOGLE_SIGN_IN_FAILED}</Banner>
       ) : null}
-      <section className="space-y-2">
-        <h1 className="text-display">Apply to study with us</h1>
-        <p className="text-slate-700">
-          Study theology on campus or online. Choose the programme that fits you.
-        </p>
-      </section>
+      <PageHeader
+        title="Apply to study with us"
+        meta="Study theology on campus or online. Choose the programme that fits you."
+      />
+      {current.isPending ? (
+        <SkeletonGroup label="Loading admissions information">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <Skeleton className="h-40" />
+        </SkeletonGroup>
+      ) : current.isError ? (
+        <LoadFailed what="the admissions information" onRetry={() => void current.refetch()} />
+      ) : (
+        <>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {current.data.programmes.map((p) => (
+              <li key={p.id}>
+                <Card className="h-full space-y-1">
+                  <h2 className="text-heading text-ink">{p.name}</h2>
+                  <p className="text-body-sm text-ink-muted">
+                    {LENGTH[p.awardType] ?? `${String(p.levels)} year(s)`}
+                  </p>
+                </Card>
+              </li>
+            ))}
+          </ul>
 
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {programmes.map((p) => (
-          <li key={p.id} className="rounded border border-slate-200 bg-white p-4">
-            <h3 className="font-semibold">{p.name}</h3>
-            <p className="text-sm text-slate-600">
-              {LENGTH[p.awardType] ?? `${String(p.levels)} year(s)`}
-            </p>
-          </li>
-        ))}
-      </ul>
+          <IntakeCard
+            intake={current.data.intake}
+            statementOfFaithUrl={current.data.statementOfFaithUrl}
+            signedIn={me.data ? { isApplicant: me.data.roles.isApplicant } : null}
+          />
+        </>
+      )}
+    </div>
+  );
+}
 
-      <section
-        className="space-y-2 rounded border border-slate-200 bg-white p-4"
-        aria-live="polite"
-      >
+/** Whether applications are open, and the way in: Google sign-up, or straight to the form. */
+function IntakeCard({
+  intake,
+  statementOfFaithUrl,
+  signedIn,
+}: {
+  intake: CurrentIntake["intake"];
+  statementOfFaithUrl: CurrentIntake["statementOfFaithUrl"];
+  signedIn: { isApplicant: boolean } | null;
+}) {
+  return (
+    <Card className="space-y-4">
+      <div aria-live="polite">
         {intake === null ? (
-          <p>There's no intake scheduled yet. Please check back soon.</p>
+          <p className="text-body">There's no intake scheduled yet. Please check back soon.</p>
         ) : intake.status === "OPEN" ? (
-          <p>
+          <p className="text-body">
             Applications for the <strong>{intake.academicSessionName}</strong> are open until{" "}
             <strong>
               <CalendarDate value={intake.closesOn} />
@@ -69,7 +99,7 @@ export function ApplyPage() {
             .
           </p>
         ) : intake.status === "PLANNED" ? (
-          <p>
+          <p className="text-body">
             Applications for the <strong>{intake.academicSessionName}</strong> open on{" "}
             <strong>
               <CalendarDate value={intake.opensOn} />
@@ -77,27 +107,28 @@ export function ApplyPage() {
             .
           </p>
         ) : (
-          <Alert tone="error">
+          <Banner tone="warning">
             Applications for the {intake.academicSessionName} are closed. You can't start an
             application now.
-          </Alert>
+          </Banner>
         )}
-        {intake?.status === "OPEN" ? (
-          me.data ? (
-            <Link
-              to="/application/edit"
-              className="block w-full rounded bg-brand px-4 py-2 text-center font-medium text-white"
-            >
-              {me.data.roles.isApplicant ? "Continue your application" : "Start your application"}
+      </div>
+      {intake?.status === "OPEN" ? (
+        signedIn ? (
+          <Button asChild variant="primary" block>
+            <Link to="/application/edit">
+              {signedIn.isApplicant ? "Continue your application" : "Start your application"}
             </Link>
-          ) : (
-            <GoogleButton
-              href="/api/v1/auth/google/start?intent=apply&returnTo=%2Fapplication%2Fedit"
-              label="Apply with Google"
-            />
-          )
-        ) : null}
-        <p className="text-sm text-slate-600">
+          </Button>
+        ) : (
+          <GoogleButton
+            href="/api/v1/auth/google/start?intent=apply&returnTo=%2Fapplication%2Fedit"
+            label="Apply with Google"
+          />
+        )
+      ) : null}
+      <div className="space-y-1 text-body-sm text-ink-muted">
+        <p>
           You apply with your Google account. No Google account?{" "}
           <a
             href="https://accounts.google.com/signup"
@@ -110,7 +141,7 @@ export function ApplyPage() {
           .
         </p>
         {statementOfFaithUrl ? (
-          <p className="text-sm text-slate-600">
+          <p>
             Applicants affirm our{" "}
             <a
               href={statementOfFaithUrl}
@@ -123,7 +154,7 @@ export function ApplyPage() {
             .
           </p>
         ) : null}
-      </section>
-    </div>
+      </div>
+    </Card>
   );
 }

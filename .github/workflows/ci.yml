@@ -97,7 +97,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @glim/web build
-      # LCP <= 4 s on slow 4G (apps/web/lighthouserc.cjs); the e2e stack serves the build.
+      # LCP <= 4 s on slow 4G, public and signed-in screens (apps/web/lighthouserc*.cjs); the e2e
+      # stack serves the build.
       - name: Lighthouse CI
         working-directory: apps/web
-        run: pnpm dlx @lhci/cli@0.15.1 autorun
+        run: node scripts/lighthouse.mjs

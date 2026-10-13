@@ -1,37 +1,71 @@
 import type { assessment, QuizAttempt } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError } from "../api/client";
-import { Alert, formText } from "../components/form";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { api } from "../api/client";
+import { describeError, type ErrorCopy } from "../api/error-copy";
+import { PageHeader } from "../components/app/page-header";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { useDetailBar } from "../components/app/shell-parts";
+import { formText } from "../components/form";
 import { Time } from "../components/time";
+import { Badge } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card, cardClass } from "../components/ui/card";
+import { Checkbox, Radio } from "../components/ui/choice";
+import { ConfirmDialog } from "../components/ui/dialog";
+import { EmptyState } from "../components/ui/empty-state";
+import { Select, TextField } from "../components/ui/field";
+import { OfflineBanner, QueuedPill, useOnline } from "../components/ui/offline";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
+import { cn } from "../design/cn";
+import { Icon } from "../design/icons";
+import { offlineQueue, queueWork, useQueued } from "../offline";
+import {
+  changedSince,
+  latestSeq,
+  mergeSaves,
+  nextSeq,
+  queuedAnswers,
+  quizGroup,
+  restoreAnswers,
+  saveStep,
+  waitingCount,
+  type Answers,
+  type Response,
+} from "./quiz-answers";
 
-type Response = QuizAttempt["questions"][number]["response"];
-type Answers = Record<string, Response>;
-
+/** Answers are gathered this long after a change, then handed to the queue as one batch. */
 const AUTOSAVE_MS = 800;
+/** While handing in, how often the page tries again. */
 const RETRY_MS = 3000;
+/** The timer turns `warning` under two minutes (§11.11). */
+const WARNING_MS = 120_000;
 
-/** Answers not yet stored on the server survive a reload or a dropped connection. */
-const pendingKey = (attemptId: string) => `glim:quiz-attempt:${attemptId}`;
+const legacyTaken = new Map<string, Answers>();
 
-function readPending(attemptId: string): Answers {
+/**
+ * Answers the previous quiz page left unsent in local storage: taken over once, so they go out
+ * through the queue. Kept per attempt for the page's lifetime, so a second render gets the same
+ * answers rather than none, until the page has mounted (`legacyTaken.set(id, {})`).
+ * (Remove after every phone has opened its quizzes since; WP-UI-12.)
+ */
+function takeLegacyAnswers(attemptId: string): Answers {
+  const taken = legacyTaken.get(attemptId);
+  if (taken !== undefined) return taken;
+  const key = `glim:quiz-attempt:${attemptId}`;
+  let answers: Answers = {};
   try {
-    const raw = localStorage.getItem(pendingKey(attemptId));
-    return raw === null ? {} : (JSON.parse(raw) as Answers);
+    const raw = window.localStorage.getItem(key);
+    window.localStorage.removeItem(key);
+    if (raw !== null) answers = JSON.parse(raw) as Answers;
   } catch {
-    return {};
+    // Storage unavailable or unreadable: nothing to take over.
   }
-}
-
-function writePending(attemptId: string, pending: Answers): void {
-  try {
-    if (Object.keys(pending).length === 0) localStorage.removeItem(pendingKey(attemptId));
-    else localStorage.setItem(pendingKey(attemptId), JSON.stringify(pending));
-  } catch {
-    // Storage may be unavailable (private mode); answers are still sent from memory.
-  }
+  legacyTaken.set(attemptId, answers);
+  return answers;
 }
 
 function clock(ms: number): string {
@@ -45,7 +79,7 @@ export function QuizPage() {
   const { quizId } = useParams({ strict: false });
   const id = quizId ?? "";
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const [attempt, setAttempt] = useState<QuizAttempt | null>(null);
   const quiz = useQuery({
     queryKey: ["quiz", id],
@@ -60,12 +94,37 @@ export function QuizPage() {
         signal,
       }),
   });
-  if (quiz.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (quiz.isError) return <Alert tone="error">This quiz isn't available to you.</Alert>;
+  useDetailBar(
+    quiz.data
+      ? {
+          back: {
+            to: "/courses/$offeringId",
+            params: { offeringId: quiz.data.courseOfferingId },
+            search: { tab: "work" },
+            label: "Course",
+          },
+        }
+      : { back: { to: "/courses", label: "My courses" } },
+  );
+  if (quiz.isPending)
+    return (
+      <SkeletonGroup label="Loading the quiz">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-40" />
+      </SkeletonGroup>
+    );
+  if (quiz.isError)
+    return isNotAvailable(quiz.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="this quiz" onRetry={() => void quiz.refetch()} />
+    );
   const z = quiz.data;
   if (attempt !== null)
     return (
       <AttemptView
+        // A finished attempt starts afresh from the server's copy.
+        key={`${attempt.id}:${attempt.status}`}
         initial={attempt}
         title={z.title}
         onDone={(finished) => {
@@ -75,38 +134,56 @@ export function QuizPage() {
       />
     );
   const running = mine.data?.attempts.find((a) => a.status === "IN_PROGRESS");
+  const finished = (mine.data?.attempts ?? []).filter((a) => a.status !== "IN_PROGRESS");
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">{z.title}</h1>
-      <p className="text-sm text-slate-600">
-        {z.questionCount} questions · {z.maxScore} marks
-        {z.timeLimitMinutes === null ? "" : ` · ${String(z.timeLimitMinutes)} minutes`} ·{" "}
-        {z.maxAttempts === 1 ? "1 attempt" : `${String(z.maxAttempts)} attempts`}
-        {z.closesAt === null ? null : (
+    <div className="space-y-5">
+      <PageHeader
+        title={z.title}
+        meta={
           <>
-            {" "}
-            · closes <Time value={z.closesAt} />
+            {z.questionCount} questions · {z.maxScore} marks
+            {z.timeLimitMinutes === null ? "" : ` · ${String(z.timeLimitMinutes)} minutes`} ·{" "}
+            {z.maxAttempts === 1 ? "1 attempt" : `${String(z.maxAttempts)} attempts`}
+            {z.closesAt === null ? null : (
+              <>
+                {" "}
+                · closes <Time value={z.closesAt} />
+              </>
+            )}
           </>
-        )}
-      </p>
+        }
+      />
       {z.instructionsHtml === null ? null : (
         <div
-          className="rounded border border-slate-200 bg-white p-3 text-sm"
+          className="max-w-prose space-y-2 text-body [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
           // Rendered from Markdown and sanitized on the server.
           dangerouslySetInnerHTML={{ __html: z.instructionsHtml }}
         />
       )}
-      {(mine.data?.attempts ?? []).filter((a) => a.status !== "IN_PROGRESS").length > 0 ? (
-        <ul className="space-y-1 text-sm">
-          {mine.data?.attempts
-            .filter((a) => a.status !== "IN_PROGRESS")
-            .map((a) => (
-              <li key={a.id}>
-                Attempt {a.attemptNo}:{" "}
-                {a.score === null ? "waiting for marking" : `${a.score} / ${z.maxScore}`}
-                <button
-                  type="button"
-                  className="ml-2 underline"
+      {finished.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className="text-heading">Your attempts</h2>
+          <Card list role="list">
+            {finished.map((a) => (
+              <div
+                key={a.id}
+                role="listitem"
+                aria-label={`Attempt ${String(a.attemptNo)}`}
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+              >
+                <span className="text-body">
+                  Attempt {a.attemptNo}:{" "}
+                  {a.score === null ? (
+                    <Badge tone="warning">Waiting for marking</Badge>
+                  ) : (
+                    <span className="font-semibold">
+                      {a.score} / {z.maxScore}
+                    </span>
+                  )}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() =>
                     void run(async () => {
                       setAttempt(
@@ -118,17 +195,24 @@ export function QuizPage() {
                   }
                 >
                   Review
-                </button>
-              </li>
+                </Button>
+              </div>
             ))}
-        </ul>
+          </Card>
+        </section>
       ) : null}
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {mine.data?.open === true ? (
-        <button
-          type="button"
-          disabled={busy}
-          className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      {mine.isError ? (
+        <LoadFailed what="your attempts" onRetry={() => void mine.refetch()} />
+      ) : mine.data?.open === true ? (
+        <Button
+          variant="primary"
+          block
+          loading={busy}
           onClick={() =>
             void run(async () => {
               setAttempt(
@@ -143,24 +227,29 @@ export function QuizPage() {
           {z.timeLimitMinutes === null || running !== undefined
             ? ""
             : ` (${String(z.timeLimitMinutes)} min timer starts)`}
-        </button>
+        </Button>
       ) : mine.isSuccess ? (
-        <p className="text-sm text-slate-600">
+        <p className="text-body-sm text-ink-muted">
           {!mine.data.eligible
             ? "You sit this exam on paper in the Room. Ask your Lecturer if you need to take it online."
             : mine.data.attemptsLeft === 0
               ? "You've used all your attempts."
               : "This quiz isn't open now."}
         </p>
-      ) : null}
+      ) : (
+        <Skeleton className="h-control" />
+      )}
     </div>
   );
 }
 
 /**
- * An attempt in progress or finished. Answers save ~1 s after each change; if the connection
- * drops they wait (in memory and local storage) and are sent when it's back. At the deadline the
- * page sends what it has and submits; the server accepts answers for 30 s after it.
+ * An attempt in progress or finished (§11.11): one question per screen on phones, all of them
+ * from 1024px, under a sticky timer bar. Answers are gathered for a moment after each change and
+ * go through the offline queue (§9.20), so answers given with no signal are kept on the phone
+ * and sent on reconnect, in order, the latest answer to each question winning. At the deadline
+ * the page sends what it has and submits, trying again every few seconds while offline; the
+ * server accepts answers for 30 s after the deadline.
  */
 function AttemptView({
   initial,
@@ -172,105 +261,164 @@ function AttemptView({
   onDone: (attempt: QuizAttempt) => void;
 }) {
   const attemptId = initial.id;
+  const group = quizGroup(attemptId);
   const inProgress = initial.status === "IN_PROGRESS";
+  const online = useOnline();
+  const queued = useQueued(group);
+  // While answers wait, try every 3 s, as the old page did (the shared queue retries every 30 s),
+  // and say so when they still don't go.
+  const [stuck, setStuck] = useState(false);
+  const hasWaiting = queued.count > 0;
+  useEffect(() => {
+    if (!hasWaiting) {
+      setStuck(false);
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      void offlineQueue.flush().then(async () => {
+        setStuck((await offlineQueue.count(group)) > 0);
+      });
+    }, RETRY_MS);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [hasWaiting, group]);
+  const baseId = useId();
+  const [legacy] = useState<Answers>(() => (inProgress ? takeLegacyAnswers(attemptId) : {}));
   const [answers, setAnswers] = useState<Answers>(() => {
     const saved: Answers = {};
     for (const q of initial.questions) saved[q.questionId] = q.response;
-    return { ...saved, ...readPending(attemptId) };
+    return { ...saved, ...legacy };
   });
-  const pending = useRef<Answers>(readPending(attemptId));
+  // Answers not yet handed to the queue; the ref is always current for timers and handing in.
+  const [local, setLocalState] = useState<Answers>(legacy);
+  const localRef = useRef(local);
+  const setLocal = (next: Answers) => {
+    localRef.current = next;
+    setLocalState(next);
+  };
+  const setLocalRef = useRef(setLocal);
+  setLocalRef.current = setLocal;
+  const edited = useRef(new Set(Object.keys(legacy)));
+  // Taken over now: reopening the attempt later must not bring the old answers back.
+  useEffect(() => {
+    if (inProgress) legacyTaken.set(attemptId, {});
+  }, [attemptId, inProgress]);
   const seq = useRef(initial.lastSeq);
-  const sending = useRef(false);
+  const batchTimer = useRef<number | undefined>(undefined);
   const finishing = useRef(false);
-  const [status, setStatus] = useState<"saved" | "saving" | "offline" | "finishing" | null>(
-    Object.keys(pending.current).length > 0 ? "offline" : null,
-  );
+  const [handingIn, setHandingIn] = useState(false);
+  const [everSaved, setEverSaved] = useState(false);
+  const [refused, setRefused] = useState<ErrorCopy | null>(null);
+  const [index, setIndex] = useState(0);
+  const moved = useRef(false);
   // The server's clock minus ours, so a phone with the wrong time still counts down correctly.
   const skew = useRef(new Date(initial.serverNow).getTime() - Date.now());
   const deadline = initial.deadlineAt === null ? null : new Date(initial.deadlineAt).getTime();
   const [left, setLeft] = useState(deadline === null ? null : deadline - Date.now() - skew.current);
 
-  /** Sends answers not yet stored; true when nothing is left to send. */
-  const flush = useCallback(async (): Promise<boolean> => {
-    const batch = { ...pending.current };
-    if (Object.keys(batch).length === 0) return true;
-    if (sending.current) return false;
-    sending.current = true;
-    // While handing in, the page says so whatever happens to each save.
-    const show = (next: "saved" | "saving" | "offline") => {
-      if (!finishing.current) setStatus(next);
+  // Answers still waiting on the phone from an earlier visit: shown, and new batches go after them.
+  useEffect(() => {
+    if (!inProgress) return undefined;
+    let live = true;
+    void offlineQueue.list(group).then((items) => {
+      if (!live) return;
+      seq.current = latestSeq(items, seq.current);
+      setAnswers((shown) => restoreAnswers(shown, queuedAnswers(items), edited.current));
+    });
+    return () => {
+      live = false;
     };
-    show("saving");
-    seq.current = Math.max(Date.now(), seq.current + 1);
-    try {
-      await api<typeof assessment.saveQuizResponses>("PATCH", "/quiz-attempts/:id", {
-        params: { id: attemptId },
-        body: {
-          seq: seq.current,
-          responses: Object.entries(batch).map(([questionId, response]) => ({
-            questionId,
-            response,
-          })),
-        },
-      });
-      // Keep only answers changed again while this batch was on its way.
-      pending.current = Object.fromEntries(
-        Object.entries(pending.current).filter(
-          ([questionId, response]) => batch[questionId] !== response,
-        ),
+  }, [group, inProgress]);
+
+  const queueBatch = useCallback(
+    (batch: Answers) => {
+      seq.current = nextSeq(seq.current, Date.now());
+      // Folded into the last unsent save, so answers made offline go back as one request.
+      return queueWork(
+        { key: crypto.randomUUID(), group, steps: [saveStep(attemptId, seq.current, batch)] },
+        mergeSaves,
       );
-      writePending(attemptId, pending.current);
-      show(Object.keys(pending.current).length === 0 ? "saved" : "saving");
-      return Object.keys(pending.current).length === 0;
-    } catch (error) {
-      // The attempt has ended on the server: there's nothing more to save.
-      if (error instanceof ApiError && error.code === "ATTEMPT_EXPIRED") {
-        pending.current = {};
-        writePending(attemptId, {});
-        return true;
-      }
-      show("offline");
-      return false;
-    } finally {
-      sending.current = false;
-    }
-  }, [attemptId]);
+    },
+    [attemptId, group],
+  );
+
+  // One hand-over at a time, so a batch is never queued twice.
+  const handing = useRef<Promise<void>>(Promise.resolve());
+  /** Hands the answers not yet batched to the queue, as one save. */
+  const handOver = useCallback(() => {
+    const handOverNow = async () => {
+      window.clearTimeout(batchTimer.current);
+      batchTimer.current = undefined;
+      const batch = localRef.current;
+      if (Object.keys(batch).length === 0) return;
+      await queueBatch(batch);
+      // Keep anything answered again while the batch was being stored.
+      setLocalRef.current(changedSince(localRef.current, batch));
+    };
+    // A failed hand-over (storage refused) mustn't stop the next one: the answers stay in `local`.
+    handing.current = handing.current.then(handOverNow, handOverNow);
+    return handing.current;
+  }, [queueBatch]);
+
+  const scheduleBatch = useCallback(() => {
+    if (batchTimer.current !== undefined) return;
+    batchTimer.current = window.setTimeout(() => void handOver(), AUTOSAVE_MS);
+  }, [handOver]);
+
+  // Answers gathered (or taken over from the old page): hand them over now, online or not.
+  useEffect(() => {
+    if (Object.keys(localRef.current).length === 0) return;
+    void handOver();
+  }, [online, handOver]);
+  // Leaving the app: keep the answers in the queue.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void handOver();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, [handOver]);
+  // Leaving the page with answers not yet batched: queue them now rather than lose them.
+  useEffect(() => () => void handOver(), [handOver]);
+
+  // After a send, say the answers are saved; a refused save is said once. An attempt that has
+  // ended on the server has nothing more to save, which the page says by handing in.
+  useEffect(() => {
+    if (queued.last === null) return;
+    if (queued.last.sent.length > 0) setEverSaved(true);
+    const rejected = queued.last.rejected.find((r) => r.error.code !== "ATTEMPT_EXPIRED");
+    if (rejected) setRefused(describeError(rejected.error));
+  }, [queued.last]);
 
   /** Sends what's left, then submits; keeps trying while the connection is down. */
   const finish = useCallback(async () => {
     if (finishing.current) return;
     finishing.current = true;
-    setStatus("finishing");
+    setHandingIn(true);
     for (;;) {
       try {
-        await flush();
+        await handOver();
+        await offlineQueue.flush();
+        // A send already under way may have started before the last batch was stored.
+        if ((await offlineQueue.count(group)) > 0) await offlineQueue.flush();
+        if ((await offlineQueue.count(group)) > 0) throw new Error("Answers still waiting");
         const done = await api<typeof assessment.submitQuizAttempt>(
           "POST",
           "/quiz-attempts/:id/submit",
           { params: { id: attemptId }, headers: { "idempotency-key": `submit-${attemptId}` } },
         );
-        writePending(attemptId, {});
         onDone(done);
         return;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
       }
     }
-  }, [attemptId, flush, onDone]);
-
-  // Retry unsent answers every few seconds and as soon as the browser is back online.
-  useEffect(() => {
-    if (!inProgress) return;
-    const retry = () => {
-      if (!finishing.current) void flush();
-    };
-    const timer = window.setInterval(retry, RETRY_MS);
-    window.addEventListener("online", retry);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("online", retry);
-    };
-  }, [inProgress, flush]);
+  }, [attemptId, group, handOver, onDone]);
 
   // The countdown; at zero the page hands the attempt in.
   useEffect(() => {
@@ -285,48 +433,85 @@ function AttemptView({
     };
   }, [inProgress, deadline, finish]);
 
+  // Moving between questions on a phone: focus the new one, so it is read out.
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    const question = document.getElementById(`${baseId}-q${String(index)}`);
+    question?.focus();
+    question?.scrollIntoView({ block: "start" });
+  }, [index, baseId]);
+
   const answer = (questionId: string, response: Response) => {
+    edited.current.add(questionId);
+    setRefused(null);
     setAnswers((a) => ({ ...a, [questionId]: response }));
-    pending.current = { ...pending.current, [questionId]: response };
-    writePending(attemptId, pending.current);
-    setStatus("saving");
-    window.setTimeout(() => void flush(), AUTOSAVE_MS);
+    setLocal({ ...localRef.current, [questionId]: response });
+    scheduleBatch();
+  };
+  const go = (next: number) => {
+    moved.current = true;
+    setIndex(next);
   };
 
   const over = !inProgress;
+  const count = initial.questions.length;
+  const waiting = waitingCount(queued.items, local);
+  const status = handingIn
+    ? "Handing in your answers…"
+    : waiting > 0
+      ? online && !stuck
+        ? "Saving…"
+        : online
+          ? "Not saved yet: your answers are kept on this device and sent as soon as the server answers."
+          : "Offline: your answers are kept and will be sent when you reconnect."
+      : everSaved
+        ? "Answers saved"
+        : "";
   return (
     <div className="space-y-4">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-slate-50 py-2">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        {inProgress && left !== null ? (
-          <span
-            role="timer"
-            aria-label="Time left"
-            className={`rounded px-2 py-1 font-mono ${left < 60_000 ? "bg-red-100 text-red-800" : "bg-slate-200"}`}
-          >
-            {clock(left)}
-          </span>
-        ) : null}
-      </div>
+      {inProgress && !online ? <OfflineBanner /> : null}
+      <PageHeader title={title} />
+      {refused ? (
+        <Banner tone="danger" title="Some answers weren't saved">
+          {refused.title}. {refused.body}
+        </Banner>
+      ) : null}
       {inProgress ? (
-        <p className="text-xs text-slate-500" aria-live="polite">
-          {status === "saving"
-            ? "Saving…"
-            : status === "saved"
-              ? "Answers saved"
-              : status === "offline"
-                ? "Offline: your answers are kept and will be sent when you reconnect."
-                : status === "finishing"
-                  ? "Handing in your answers…"
-                  : null}
-        </p>
+        <div className="sticky top-0 z-sticky flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface py-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <p className="text-body-sm text-ink-muted" aria-live="polite">
+              {status}
+            </p>
+            {handingIn ? null : <QueuedPill count={waiting} noun={["answer", "answers"]} />}
+          </div>
+          {left !== null ? (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-pill px-3 py-1",
+                left < WARNING_MS ? "bg-warning-soft text-warning" : "bg-surface-sunken text-ink",
+              )}
+            >
+              <Icon name="clock" size={16} />
+              {left < WARNING_MS ? <span className="sr-only">Under 2 minutes left</span> : null}
+              <span role="timer" aria-label="Time left" className="font-mono text-code">
+                {clock(left)}
+              </span>
+            </span>
+          ) : null}
+        </div>
       ) : (
-        <p className="font-medium">
+        <p className="text-subhead">
           {initial.score === null
             ? "Submitted. Some answers are waiting for marking."
             : `Score: ${initial.score} / ${initial.maxScore}`}
         </p>
       )}
+      {inProgress && count > 1 ? (
+        <p className="text-meta text-ink-muted lg:hidden">
+          Question {index + 1} of {count}
+        </p>
+      ) : null}
       <ol className="space-y-4">
         {initial.questions.map((q, i) => {
           const value = answers[q.questionId] ?? null;
@@ -335,86 +520,126 @@ function AttemptView({
           return (
             <li
               key={q.questionId}
-              className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm"
+              id={`${baseId}-q${String(i)}`}
+              tabIndex={-1}
+              className={cn(
+                cardClass(),
+                "space-y-3 scroll-mt-16",
+                inProgress && i !== index && "hidden lg:block",
+              )}
               aria-label={`Question ${String(i + 1)}`}
             >
-              <div className="flex justify-between gap-2">
+              <div className="flex justify-between gap-3">
                 <div
-                  className="font-medium"
+                  className="min-w-0 text-subhead"
                   // Rendered from Markdown and sanitized on the server.
                   dangerouslySetInnerHTML={{ __html: q.promptHtml }}
                 />
-                <span className="shrink-0 text-slate-500">
+                <span className="shrink-0 text-meta text-ink-muted">
                   {over && q.pointsAwarded !== null ? `${q.pointsAwarded} / ` : ""}
                   {q.points}
                 </span>
               </div>
               {q.options.length > 0 ? (
-                <fieldset className="space-y-1" disabled={over}>
+                <fieldset disabled={over}>
+                  <legend className="sr-only">Your answer</legend>
                   {q.options.map((o) => {
                     const multi = q.qtype === "MCQ_MULTI";
                     const right = q.correctOptionIds?.includes(o.id) === true;
+                    const Choice = multi ? Checkbox : Radio;
                     return (
-                      <label key={o.id} className="flex items-center gap-2">
-                        <input
-                          type={multi ? "checkbox" : "radio"}
-                          name={q.questionId}
-                          checked={chosen.includes(o.id)}
-                          onChange={(e) => {
-                            const next = multi
-                              ? e.target.checked
-                                ? [...chosen, o.id]
-                                : chosen.filter((c) => c !== o.id)
-                              : [o.id];
-                            answer(q.questionId, { optionIds: next });
-                          }}
-                        />
-                        <span className={right ? "font-medium text-green-800" : ""}>
-                          {o.text}
-                          {right ? " ✓" : ""}
-                        </span>
-                      </label>
+                      <Choice
+                        key={o.id}
+                        name={q.questionId}
+                        checked={chosen.includes(o.id)}
+                        onChange={(e) => {
+                          const next = multi
+                            ? e.target.checked
+                              ? [...chosen, o.id]
+                              : chosen.filter((c) => c !== o.id)
+                            : [o.id];
+                          answer(q.questionId, { optionIds: next });
+                        }}
+                        label={
+                          <span className={right ? "font-semibold text-success" : undefined}>
+                            {o.text}
+                            {right ? " ✓" : ""}
+                          </span>
+                        }
+                      />
                     );
                   })}
                 </fieldset>
-              ) : (
-                <textarea
-                  aria-label="Your answer"
-                  rows={q.qtype === "ESSAY" ? 6 : 1}
+              ) : q.qtype === "ESSAY" ? (
+                <TextField
+                  multiline
+                  label="Your answer"
+                  rows={6}
                   value={text}
                   readOnly={over}
                   onChange={(e) => {
                     answer(q.questionId, { text: e.target.value });
                   }}
-                  className="block w-full rounded border border-slate-300 px-3 py-2"
+                />
+              ) : (
+                <TextField
+                  label="Your answer"
+                  value={text}
+                  readOnly={over}
+                  onChange={(e) => {
+                    answer(q.questionId, { text: e.target.value });
+                  }}
                 />
               )}
               {q.acceptedAnswers !== null ? (
-                <p className="text-green-800">Accepted: {q.acceptedAnswers.join(", ")}</p>
+                <p className="text-body-sm text-success">
+                  Accepted: {q.acceptedAnswers.join(", ")}
+                </p>
               ) : null}
               {q.explanationHtml !== null ? (
                 <div
-                  className="text-slate-700"
+                  className="text-body-sm text-ink-muted"
                   // Rendered from Markdown and sanitized on the server.
                   dangerouslySetInnerHTML={{ __html: q.explanationHtml }}
                 />
               ) : null}
               {q.graderComment !== null ? (
-                <p className="text-slate-700">Comment: {q.graderComment}</p>
+                <p className="text-body-sm text-ink-muted">Comment: {q.graderComment}</p>
               ) : null}
             </li>
           );
         })}
       </ol>
+      {inProgress && count > 1 ? (
+        <div className="flex gap-3 lg:hidden">
+          {index > 0 ? (
+            <Button
+              variant="secondary"
+              icon="chevronLeft"
+              onClick={() => {
+                go(index - 1);
+              }}
+            >
+              Previous question
+            </Button>
+          ) : null}
+          {index < count - 1 ? (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                go(index + 1);
+              }}
+            >
+              Next question
+              <Icon name="chevronRight" size={20} />
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {inProgress ? (
-        <button
-          type="button"
-          disabled={status === "finishing"}
-          className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
-          onClick={() => void finish()}
-        >
+        <Button variant="primary" block loading={handingIn} onClick={() => void finish()}>
           Submit
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -425,6 +650,11 @@ export function QuizGradingPage() {
   const { quizId } = useParams({ strict: false });
   const id = quizId ?? "";
   const [open, setOpen] = useState<string | null>(null);
+  const quiz = useQuery({
+    queryKey: ["quiz", id],
+    queryFn: ({ signal }) =>
+      api<typeof assessment.getQuiz>("GET", "/quizzes/:id", { params: { id }, signal }),
+  });
   const list = useQuery({
     queryKey: ["quiz", id, "attempts"],
     queryFn: ({ signal }) =>
@@ -433,49 +663,83 @@ export function QuizGradingPage() {
         signal,
       }),
   });
-  if (list.isPending) return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (list.isError) return <Alert tone="error">We couldn't load the attempts.</Alert>;
+  useDetailBar(
+    quiz.data
+      ? {
+          back: {
+            to: "/teach/$offeringId",
+            params: { offeringId: quiz.data.courseOfferingId },
+            search: { tab: "work" },
+            label: "Course",
+          },
+        }
+      : { back: { to: "/teach", label: "Teaching" } },
+  );
+  if (list.isPending)
+    return (
+      <SkeletonGroup label="Loading the attempts">
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-40" />
+      </SkeletonGroup>
+    );
+  if (list.isError)
+    return isNotAvailable(list.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="the attempts" onRetry={() => void list.refetch()} />
+    );
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">Quiz attempts</h1>
+    <div className="space-y-5">
+      <PageHeader title="Quiz attempts" meta={quiz.data?.title} />
       <OnlineGrants quizId={id} />
-      {list.data.items.length === 0 ? <p className="text-slate-600">No attempts yet.</p> : null}
-      <ul className="space-y-2 text-sm">
-        {list.data.items.map((a) => (
-          <li
-            key={a.attemptId}
-            className="space-y-2 rounded border border-slate-200 bg-white p-3"
-            aria-label={`${a.studentName}, attempt ${String(a.attemptNo)}`}
-          >
-            <div className="flex flex-wrap justify-between gap-2">
-              <span className="font-medium">
-                {a.studentName} · attempt {a.attemptNo}
-              </span>
-              <span>
-                {a.score ?? "—"}
-                {a.essaysToMark > 0 ? ` · ${String(a.essaysToMark)} to mark` : ""}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="underline"
-              onClick={() => {
-                setOpen(open === a.attemptId ? null : a.attemptId);
-              }}
+      {list.data.items.length === 0 ? (
+        <EmptyState icon="check" title="No attempts yet">
+          Finished attempts show here, those with essays to mark first.
+        </EmptyState>
+      ) : (
+        <Card list role="list">
+          {list.data.items.map((a) => (
+            <div
+              key={a.attemptId}
+              role="listitem"
+              className="space-y-3 px-4 py-3"
+              aria-label={`${a.studentName}, attempt ${String(a.attemptNo)}`}
             >
-              {open === a.attemptId ? "Close" : "Open"}
-            </button>
-            {open === a.attemptId ? <MarkAttempt attemptId={a.attemptId} quizId={id} /> : null}
-          </li>
-        ))}
-      </ul>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-subhead">
+                    {a.studentName} · attempt {a.attemptNo}
+                  </p>
+                  <p className="flex flex-wrap items-center gap-2 text-body-sm text-ink-muted">
+                    Score {a.score ?? "—"}
+                    {a.essaysToMark > 0 ? (
+                      <Badge tone="warning">{`${String(a.essaysToMark)} to mark`}</Badge>
+                    ) : null}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-expanded={open === a.attemptId}
+                  onClick={() => {
+                    setOpen(open === a.attemptId ? null : a.attemptId);
+                  }}
+                >
+                  {open === a.attemptId ? "Close" : "Open"}
+                </Button>
+              </div>
+              {open === a.attemptId ? <MarkAttempt attemptId={a.attemptId} quizId={id} /> : null}
+            </div>
+          ))}
+        </Card>
+      )}
     </div>
   );
 }
 
 function MarkAttempt({ attemptId, quizId }: { attemptId: string; quizId: string }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, fieldErrors, run } = useSubmit();
   const attempt = useQuery({
     queryKey: ["quiz-attempt", attemptId],
     queryFn: ({ signal }) =>
@@ -484,14 +748,29 @@ function MarkAttempt({ attemptId, quizId }: { attemptId: string; quizId: string 
         signal,
       }),
   });
-  if (attempt.data === undefined) return null;
+  if (attempt.isPending)
+    return (
+      <SkeletonGroup label="Loading the attempt">
+        <Skeleton className="h-24" />
+      </SkeletonGroup>
+    );
+  if (attempt.isError)
+    return <LoadFailed what="this attempt" onRetry={() => void attempt.refetch()} />;
   return (
-    <div className="space-y-3">
-      {error ? <Alert tone="error">{error}</Alert> : null}
+    <div className="space-y-4">
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       {attempt.data.questions.map((q) => (
-        <div key={q.questionId} className="space-y-1 border-t border-slate-100 pt-2">
-          <div dangerouslySetInnerHTML={{ __html: q.promptHtml }} />
-          <p className="whitespace-pre-wrap rounded bg-slate-50 p-2">
+        <div key={q.questionId} className="space-y-2 border-t border-line pt-3">
+          <div
+            className="text-body"
+            // Rendered from Markdown and sanitized on the server.
+            dangerouslySetInnerHTML={{ __html: q.promptHtml }}
+          />
+          <p className="rounded-sm bg-surface-sunken p-3 text-body whitespace-pre-wrap">
             {q.response === null
               ? "(no answer)"
               : "text" in q.response
@@ -504,7 +783,8 @@ function MarkAttempt({ attemptId, quizId }: { attemptId: string; quizId: string 
           {q.qtype === "ESSAY" ? (
             <form
               key={q.pointsAwarded ?? "unmarked"}
-              className="flex flex-wrap items-end gap-2"
+              aria-label="Mark this answer"
+              className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
                 const data = new FormData(e.currentTarget);
@@ -526,31 +806,34 @@ function MarkAttempt({ attemptId, quizId }: { attemptId: string; quizId: string 
                 });
               }}
             >
-              <label>
-                <span className="block text-slate-700">Points (of {q.points})</span>
-                <input
+              <div className="grid gap-3 md:grid-cols-3">
+                <TextField
                   name="points"
+                  label={`Points (of ${q.points})`}
                   inputMode="decimal"
                   required
                   defaultValue={q.pointsAwarded ?? ""}
-                  className="w-24 rounded border border-slate-300 px-2 py-1"
+                  error={fieldErrors.points}
                 />
-              </label>
-              <label className="min-w-0 flex-1">
-                <span className="block text-slate-700">Comment</span>
-                <input
-                  name="comment"
-                  defaultValue={q.graderComment ?? ""}
-                  className="w-full rounded border border-slate-300 px-2 py-1"
-                />
-              </label>
-              <button type="submit" disabled={busy} className="underline">
+                <div className="md:col-span-2">
+                  <TextField
+                    name="comment"
+                    label="Comment"
+                    optional
+                    defaultValue={q.graderComment ?? ""}
+                  />
+                </div>
+              </div>
+              <Button type="submit" variant="secondary" size="sm" loading={busy}>
                 Save mark
-              </button>
+              </Button>
             </form>
           ) : (
-            <p className="text-slate-500">
-              {q.isCorrect === true ? "Right" : "Wrong"} · {q.pointsAwarded ?? "0.00"} / {q.points}
+            <p className="flex items-center gap-2 text-body-sm text-ink-muted">
+              <Badge tone={q.isCorrect === true ? "success" : "danger"}>
+                {q.isCorrect === true ? "Right" : "Wrong"}
+              </Badge>
+              {q.pointsAwarded ?? "0.00"} / {q.points}
             </p>
           )}
         </div>
@@ -565,8 +848,9 @@ function MarkAttempt({ attemptId, quizId }: { attemptId: string; quizId: string 
  */
 function OnlineGrants({ quizId }: { quizId: string }) {
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const { busy, problem, fieldErrors, run } = useSubmit();
   const [formKey, setFormKey] = useState(0);
+  const [withdrawing, setWithdrawing] = useState<{ studentId: string; name: string } | null>(null);
   const quiz = useQuery({
     queryKey: ["quiz", quizId],
     queryFn: ({ signal }) =>
@@ -598,45 +882,72 @@ function OnlineGrants({ quizId }: { quizId: string }) {
   const campus = (book.data?.rows ?? []).filter(
     (r) => r.studyMode === "ON_CAMPUS" && !granted.has(r.studentId),
   );
+  const items = grants.data?.items ?? [];
   return (
-    <section className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm">
-      <h3 className="font-medium">On-campus students sitting online</h3>
-      <p className="text-slate-600">
+    <section className="space-y-3">
+      <h2 className="text-heading">On-campus students sitting online</h2>
+      <p className="text-body-sm text-ink-muted">
         Online students take this exam online; On-campus students sit it on paper unless you let
         them in here.
       </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <ul className="space-y-1">
-        {(grants.data?.items ?? []).map((g) => (
-          <li key={g.studentId} className="flex flex-wrap items-baseline justify-between gap-2">
-            <span>
-              {g.studentName} <span className="text-slate-500">({g.reason})</span>
-            </span>
-            <button
-              type="button"
-              disabled={busy}
-              className="text-brand underline"
-              onClick={() =>
-                void run(async () => {
-                  await api<typeof assessment.revokeOnline>(
-                    "DELETE",
-                    "/quizzes/:id/online-grants/:studentId",
-                    { params: { id: quizId, studentId: g.studentId } },
-                  );
-                  await queryClient.invalidateQueries({ queryKey: grantsKey });
-                })
-              }
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      {grants.isError ? (
+        <LoadFailed what="who may sit online" onRetry={() => void grants.refetch()} />
+      ) : items.length > 0 ? (
+        <Card list role="list">
+          {items.map((g) => (
+            <div
+              key={g.studentId}
+              role="listitem"
+              aria-label={g.studentName}
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             >
-              Withdraw
-            </button>
-          </li>
-        ))}
-      </ul>
+              <span className="text-body">
+                {g.studentName} <span className="text-ink-muted">({g.reason})</span>
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setWithdrawing({ studentId: g.studentId, name: g.studentName });
+                }}
+              >
+                Withdraw
+              </Button>
+            </div>
+          ))}
+        </Card>
+      ) : null}
+      <ConfirmDialog
+        open={withdrawing !== null}
+        onOpenChange={(next) => {
+          if (!next) setWithdrawing(null);
+        }}
+        title={`Withdraw ${withdrawing?.name ?? ""}'s online sitting?`}
+        confirmLabel="Withdraw"
+        tone="danger"
+        onConfirm={async () => {
+          if (withdrawing === null) return;
+          await api<typeof assessment.revokeOnline>(
+            "DELETE",
+            "/quizzes/:id/online-grants/:studentId",
+            { params: { id: quizId, studentId: withdrawing.studentId } },
+          );
+          await queryClient.invalidateQueries({ queryKey: grantsKey });
+          setWithdrawing(null);
+        }}
+      >
+        They will sit this exam on paper. An attempt they have already started carries on.
+      </ConfirmDialog>
       {campus.length > 0 ? (
         <form
           key={formKey}
           aria-label="Let a student sit online"
-          className="space-y-2"
+          className={cn(cardClass(), "space-y-4")}
           onSubmit={(e) => {
             e.preventDefault();
             const data = new FormData(e.currentTarget);
@@ -654,33 +965,23 @@ function OnlineGrants({ quizId }: { quizId: string }) {
             });
           }}
         >
-          <label className="block">
-            <span className="block text-slate-700">Student</span>
-            <select name="studentId" className="w-full rounded border border-slate-300 px-2 py-2">
-              {campus.map((r) => (
-                <option key={r.studentId} value={r.studentId}>
-                  {r.studentName} ({r.matricNumber})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="block text-slate-700">Reason</span>
-            <input
-              name="reason"
-              required
-              maxLength={500}
-              className="block w-full rounded border border-slate-300 px-3 py-2"
-              aria-invalid={fieldErrors.reason === undefined ? undefined : true}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
-          >
+          <Select name="studentId" label="Student">
+            {campus.map((r) => (
+              <option key={r.studentId} value={r.studentId}>
+                {r.studentName} ({r.matricNumber})
+              </option>
+            ))}
+          </Select>
+          <TextField
+            name="reason"
+            label="Reason"
+            required
+            maxLength={500}
+            error={fieldErrors.reason}
+          />
+          <Button type="submit" variant="primary" loading={busy}>
             Let them sit online
-          </button>
+          </Button>
         </form>
       ) : null}
     </section>

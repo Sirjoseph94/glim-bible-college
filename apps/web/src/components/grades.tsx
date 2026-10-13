@@ -1,8 +1,13 @@
 import type { assessment } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { LoadFailed } from "./app/page-states";
 import { SafeHtml } from "./course-content";
 import { Time } from "./time";
+import { Badge } from "./ui/badge";
+import { Card } from "./ui/card";
+import { EmptyState } from "./ui/empty-state";
+import { Skeleton, SkeletonGroup } from "./ui/skeleton";
 
 /** The student's released grades on a course (TRD §14.2); drafts never reach the browser. */
 export function MyGrades({ offeringId }: { offeringId: string }) {
@@ -14,37 +19,61 @@ export function MyGrades({ offeringId }: { offeringId: string }) {
         signal,
       }),
   });
-  if (list.isPending) return <div className="h-10 animate-pulse rounded bg-slate-200" />;
-  if (list.isError) return <p className="text-red-700">We couldn't load your grades.</p>;
+  if (list.isPending)
+    return (
+      <SkeletonGroup label="Loading your grades">
+        <Skeleton className="h-16" />
+        <Skeleton className="h-16" />
+      </SkeletonGroup>
+    );
+  if (list.isError) return <LoadFailed what="your grades" onRetry={() => void list.refetch()} />;
   const items = list.data.items;
-  if (items.length === 0) return <p className="text-slate-600">No grades released yet.</p>;
+  if (items.length === 0)
+    return (
+      <EmptyState icon="award" title="No grades released yet">
+        Your Lecturer releases grades here once work is marked.
+      </EmptyState>
+    );
   return (
-    <ul className="space-y-2">
-      {items.map((g) => (
-        <li
-          key={g.assessmentId}
-          className="rounded border border-slate-200 p-2"
-          aria-label={g.title}
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-medium">{g.title}</span>
-            <span>
-              {g.excused ? "Excused" : `${g.score ?? "–"} / ${g.maxScore}`}
-              <span className="text-slate-600"> · counts {g.weight} %</span>
-            </span>
+    <section className="space-y-2">
+      <h2 className="text-heading">Released grades</h2>
+      <Card list role="list">
+        {items.map((g) => (
+          <div
+            key={g.assessmentId}
+            role="listitem"
+            aria-label={g.title}
+            className="space-y-2 px-4 py-3"
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-subhead text-ink">{g.title}</p>
+                <p className="text-meta text-ink-muted">
+                  Counts {g.weight}%
+                  {g.releasedAt === null ? null : (
+                    <>
+                      {" "}
+                      · Released <Time value={g.releasedAt} />
+                    </>
+                  )}
+                </p>
+              </div>
+              {g.excused ? (
+                <Badge status="excused" />
+              ) : (
+                <p className="text-subhead text-ink tabular-nums">
+                  {g.score ?? "–"} / {g.maxScore}
+                </p>
+              )}
+            </div>
+            {g.feedbackHtml === null ? null : (
+              <div className="rounded-md bg-surface-sunken p-3">
+                <SafeHtml html={g.feedbackHtml} />
+              </div>
+            )}
           </div>
-          {g.releasedAt === null ? null : (
-            <div className="text-xs text-slate-500">
-              Released <Time value={g.releasedAt} />
-            </div>
-          )}
-          {g.feedbackHtml === null ? null : (
-            <div className="mt-1 rounded bg-slate-50 p-2">
-              <SafeHtml html={g.feedbackHtml} />
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
+        ))}
+      </Card>
+    </section>
   );
 }

@@ -29,7 +29,8 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
 }) => {
   await signIn(page, LECTURER);
   await openTeaching(page, "Pastoral Care", "Work");
-  const form = page.locator("form", { hasText: "New assignment" });
+  await page.getByRole("button", { name: "New assignment", exact: true }).click();
+  const form = page.getByRole("dialog", { name: "New assignment" });
   await form.getByLabel("Title").fill("Essay on John 1");
   await form.getByLabel("Instructions (Markdown)").fill("Write **300 words** on the Word.");
   await form.getByLabel("Due (your time)").fill(localInput(3));
@@ -37,7 +38,9 @@ test("a Lecturer sets an assignment, a student submits, the Lecturer grades it",
   await form.getByLabel("Weight (%)").fill("15");
   await form.getByRole("button", { name: "Create assignment" }).click();
   const item = page.getByRole("listitem", { name: "Essay on John 1" });
-  await expect(item).toContainText("Draft · 20.00 marks · 15.00%");
+  await expect(form).toBeHidden();
+  await expect(item).toContainText("20.00 marks · 15.00%");
+  await expect(item.getByText("Draft", { exact: true })).toBeVisible();
   await item.getByRole("button", { name: "Publish" }).click();
   await expect(item.getByRole("link", { name: "Grade submissions" })).toBeVisible();
   await signOut(page);

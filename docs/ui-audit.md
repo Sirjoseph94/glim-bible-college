@@ -310,3 +310,25 @@ The existing `e2e/wcag.spec.ts` also passes (0 violations on `/login`, `/apply`,
 **Assets**
 
 - The crest `new-ncgc-logo-162.png` is in the design-system artifact's asset store (asset id `7fef724a50a2bfdcde50d6406f4aff8e`), not in its published files; WP-UI-02 fetches it from there and generates the 64 px copy.
+
+## 9. After (WP-UI-12, 13 Oct 2026)
+
+**How it was run.** Same method as §6: the whole e2e suite seeds the database through the UI, then throwaway capture specs (not committed) open each screen at 390×844 and 1280×900 in the light theme and at 390×844 in the dark theme, and run axe (`wcag2a/aa`, `wcag21a/aa`) at 390 px. The active student was captured before the terminal specs graduate and erase them, which closes the §6 gap: Today, Courses, a course page, Schedule, Registration and Results are now an active student's. Images are in `docs/ui-audit/after/` (JPEG, CSS-pixel size, full page), named like `before/`, with `-dark` for the dark theme.
+
+**Before → after names.** Where a route moved, the after file uses the new route:
+
+| Before | After |
+| --- | --- |
+| `lecturer_teach_offerings_gradebook@*` | `lecturer_teach_course_gradebook@*` (`/teach/$offeringId?tab=gradebook`, UI-Q5) |
+| `lecturer_teach_meetings_roll-call@*` | `lecturer_roll-call@*` |
+| `registrar_results_transcripts@*` | `registrar_results_semesters@*` (transcripts merged into results, UI-Q8) |
+| `student_transcripts@*` | `student_results@*` (UI-Q8) |
+| `student_courses@*`, `student_registration@*` (showed Home, §6) | the real screens |
+| — | new: every `/teach/$offeringId` tab, `student_courses_course`, `*_schedule`, staff `*_home` |
+
+**Findings.**
+- **axe is clean** on all 84 captures, light and dark. One serious finding came up during the capture and is fixed in WP-UI-12: the shell scrolls inside `<main>`, so a page with nothing focusable (a student's Schedule) couldn't be scrolled from the keyboard (`scrollable-region-focusable`). `<main>` now takes focus. `e2e/student-wcag.spec.ts` checks a student's pages on a short screen in both themes, because `wcag.spec.ts` runs after that student is erased.
+- **No horizontal page scroll** at 390 or 1280. Wide tables scroll inside their card.
+- **No fonts** downloaded anywhere (system stack, §4.3).
+- **Lighthouse** (mobile, simulated slow 4G): public routes 2.1–2.4 s LCP, signed-in Home, Courses and Schedule 2.6–2.8 s, CLS ≤ 0.003 (`apps/web/scripts/lighthouse.mjs`).
+- **Required checks.** Budgets (`checks`), axe (`e2e`) and Lighthouse (`lighthouse`) all run on every PR. Making them *required* before merging is a GitHub branch-protection setting on `main`, which an admin of the repository must turn on (Settings → Branches → require status checks: `checks`, `e2e`, `lighthouse`).

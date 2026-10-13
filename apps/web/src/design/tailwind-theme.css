@@ -8,9 +8,19 @@
  * (--radius-sm/md/lg, --font-sans, --font-mono), the unlayered token wins over Tailwind's
  * theme layer, so `rounded-md` and `font-sans` already read the token.
  *
- * Tailwind's default palette and scales stay available until WP-UI-12 removes them
- * (decision UI-Q16), so unmigrated screens keep working.
+ * Tailwind's default palette, type scale and shadows are switched off (WP-UI-12, decision UI-Q16):
+ * `bg-slate-100`, `text-sm` or `shadow-md` generate nothing, so only token names style a page.
+ * Spacing steps, radii, font weights and breakpoints not overridden here keep Tailwind's values.
  */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+}
+
 @theme inline reference {
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
@@ -56,45 +66,6 @@
   --shadow-sheet: var(--shadow-sheet);
   --shadow-pop: var(--shadow-pop);
   --container-content: var(--content-max);
-}
-
-/*
- * TEMPORARY BRIDGE (WP-UI-04a): Tailwind palette names still used by unmigrated screens point at
- * the tokens, so every page follows the theme (and dark mode can be on) before its own
- * migration. Each screen WP replaces these classes with token names; WP-UI-12 deletes this block
- * together with Tailwind's default palette (decision UI-Q16). Do not use these names in new code.
- */
-@theme inline reference {
-  --color-white: var(--surface-raised);
-  --color-slate-50: var(--surface);
-  --color-slate-100: var(--surface-sunken);
-  --color-slate-200: var(--line);
-  --color-slate-300: var(--line-strong);
-  --color-slate-400: var(--ink-muted);
-  --color-slate-500: var(--ink-muted);
-  --color-slate-600: var(--ink-muted);
-  --color-slate-700: var(--ink-muted);
-  --color-slate-800: var(--ink);
-  --color-slate-900: var(--ink);
-  --color-red-50: var(--danger-soft);
-  --color-red-100: var(--danger-soft);
-  --color-red-200: var(--danger);
-  --color-red-300: var(--danger);
-  --color-red-600: var(--danger);
-  --color-red-700: var(--danger);
-  --color-red-800: var(--danger);
-  --color-amber-50: var(--warning-soft);
-  --color-amber-100: var(--warning-soft);
-  --color-amber-200: var(--warning);
-  --color-amber-700: var(--warning);
-  --color-amber-800: var(--warning);
-  --color-amber-900: var(--warning);
-  --color-green-50: var(--success-soft);
-  --color-green-200: var(--success);
-  --color-green-700: var(--success);
-  --color-green-800: var(--success);
-  /* Links were blue; links are brand (§4.1). */
-  --color-blue-700: var(--brand);
 }
 
 /*

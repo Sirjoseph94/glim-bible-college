@@ -2,7 +2,21 @@ import type { admissions, AdmissionsReport, reports } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
-import { Alert } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import {
+  DataTable,
+  bodyCell,
+  headCell,
+  numericCell,
+  stickyCell,
+} from "../components/ui/data-table";
+import { EmptyState } from "../components/ui/empty-state";
+import { Select } from "../components/ui/field";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 
 const download = (path: string, query: Record<string, string>) => {
   const params = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== "")).toString();
@@ -11,23 +25,21 @@ const download = (path: string, query: Record<string, string>) => {
 
 function Counts({ title, counts }: { title: string; counts: AdmissionsReport["byStatus"] }) {
   return (
-    <section className="rounded border border-slate-200 bg-white p-3">
-      <h3 className="mb-2 font-semibold">{title}</h3>
+    <Card className="space-y-2">
+      <h2 className="text-heading">{title}</h2>
       {counts.length === 0 ? (
-        <p className="text-sm text-slate-600">None yet.</p>
+        <p className="text-body-sm text-ink-muted">None yet.</p>
       ) : (
-        <table className="w-full text-sm">
-          <tbody>
-            {counts.map((c) => (
-              <tr key={c.key}>
-                <td>{c.label}</td>
-                <td className="text-right tabular-nums">{c.count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <dl className="divide-y divide-line text-body-sm">
+          {counts.map((c) => (
+            <div key={c.key} className="flex justify-between gap-4 py-1.5">
+              <dt>{c.label}</dt>
+              <dd className="tabular-nums">{c.count}</dd>
+            </div>
+          ))}
+        </dl>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -57,37 +69,48 @@ export function AdmissionsReportsPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">Admissions reports</h1>
-      <select
-        aria-label="Intake"
-        value={intakeId}
-        onChange={(e) => {
-          setIntakeId(e.target.value);
-        }}
-        className="rounded border border-slate-300 bg-white px-2 py-2"
-      >
-        <option value="">All intakes</option>
-        {intakes.data?.items.map((i) => (
-          <option key={i.id} value={i.id}>
-            Intake {i.code}
-          </option>
-        ))}
-      </select>
+    <div className="space-y-5">
+      <PageHeader title="Admissions reports" meta="Counts per intake, referrals and exports." />
+      <div className="max-w-sm">
+        <Select
+          label="Intake"
+          value={intakeId}
+          onChange={(e) => {
+            setIntakeId(e.target.value);
+          }}
+        >
+          <option value="">All intakes</option>
+          {intakes.data?.items.map((i) => (
+            <option key={i.id} value={i.id}>
+              Intake {i.code}
+            </option>
+          ))}
+        </Select>
+      </div>
 
-      {report.isError ? <Alert tone="error">We couldn't load the report.</Alert> : null}
-      {report.data ? (
-        <>
-          <p>
-            <strong>{report.data.total}</strong> submitted applications ·{" "}
-            {report.data.draftsInProgress} drafts in progress ·{" "}
-            <a
-              href={download("/reports/admissions", { intakeId, format: "csv" })}
-              className="underline"
-            >
-              Download CSV
-            </a>
-          </p>
+      {report.isPending ? (
+        <SkeletonGroup label="Loading the report">
+          <Skeleton className="h-6 w-1/2" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </div>
+        </SkeletonGroup>
+      ) : report.isError ? (
+        <LoadFailed what="the report" onRetry={() => void report.refetch()} />
+      ) : (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-body">
+              <strong>{report.data.total}</strong> submitted applications ·{" "}
+              {report.data.draftsInProgress} drafts in progress
+            </p>
+            <Button asChild variant="secondary" size="sm" icon="download">
+              <a href={download("/reports/admissions", { intakeId, format: "csv" })}>
+                Download report (CSV)
+              </a>
+            </Button>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Counts title="By status" counts={report.data.byStatus} />
             <Counts title="By programme" counts={report.data.byProgramme} />
@@ -95,88 +118,120 @@ export function AdmissionsReportsPage() {
             <Counts title="By country" counts={report.data.byCountry} />
             <Counts title="How they heard about us" counts={report.data.byHeardVia} />
           </div>
-        </>
-      ) : null}
+        </section>
+      )}
 
-      <section className="space-y-2 rounded border border-slate-200 bg-white p-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-semibold">Referrals</h3>
-          <a
-            href={download("/reports/referrals", { intakeId, format: "csv" })}
-            className="text-sm underline"
-          >
-            Download CSV
-          </a>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-600">
-              <th>Referrer</th>
-              <th>Code</th>
-              <th className="text-right">Applied</th>
-              <th className="text-right">Admitted</th>
-              <th className="text-right">Accepted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {referrals.data?.referrers.map((r) => (
-              <tr key={r.userId}>
-                <td>{r.name}</td>
-                <td className="font-mono">{r.code}</td>
-                <td className="text-right tabular-nums">{r.total}</td>
-                <td className="text-right tabular-nums">{r.admitted}</td>
-                <td className="text-right tabular-nums">{r.accepted}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {referrals.data && referrals.data.unmatched.length > 0 ? (
-          <p className="text-sm text-amber-700">
-            Codes that matched nobody:{" "}
-            {referrals.data.unmatched
-              .map((u) => `${u.code} (${String(u.applications.length)})`)
-              .join(", ")}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="space-y-2 rounded border border-slate-200 bg-white p-3">
-        <h3 className="font-semibold">Export applications</h3>
-        <p className="text-sm text-slate-600">
-          Every submitted application, one row each. Exports are audited.
-        </p>
-        <a
-          href={download("/admissions/applications/export", { intakeId, format: "csv" })}
-          className="mr-4 underline"
-        >
-          Download CSV
-        </a>
-        {confirmSensitive ? (
-          <span className="text-sm">
-            This includes confidential spiritual-background answers.{" "}
-            <a
-              href={download("/admissions/applications/export", {
-                intakeId,
-                includeSensitive: "true",
-                format: "csv",
-              })}
-              className="font-medium text-red-700 underline"
-            >
-              Download with confidential answers
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-heading">Referrals</h2>
+          <Button asChild variant="secondary" size="sm" icon="download">
+            <a href={download("/reports/referrals", { intakeId, format: "csv" })}>
+              Download referrals (CSV)
             </a>
-          </span>
+          </Button>
+        </div>
+        {referrals.isPending ? (
+          <SkeletonGroup label="Loading referrals">
+            <Skeleton className="h-32" />
+          </SkeletonGroup>
+        ) : referrals.isError ? (
+          <LoadFailed what="the referrals" onRetry={() => void referrals.refetch()} />
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmSensitive(true);
-            }}
-            className="text-sm underline"
-          >
-            Include spiritual background…
-          </button>
+          <>
+            {referrals.data.referrers.length === 0 ? (
+              <Card>
+                <EmptyState icon="users" title="No referrals yet" headingLevel={3}>
+                  Applications that give a referral code are counted here.
+                </EmptyState>
+              </Card>
+            ) : (
+              <DataTable caption="Referrals" minWidth="min-w-160">
+                <thead>
+                  <tr>
+                    <th scope="col" className={`${headCell} ${stickyCell}`}>
+                      Referrer
+                    </th>
+                    <th scope="col" className={headCell}>
+                      Code
+                    </th>
+                    <th scope="col" className={`${headCell} ${numericCell}`}>
+                      Applied
+                    </th>
+                    <th scope="col" className={`${headCell} ${numericCell}`}>
+                      Admitted
+                    </th>
+                    <th scope="col" className={`${headCell} ${numericCell}`}>
+                      Accepted
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {referrals.data.referrers.map((r) => (
+                    <tr key={r.userId}>
+                      <td className={`${bodyCell} ${stickyCell}`}>{r.name}</td>
+                      <td className={`${bodyCell} font-mono`}>{r.code}</td>
+                      <td className={`${bodyCell} ${numericCell}`}>{r.total}</td>
+                      <td className={`${bodyCell} ${numericCell}`}>{r.admitted}</td>
+                      <td className={`${bodyCell} ${numericCell}`}>{r.accepted}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            )}
+            {referrals.data.unmatched.length > 0 ? (
+              <Banner tone="warning" title="Codes that matched nobody">
+                {referrals.data.unmatched
+                  .map((u) => `${u.code} (${String(u.applications.length)})`)
+                  .join(", ")}
+              </Banner>
+            ) : null}
+          </>
         )}
       </section>
+
+      <Card className="space-y-3">
+        <h2 className="text-heading">Export applications</h2>
+        <p className="text-body-sm text-ink-muted">
+          Every submitted application, one row each. Exports are audited.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="secondary" icon="download">
+            <a href={download("/admissions/applications/export", { intakeId, format: "csv" })}>
+              Download applications (CSV)
+            </a>
+          </Button>
+          {confirmSensitive ? null : (
+            <Button
+              variant="quiet"
+              onClick={() => {
+                setConfirmSensitive(true);
+              }}
+            >
+              Include spiritual background…
+            </Button>
+          )}
+        </div>
+        {/* The confidential export takes a second, deliberate step (INV-15). */}
+        {confirmSensitive ? (
+          <Banner
+            tone="warning"
+            title="This includes confidential spiritual-background answers"
+            action={
+              <Button asChild variant="danger" size="sm" icon="download">
+                <a
+                  href={download("/admissions/applications/export", {
+                    intakeId,
+                    includeSensitive: "true",
+                    format: "csv",
+                  })}
+                >
+                  Download with confidential answers
+                </a>
+              </Button>
+            }
+          />
+        ) : null}
+      </Card>
     </div>
   );
 }

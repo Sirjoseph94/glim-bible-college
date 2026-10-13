@@ -32,21 +32,25 @@ test("a hybrid exam: paper scores and an online part in one gradebook column", a
   // The online part: one question worth 1 point, scaled to the exam's 20.
   await page.getByRole("tab", { name: "Work" }).click();
   await page.getByText(/^Question bank/).click();
-  const bank = page.locator("form", { hasText: "Add a question" });
-  await bank.getByLabel("Question").fill("Which city did Paul write Romans from?");
-  await bank.getByLabel("Option 1").fill("Corinth");
-  await bank.getByLabel("Option 2").fill("Rome");
-  await bank.getByRole("checkbox", { name: "Right answer" }).first().check();
+  await page.getByRole("button", { name: "Add a question" }).click();
+  const bank = page.getByRole("dialog", { name: "Add a question" });
+  await bank.getByLabel("Question", { exact: true }).fill("Which city did Paul write Romans from?");
+  await bank.getByLabel("Option 1", { exact: true }).fill("Corinth");
+  await bank.getByLabel("Option 2", { exact: true }).fill("Rome");
+  await bank.getByRole("checkbox", { name: "Right answer (option 1)" }).check();
   await bank.getByRole("button", { name: "Add question" }).click();
+  await expect(bank).toBeHidden();
   await expect(page.getByText(/Which city did Paul write Romans from\?/).first()).toBeVisible();
 
-  const builder = page.locator("form", { hasText: "New quiz" });
+  await page.getByRole("button", { name: "New quiz", exact: true }).click();
+  const builder = page.getByRole("dialog", { name: "New quiz or online exam" });
   await builder
     .getByLabel("For")
     .selectOption({ label: "Online part of Semester exam (for Online students)" });
   await builder.getByRole("checkbox", { name: /Which city did Paul/ }).check();
   await builder.getByLabel("Time limit (minutes)").fill("30");
   await builder.getByRole("button", { name: "Create online exam" }).click();
+  await expect(builder).toBeHidden();
   const item = page.getByRole("listitem", { name: "Semester exam" });
   await expect(item).toContainText("Online exam · 1 questions · 20.00 marks");
   await item.getByRole("button", { name: "Publish" }).click();

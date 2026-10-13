@@ -227,6 +227,18 @@ const courseRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/course"), "CoursePage"),
 });
 
+/** Class Meetings for students and Lecturers alike (§6.3, §11.11). */
+const scheduleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/schedule",
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.query(meQuery);
+    if (me === null) throw redirect({ to: "/login" });
+    if (!me.roles.isStudent && !me.roles.isLecturer) throw redirect({ to: "/" });
+  },
+  component: lazyRouteComponent(() => import("./routes/schedule"), "SchedulePage"),
+});
+
 const teachRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/teach",
@@ -537,6 +549,7 @@ const routeTree = rootRoute.addChildren([
   adminOfferingRoute,
   adminLecturersRoute,
   teachRoute,
+  scheduleRoute,
   registrationRoute,
   coursesRoute,
   courseRoute,

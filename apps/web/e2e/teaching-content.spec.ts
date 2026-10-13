@@ -20,30 +20,38 @@ test("a Lecturer shares materials and an announcement with the class", async ({ 
   await signIn(page, LECTURER);
   await openTeaching(page, "Pastoral Care", "Overview");
 
-  await page.getByLabel("Title").first().fill("Welcome to the course");
-  await page.getByLabel("Message (Markdown)").fill("Read **John 1** before *Monday*.");
-  await page.getByLabel("Pin to the top").check();
-  await page.getByRole("button", { name: "Post" }).click();
+  await page.getByRole("button", { name: "New announcement", exact: true }).click();
+  const post = page.getByRole("dialog", { name: "New announcement" });
+  await post.getByLabel("Title").fill("Welcome to the course");
+  await post.getByLabel("Message (Markdown)").fill("Read **John 1** before *Monday*.");
+  await post.getByLabel("Pin to the top").check();
+  await post.getByRole("button", { name: "Post" }).click();
+  await expect(post).toBeHidden();
   await expect(page.getByRole("listitem", { name: "Welcome to the course" })).toContainText(
     "Read John 1 before Monday.",
   );
 
   await page.getByRole("tab", { name: "Materials" }).click();
-  const add = page.locator("form", { hasText: "Add material" });
+  // "Add material" opens a Sheet; it closes once the material is added.
+  const add = page.getByRole("dialog", { name: "Add material" });
+  const openAdd = () => page.getByRole("button", { name: "Add material", exact: true }).click();
+  await openAdd();
   await add.getByRole("radio", { name: "Text" }).check();
   await add.getByLabel("Title").fill("Study questions");
-  await add.getByLabel("Section (optional), e.g. Week 1").fill("Week 1");
+  await add.getByLabel("Section (optional)").fill("Week 1");
   await add.getByLabel("Text (Markdown)").fill("1. Who is the Word?\n\n<script>alert(1)</script>");
   await add.getByRole("button", { name: "Add material" }).click();
   await expect(page.getByRole("listitem", { name: "Study questions" })).toBeVisible();
 
+  await openAdd();
   await add.getByRole("radio", { name: "Link" }).check();
   await add.getByLabel("Title").fill("John 1 online");
-  await add.getByLabel("Section (optional), e.g. Week 1").fill("Week 1");
+  await add.getByLabel("Section (optional)").fill("Week 1");
   await add.getByLabel("Web address").fill("https://www.biblegateway.com/passage/?search=John+1");
   await add.getByRole("button", { name: "Add material" }).click();
   await expect(page.getByRole("listitem", { name: "John 1 online" })).toBeVisible();
 
+  await openAdd();
   await add.getByRole("radio", { name: "File" }).check();
   await add.getByLabel("Title").fill("Lecture notes");
   await add.getByLabel("File (up to 100 MB)").setInputFiles({

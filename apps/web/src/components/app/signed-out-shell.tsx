@@ -4,7 +4,7 @@ import { Crest } from "../../design/crest";
 import { InstitutionName } from "./shell-parts";
 
 /** Pages that draw the crest and name themselves (AuthLayout), so they need no top bar. */
-const AUTH_PAGES = ["/login", "/forgot", "/reset/", "/invite/"];
+const AUTH_PAGES = ["/login", "/forgot", "/reset/", "/invite/", "/verify/"];
 
 /**
  * Pages for people who aren't signed in: the crest and name over a centred column. The sign-in

@@ -51,3 +51,20 @@ export function planToday(
   const next = happeningNow.length === 0 && laterToday.length === 0 ? (comingUp[0] ?? null) : null;
   return { happeningNow, laterToday, next, comingUp };
 }
+
+/** One calendar day of a schedule, in the viewer's zone. */
+export interface ScheduleDay {
+  /** YYYY-MM-DD in the viewer's zone. */
+  day: string;
+  meetings: ScheduledMeeting[];
+}
+
+/** Classes grouped by the viewer's calendar day, days and classes in time order (§11.11). */
+export function byDay(meetings: ScheduledMeeting[], zone: string): ScheduleDay[] {
+  const days = new Map<string, ScheduledMeeting[]>();
+  for (const m of [...meetings].sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))) {
+    const day = dayIn(new Date(m.scheduledStart), zone);
+    days.set(day, [...(days.get(day) ?? []), m]);
+  }
+  return [...days].map(([day, list]) => ({ day, meetings: list }));
+}

@@ -4,7 +4,8 @@ import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
 import { meQuery } from "../api/session";
-import { Alert, formText } from "../components/form";
+import { formText } from "../components/form";
+import { AuthLayout } from "../components/app/auth-layout";
 import { Time } from "../components/time";
 import { useSubmit } from "../components/use-submit";
 import { Banner } from "../components/ui/banner";
@@ -441,42 +442,101 @@ export function VerifyPage() {
       }),
   });
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">Verify a transcript</h1>
-      {check.isPending ? <div className="h-24 animate-pulse rounded bg-slate-200" /> : null}
-      {check.isError ? (
-        <Alert tone="error">No transcript has the code {code}. Check it and try again.</Alert>
-      ) : null}
-      {check.isSuccess ? (
-        <div className="space-y-2 rounded border border-slate-200 bg-white p-4 text-sm">
+    <AuthLayout title="Verify a transcript">
+      {check.isPending ? (
+        <SkeletonGroup label="Checking the transcript">
+          <Skeleton className="h-24" />
+        </SkeletonGroup>
+      ) : check.isError ? (
+        isNotAvailable(check.error) ? (
+          <Banner tone="danger" title="No transcript has this code">
+            Check the code {code} on the transcript and try again.
+          </Banner>
+        ) : (
+          <LoadFailed what="the transcript check" onRetry={() => void check.refetch()} />
+        )
+      ) : (
+        <div className="space-y-4">
           {check.data.valid ? (
-            <Alert tone="success">This transcript is genuine and valid.</Alert>
+            <Banner tone="success" title="Genuine">
+              This transcript is genuine and valid.
+            </Banner>
           ) : (
-            <Alert tone="error">
+            <Banner tone="danger" title="No longer valid">
               This transcript was{" "}
               {check.data.status === "REVOKED" ? "revoked" : "replaced by a newer one"} and is no
               longer valid.
-            </Alert>
+            </Banner>
           )}
-          {/* eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width */}
-          <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1">
-            <dt className="text-slate-600">Issued by</dt>
-            <dd>{check.data.institutionName}</dd>
-            <dt className="text-slate-600">Programme</dt>
-            <dd>{check.data.programmeName}</dd>
-            <dt className="text-slate-600">Student</dt>
-            <dd>{check.data.studentInitials}</dd>
-            <dt className="text-slate-600">Issued</dt>
-            <dd>
-              <Time value={check.data.issuedAt} />
-            </dd>
-            <dt className="text-slate-600">Records as of</dt>
-            <dd>{check.data.asOf}</dd>
-            <dt className="text-slate-600">SHA-256</dt>
-            <dd className="break-all font-mono text-xs">{check.data.snapshotSha256}</dd>
-          </dl>
+          <Card>
+            <dl className="space-y-3 text-body-sm">
+              <div>
+                <dt className="text-meta text-ink-muted">Status</dt>
+                <dd>
+                  {check.data.valid ? (
+                    <Badge tone="success">Valid</Badge>
+                  ) : (
+                    <Badge tone="danger">
+                      {check.data.status === "REVOKED" ? "Revoked" : "Replaced"}
+                    </Badge>
+                  )}
+                </dd>
+              </div>
+              {(
+                [
+                  ["Issued by", check.data.institutionName],
+                  ["Programme", check.data.programmeName],
+                  ["Student", check.data.studentInitials],
+                  ["Issued", <Time key="issued" value={check.data.issuedAt} />],
+                  ["Records as of", check.data.asOf],
+                ] as const
+              ).map(([term, value]) => (
+                <div key={term}>
+                  <dt className="text-meta text-ink-muted">{term}</dt>
+                  <dd className="text-ink">{value}</dd>
+                </div>
+              ))}
+              <div>
+                <dt className="text-meta text-ink-muted">SHA-256</dt>
+                <dd className="font-mono text-code break-all">{check.data.snapshotSha256}</dd>
+              </div>
+            </dl>
+          </Card>
+          <HashCheck expected={check.data.snapshotSha256} />
         </div>
-      ) : null}
+      )}
+    </AuthLayout>
+  );
+}
+
+/**
+ * §11.11 "hash comparison input": paste the SHA-256 printed on a copy to see that it is the
+ * fingerprint of this transcript's record. Compared on this device; nothing is sent. It can't
+ * show that the rest of the copy is unaltered, so it doesn't say so.
+ */
+function HashCheck({ expected }: { expected: string }) {
+  const [value, setValue] = useState("");
+  const typed = value.trim().toLowerCase();
+  const matches = typed === expected.toLowerCase();
+  return (
+    <div className="space-y-2">
+      <TextField
+        label="SHA-256 on your copy"
+        optional
+        hint="Paste the fingerprint printed on your copy to check it is this transcript's record."
+        value={value}
+        className="font-mono"
+        onChange={(e) => {
+          setValue(e.target.value);
+        }}
+      />
+      <p role="status" className="text-body-sm">
+        {typed === "" ? null : matches ? (
+          <Badge tone="success">Matches</Badge>
+        ) : (
+          <Badge tone="danger">Doesn't match</Badge>
+        )}
+      </p>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { NotificationDot } from "../ui/notification-dot";
 import { BackLink } from "./back-link";
 import { DetailBarContext, InstitutionName, type DetailBar } from "./shell-parts";
 import { activeItem, navItems, sectionLinks, type NavItem } from "./nav";
+import { isAlternateView, useStoredView } from "./view";
 
 function CourseCode({ code }: { code: string }) {
   return <span className="shrink-0 font-mono text-code text-brand">{code}</span>;
@@ -214,6 +215,13 @@ export function AppShell({
 }) {
   const { pathname } = useLocation();
   const [detail, setDetail] = useState<DetailBar | null>(null);
+  // §6.3: "Lecturer view" in the top bar when a student who teaches chose it in Profile. The
+  // choice changes only Home, so only Home says so.
+  const storedView = useStoredView();
+  const viewLabel =
+    pathname === "/" && isAlternateView(me.roles, storedView) ? (
+      <span className="block text-meta font-semibold text-ink-muted">Lecturer view</span>
+    ) : null;
   const items = navItems(me.roles);
   const current = activeItem(pathname, items);
   const actions = (
@@ -247,14 +255,22 @@ export function AppShell({
                 <>
                   <Link to="/" className="flex min-w-0 items-center gap-2">
                     <Crest size={28} />
-                    <InstitutionName name={institutionName} testId="institution-name" />
+                    <span className="min-w-0">
+                      <InstitutionName name={institutionName} testId="institution-name" />
+                      {viewLabel}
+                    </span>
                   </Link>
                   {actions}
                 </>
               )}
             </div>
           </header>
-          <main className="min-h-0 flex-1 overflow-y-auto">
+          {/* The page scrolls here, not the document, so keyboard users must be able to focus it
+              to scroll a page with no links or buttons (WCAG 2.1.1, axe scrollable-region-focusable). */}
+          <main
+            tabIndex={0}
+            className="min-h-0 flex-1 overflow-y-auto focus-visible:-outline-offset-2"
+          >
             <div className="glim-gutter mx-auto w-full max-w-content space-y-5 pt-4 pb-5 lg:pt-6 lg:pb-8">
               <div className="hidden items-center justify-between gap-4 lg:flex">
                 {detail ? (
@@ -265,7 +281,10 @@ export function AppShell({
                     search={detail.back.search}
                   />
                 ) : (
-                  <InstitutionName name={institutionName} />
+                  <span>
+                    <InstitutionName name={institutionName} />
+                    {viewLabel}
+                  </span>
                 )}
                 {actions}
               </div>
