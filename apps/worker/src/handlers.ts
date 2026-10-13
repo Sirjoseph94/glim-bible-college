@@ -1,8 +1,12 @@
-import type { DomainEvent, QueueName } from "@glim/contracts";
+import { QUEUES, type DomainEvent, type QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService, UserAdminService } from "@glim/modules/identity";
 import { AttendanceService } from "@glim/modules/attendance";
-import { MeetingLifecycleService, SeriesService } from "@glim/modules/class-meeting";
+import {
+  MeetingLifecycleService,
+  ProvisioningService,
+  SeriesService,
+} from "@glim/modules/class-meeting";
 import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
@@ -39,6 +43,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const imports = deps.context.get(ImportsService);
   const series = deps.context.get(SeriesService);
   const lifecycle = deps.context.get(MeetingLifecycleService);
+  const provisioning = deps.context.get(ProvisioningService);
   const attendance = deps.context.get(AttendanceService);
   const userAdmin = deps.context.get(UserAdminService);
   const videoAvailability = deps.context.get(AvailabilityService);
@@ -55,6 +60,15 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "admissions.purge": () => purge.run(),
     "class-meeting.series-extend": () => series.extend(),
     "meeting.tick": () => lifecycle.tick(),
+    // Google Meet (integration slice): idle while LIVE_PROVIDER=none.
+    "class-meeting.provision": (job) =>
+      provisioning.provision((job.data as { meetingId: string }).meetingId, {
+        final: job.retryCount >= QUEUES["class-meeting.provision"].retryLimit,
+      }),
+    "class-meeting.sync-access": (job) =>
+      provisioning.syncAccess((job.data as { meetingId: string }).meetingId),
+    "class-meeting.end": (job) =>
+      provisioning.endConference((job.data as { meetingId: string }).meetingId),
     // The daily sweep, or one video the System Admin asked to recheck from the ops page.
     "video.availability-check": async (job) => {
       const one = job.data as { videoId?: string; actorUserId?: string } | null;

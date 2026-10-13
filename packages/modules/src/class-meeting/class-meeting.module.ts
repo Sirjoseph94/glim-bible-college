@@ -8,6 +8,7 @@ import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
 import { MeetingLifecycleService } from "./lifecycle.service";
 import { MeetingWriter } from "./meeting-writer";
+import { ProvisioningService } from "./provisioning.service";
 import { SeriesService } from "./series.service";
 
 /** Class Meetings tell authorization which offering each belongs to (§7.2). */
@@ -27,7 +28,7 @@ class ClassMeetingResources implements OnModuleInit {
   }
 }
 
-/** Hybrid Class Meetings: a Room and an online link (TRD §11, v1 spec). */
+/** Hybrid Class Meetings: a Room and Google Meet, provisioned or pasted (TRD §11). */
 @Module({
   imports: [
     AuditModule,
@@ -37,12 +38,13 @@ class ClassMeetingResources implements OnModuleInit {
     SchedulingModule,
   ],
   providers: [
+    ProvisioningService,
     MeetingWriter,
     ClassMeetingsService,
     SeriesService,
     MeetingLifecycleService,
     ClassMeetingResources,
   ],
-  exports: [ClassMeetingsService, SeriesService, MeetingLifecycleService],
+  exports: [ClassMeetingsService, SeriesService, MeetingLifecycleService, ProvisioningService],
 })
 export class ClassMeetingModule {}

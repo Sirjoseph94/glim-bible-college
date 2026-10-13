@@ -633,6 +633,11 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/end`,
     offering: "O1",
   }),
+  // Without Google Meet on, allowed callers get 409 ("isn't switched on"); nothing changes.
+  "POST /class-meetings/:id/reprovision": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/reprovision`,
+    offering: "O1",
+  }),
   "GET /class-meetings/:id/roll-call": async (t) => ({
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/roll-call`,
     offering: "O1",

@@ -16,7 +16,7 @@ describe("error codes", () => {
 });
 
 describe("queue registry", () => {
-  it("routes queues to worker roles, leaving integration-slice queues out of v1", () => {
+  it("routes queues to worker roles", () => {
     expect(queuesForRole("general")).toContain("admissions.offer-sweep");
     expect(queuesForRole("general")).not.toContain("auth.session-cleanup");
     expect(queuesForRole("scheduler")).toEqual([
@@ -24,13 +24,14 @@ describe("queue registry", () => {
       "idempotency.cleanup",
       "auth.session-cleanup",
     ]);
-    expect(queuesForRole("all")).not.toContain("recording.ingest");
-    expect(queuesForRole("google")).toEqual([]);
+    expect(queuesForRole("all")).toContain("recording.ingest");
+    expect(queuesForRole("google")).toContain("class-meeting.provision");
+    expect(queuesForRole("media")).toEqual(["recording.ingest"]);
   });
 
-  it("schedules cron jobs only onto v1 queues", () => {
+  it("schedules cron jobs only onto known queues", () => {
     for (const [name, spec] of Object.entries(CRON_SCHEDULES)) {
-      expect(QUEUES[spec.queue].slice, name).toBe("v1");
+      expect(QUEUES[spec.queue], name).toBeDefined();
     }
   });
 });

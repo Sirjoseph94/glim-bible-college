@@ -16,6 +16,7 @@ import {
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
+import { ProvisioningService } from "./provisioning.service";
 
 export type MeetingRow = typeof schema.classMeetings.$inferSelect;
 export type RecordingMode = EnumValue<"class_meetings.recording_mode">;
@@ -127,6 +128,7 @@ export class MeetingWriter {
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(SchedulingService) readonly scheduling: SchedulingService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(ProvisioningService) readonly provisioning: ProvisioningService,
   ) {}
 
   now(): Date {
@@ -211,7 +213,10 @@ export class MeetingWriter {
     return null;
   }
 
-  /** Inserts a meeting with its policy snapshot and Lecturer slots, audited, with its event. */
+  /**
+   * Inserts a meeting with its policy snapshot and Lecturer slots, audited, with its event, and
+   * (with Google Meet on) its provision job, all in the caller's transaction (INV-5, INV-8).
+   */
   async insert(
     tx: { db: Database; boss: TxQueue },
     row: NewMeetingRow,
@@ -220,11 +225,13 @@ export class MeetingWriter {
   ): Promise<MeetingRow> {
     const { db, boss } = tx;
     const now = this.clock.now();
-    const [joinWindow, attendance, institution] = await Promise.all([
+    const [joinWindow, attendance, institution, googleMeet] = await Promise.all([
       this.policies.current("JOIN_WINDOW", db),
       this.policies.current("ATTENDANCE", db),
       this.settings.get(db),
+      this.provisioning.snapshot(db),
     ]);
+    const provider = this.provisioning.providerName;
     const [created] = await db
       .insert(schema.classMeetings)
       .values({
@@ -239,9 +246,13 @@ export class MeetingWriter {
         roomId: row.roomId,
         onlineLink: row.onlineLink,
         recordingMode: row.recordingMode,
+        // With Google Meet on, the worker creates the space (§11.6); otherwise the pasted link.
+        provider,
+        providerStatus: provider === null ? null : "PENDING",
         policySnapshot: {
           joinWindow: { version: joinWindow.version, config: joinWindow.config },
           attendance: { version: attendance.version, config: attendance.config },
+          ...(googleMeet === null ? {} : { googleMeet }),
         },
         createdBy: actor.userId,
         createdAt: now,
@@ -249,6 +260,7 @@ export class MeetingWriter {
       })
       .returning();
     if (created === undefined) throw new Error("class meeting insert returned nothing");
+    await this.provisioning.queueProvision(tx, created);
     await this.scheduling.bookLecturers(
       db,
       { offeringId: row.offeringId, start: row.start, end: row.end, meetingId: created.id },

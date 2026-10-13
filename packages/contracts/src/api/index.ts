@@ -73,6 +73,7 @@ export const ENDPOINTS = [
   meetings.joinClassMeeting,
   meetings.startClassMeeting,
   meetings.endClassMeeting,
+  meetings.reprovisionClassMeeting,
   attendance.getRollCall,
   attendance.putRollCall,
   attendance.getMeetingAttendance,

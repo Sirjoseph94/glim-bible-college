@@ -269,7 +269,7 @@ export class ClassMeetingsService {
               version: sql`${m.version} + 1`,
             })
             .where(eq(m.id, plan.row.id));
-          if (timesChange)
+          if (timesChange) {
             await this.writer.scheduling.moveSlots(
               db,
               plan.row.id,
@@ -277,6 +277,14 @@ export class ClassMeetingsService {
               plan.end,
               override.value,
             );
+            // The space is kept (§11.9); one not yet created is asked for by the new time.
+            if (plan.row.providerStatus === "PENDING")
+              await this.writer.provisioning.queueProvision(tx, {
+                ...plan.row,
+                scheduledStart: plan.start,
+                scheduledEnd: plan.end,
+              });
+          }
         }
         if (scope === "ALL_FUTURE" && current.seriesId !== null)
           await this.writer.scheduling.updateSeries(
@@ -626,8 +634,11 @@ export class ClassMeetingsService {
         scheduledEnd: meeting.scheduledEnd.toISOString(),
         timezone: meeting.timezone,
         room,
-        hasOnlineLink: meeting.onlineLink !== null,
+        hasOnlineLink: meeting.onlineLink !== null || meeting.joinUrl !== null,
         onlineLink: showLink ? meeting.onlineLink : null,
+        providerStatus: meeting.providerStatus as ClassMeeting["providerStatus"],
+        joinUrl: showLink ? meeting.joinUrl : null,
+        provisionError: showLink ? meeting.provisionError : null,
         state: meeting.state as ClassMeeting["state"],
         recordingMode: meeting.recordingMode as RecordingMode,
         version: meeting.version,

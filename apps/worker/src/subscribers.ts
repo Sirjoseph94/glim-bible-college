@@ -1,6 +1,7 @@
 import type { DomainEvent, DomainEventName } from "@glim/contracts";
 import { Db } from "@glim/db";
 import { AttendanceService } from "@glim/modules/attendance";
+import { ProvisioningService } from "@glim/modules/class-meeting";
 import { TranscriptsService } from "@glim/modules/transcripts";
 import type { INestApplicationContext } from "@nestjs/common";
 
@@ -17,7 +18,18 @@ export function createSubscribers(context: INestApplicationContext): SubscriberR
   const db = context.get(Db);
   const attendance = context.get(AttendanceService);
   const transcripts = context.get(TranscriptsService);
+  const provisioning = context.get(ProvisioningService);
+  // Who may join without knocking follows the course's students and Lecturers (§11.5).
+  const resync = async (event: DomainEvent) => {
+    const p = event.payload as { courseOfferingId?: string; offeringId?: string };
+    const offeringId = p.courseOfferingId ?? p.offeringId;
+    if (offeringId !== undefined) await provisioning.queueSyncForOffering(offeringId);
+  };
   return {
+    "course.enrollment.activated": [resync],
+    "course.enrollment.ended": [resync],
+    "lecturing.assignment.created": [resync],
+    "lecturing.assignment.ended": [resync],
     // Year 1 → Year 2 progression when an Academic Session is activated (§9.1, D-03).
     "academic.session.activated": [
       async (event) => {
