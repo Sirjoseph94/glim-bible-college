@@ -12,7 +12,11 @@ liveProviderContract("FakeLiveProvider", () => {
 describe("Meet event envelopes", () => {
   const at = new Date("2026-11-02T10:00:00Z");
   it.each([
-    ["CONFERENCE_STARTED", { conferenceId: "c1" }, { conferenceId: "c1", recordingId: null }],
+    [
+      "CONFERENCE_STARTED",
+      { conferenceId: "c1" },
+      { conferenceId: "c1", recordingId: null, hostUserId: "42" },
+    ],
     ["CONFERENCE_ENDED", { conferenceId: "c1" }, { conferenceId: "c1", recordingId: null }],
     [
       "PARTICIPANT_JOINED",

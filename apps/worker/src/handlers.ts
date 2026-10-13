@@ -2,10 +2,13 @@ import { QUEUES, type DomainEvent, type QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService, UserAdminService } from "@glim/modules/identity";
 import { AttendanceService } from "@glim/modules/attendance";
+import { LIVE_PROVIDER, type LiveProvider } from "@glim/integrations/live-provider/port";
 import {
+  MeetEventsService,
   MeetingLifecycleService,
   ProvisioningService,
   SeriesService,
+  SubscriptionsService,
 } from "@glim/modules/class-meeting";
 import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
@@ -44,6 +47,27 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const series = deps.context.get(SeriesService);
   const lifecycle = deps.context.get(MeetingLifecycleService);
   const provisioning = deps.context.get(ProvisioningService);
+  const meetEvents = deps.context.get(MeetEventsService);
+  const subscriptions = deps.context.get(SubscriptionsService);
+  // Google Meet (integration slice): without a provider these queues get no handler, so their
+  // cron schedules are removed and nothing polls Google.
+  const google: HandlerRegistry =
+    deps.context.get<LiveProvider | null>(LIVE_PROVIDER) === null
+      ? {}
+      : {
+          "class-meeting.provision": (job) =>
+            provisioning.provision((job.data as { meetingId: string }).meetingId, {
+              final: job.retryCount >= QUEUES["class-meeting.provision"].retryLimit,
+            }),
+          "class-meeting.sync-access": (job) =>
+            provisioning.syncAccess((job.data as { meetingId: string }).meetingId),
+          "class-meeting.end": (job) =>
+            provisioning.endConference((job.data as { meetingId: string }).meetingId),
+          "meeting.reconcile": () => meetEvents.reconcile(),
+          // The 15-minute sweep, or one subscription a lifecycle event named.
+          "subscription.renew": (job) =>
+            subscriptions.run((job.data as { remoteName?: string } | null)?.remoteName),
+        };
   const attendance = deps.context.get(AttendanceService);
   const userAdmin = deps.context.get(UserAdminService);
   const videoAvailability = deps.context.get(AvailabilityService);
@@ -60,15 +84,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "admissions.purge": () => purge.run(),
     "class-meeting.series-extend": () => series.extend(),
     "meeting.tick": () => lifecycle.tick(),
-    // Google Meet (integration slice): idle while LIVE_PROVIDER=none.
-    "class-meeting.provision": (job) =>
-      provisioning.provision((job.data as { meetingId: string }).meetingId, {
-        final: job.retryCount >= QUEUES["class-meeting.provision"].retryLimit,
-      }),
-    "class-meeting.sync-access": (job) =>
-      provisioning.syncAccess((job.data as { meetingId: string }).meetingId),
-    "class-meeting.end": (job) =>
-      provisioning.endConference((job.data as { meetingId: string }).meetingId),
+    ...google,
     // The daily sweep, or one video the System Admin asked to recheck from the ops page.
     "video.availability-check": async (job) => {
       const one = job.data as { videoId?: string; actorUserId?: string } | null;

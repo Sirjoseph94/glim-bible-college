@@ -133,6 +133,8 @@ export const QUEUES = {
     expireInSeconds: 10 * MIN,
   },
   "meeting.tick": { role: "general", retryLimit: 2, expireInSeconds: MIN },
+  /** Every 3 minutes: Meet conferences the events missed (§11.8, INV-6). */
+  "meeting.reconcile": { role: "google", retryLimit: 1, expireInSeconds: 3 * MIN },
 } as const satisfies Record<string, QueueSpec>;
 
 export type QueueName = keyof typeof QUEUES;
@@ -175,6 +177,8 @@ export const CRON_SCHEDULES = {
   "auth.session-cleanup": { queue: "auth.session-cleanup", cron: "45 * * * *", tz: "UTC" },
   "db.logical-backup": { queue: "db.logical-backup", cron: "0 1 * * 0", tz: "UTC" },
   "ops.queue-health": { queue: "ops.queue-health", cron: "* * * * *", tz: "UTC" },
+  "meeting-reconciliation": { queue: "meeting.reconcile", cron: "*/3 * * * *", tz: "UTC" },
+  "subscription-renewal": { queue: "subscription.renew", cron: "*/15 * * * *", tz: "UTC" },
 } as const satisfies Record<string, CronSpec>;
 
 export type CronName = keyof typeof CRON_SCHEDULES;

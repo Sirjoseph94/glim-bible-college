@@ -530,6 +530,7 @@ export class GoogleMeetProvider implements LiveProvider {
     return {
       remoteName: sub.name,
       expiresAt: new Date(sub.expireTime ?? Date.now()),
+      eventTypes: MEET_EVENT_TYPES,
     };
   }
 

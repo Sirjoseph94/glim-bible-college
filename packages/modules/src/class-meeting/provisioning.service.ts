@@ -14,7 +14,8 @@ import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@gli
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import type { MeetingRow } from "./meeting-writer";
+
+type MeetingRow = typeof schema.classMeetings.$inferSelect;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

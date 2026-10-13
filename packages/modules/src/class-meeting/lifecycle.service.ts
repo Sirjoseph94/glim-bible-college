@@ -304,6 +304,20 @@ export class MeetingLifecycleService {
   }
 
   /**
+   * A conference started or ended in the meeting's Meet space (§11.8 events, reconciliation).
+   * `at` is when Meet says it happened. A transition the state machine refuses (a call in a
+   * cancelled class, an end while not live) changes nothing.
+   */
+  async applyProviderEvent(
+    id: string,
+    event: "CONFERENCE_STARTED" | "CONFERENCE_ENDED",
+    at: Date,
+  ): Promise<ClassMeetingState | null> {
+    const result = await this.apply(id, event, { userId: null, type: "PROVIDER" }, undefined, at);
+    return result.ok ? result.value : null;
+  }
+
+  /**
    * Applies one event to a locked meeting through the state machine, with its side effects:
    * timestamps, the audit row and the domain event.
    */
@@ -312,12 +326,13 @@ export class MeetingLifecycleService {
     event: MeetingEvent,
     actor: AuditActor,
     precondition?: (row: MeetingRow, now: Date) => ReturnType<typeof domainError> | null,
+    at?: Date,
   ): Promise<DomainResult<ClassMeetingState>> {
     return this.db.withTxResult(async ({ db, boss }) => {
       const m = schema.classMeetings;
       const [row] = await db.select().from(m).where(eq(m.id, id)).for("update");
       if (row === undefined) return err(domainError("NOT_FOUND", "Not found."));
-      const now = this.clock.now();
+      const now = at ?? this.clock.now();
       const problem = precondition?.(row, now) ?? null;
       if (problem !== null) return err(problem);
       const policy = windowPolicy(row);
@@ -337,7 +352,7 @@ export class MeetingLifecycleService {
             ? { firstConferenceStartedAt: now }
             : {}),
           ...(result.to === "ENDED" ? { lastConferenceEndedAt: now } : {}),
-          updatedAt: now,
+          updatedAt: this.clock.now(),
           version: sql`${m.version} + 1`,
         })
         .where(eq(m.id, id));

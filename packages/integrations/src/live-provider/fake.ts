@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { parseMeetEnvelope } from "../google/events";
+import { MEET_EVENT_TYPES, parseMeetEnvelope } from "../google/events";
 import {
   ProviderNotFoundError,
   ProviderPermanentError,
@@ -214,7 +214,7 @@ export class FakeLiveProvider implements LiveProvider {
       const remoteName = `subscriptions/fake-${host.userId}`;
       const expiresAt = new Date(this.world.now().getTime() + this.world.subscriptionLifetimeMs);
       this.world.subscriptions.set(remoteName, { hostEmail, expiresAt });
-      return { remoteName, expiresAt };
+      return { remoteName, expiresAt, eventTypes: MEET_EVENT_TYPES };
     });
   }
 
@@ -223,7 +223,7 @@ export class FakeLiveProvider implements LiveProvider {
       const sub = this.world.subscriptions.get(remoteName);
       if (sub?.hostEmail !== hostEmail) throw new ProviderNotFoundError("No such subscription.");
       sub.expiresAt = new Date(this.world.now().getTime() + this.world.subscriptionLifetimeMs);
-      return { remoteName, expiresAt: sub.expiresAt };
+      return { remoteName, expiresAt: sub.expiresAt, eventTypes: MEET_EVENT_TYPES };
     });
   }
 

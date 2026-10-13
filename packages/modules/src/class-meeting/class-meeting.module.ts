@@ -2,14 +2,17 @@ import { AuditModule } from "@glim/modules/audit";
 import { AuthorizationModule, AuthorizationService } from "@glim/modules/authorization";
 import { IdentityModule } from "@glim/modules/identity";
 import { NotificationsModule } from "@glim/modules/notifications";
+import { OpsModule } from "@glim/modules/ops";
 import { SchedulingModule } from "@glim/modules/scheduling";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
 import { MeetingLifecycleService } from "./lifecycle.service";
+import { MeetEventsService } from "./meet-events.service";
 import { MeetingWriter } from "./meeting-writer";
 import { ProvisioningService } from "./provisioning.service";
 import { SeriesService } from "./series.service";
+import { SubscriptionsService } from "./subscriptions.service";
 
 /** Class Meetings tell authorization which offering each belongs to (§7.2). */
 @Injectable()
@@ -35,6 +38,7 @@ class ClassMeetingResources implements OnModuleInit {
     AuthorizationModule,
     IdentityModule,
     NotificationsModule,
+    OpsModule,
     SchedulingModule,
   ],
   providers: [
@@ -43,8 +47,17 @@ class ClassMeetingResources implements OnModuleInit {
     ClassMeetingsService,
     SeriesService,
     MeetingLifecycleService,
+    MeetEventsService,
+    SubscriptionsService,
     ClassMeetingResources,
   ],
-  exports: [ClassMeetingsService, SeriesService, MeetingLifecycleService, ProvisioningService],
+  exports: [
+    ClassMeetingsService,
+    SeriesService,
+    MeetingLifecycleService,
+    ProvisioningService,
+    MeetEventsService,
+    SubscriptionsService,
+  ],
 })
 export class ClassMeetingModule {}

@@ -141,6 +141,8 @@ export interface ProviderEvent {
   recordingId: string | null;
   /** The subscription it came through (lifecycle events). */
   subscription: string | null;
+  /** The host account's provider user id the event was delivered for, when the provider says. */
+  hostUserId: string | null;
 }
 
 export interface PulledEvent {
@@ -151,6 +153,8 @@ export interface PulledEvent {
 export interface ProviderSubscription {
   remoteName: string;
   expiresAt: Date;
+  /** The event types it delivers (the provider's names). */
+  eventTypes: string[];
 }
 
 export interface ProviderHealth {

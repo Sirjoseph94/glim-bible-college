@@ -9,3 +9,5 @@ export { HORIZON_DAYS, SeriesService, type NewSeriesInput } from "./series.servi
 export { MeetingLifecycleService, type JoinView, type RollCallCheck } from "./lifecycle.service";
 export { tickEvent, transition, type MeetingContext, type MeetingEvent } from "./state-machine";
 export { ProvisioningService, type ProvisionOutcome } from "./provisioning.service";
+export { MeetEventsService } from "./meet-events.service";
+export { SubscriptionsService, type SubscriptionSweep } from "./subscriptions.service";

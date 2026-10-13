@@ -70,6 +70,7 @@ export function parseMeetEnvelope(envelope: RawProviderEnvelope): ProviderEvent 
     conferenceId: ids.conferenceRecords ?? null,
     recordingId: ids.recordings ?? null,
     subscription: type === "SUBSCRIPTION_LIFECYCLE" ? (source.subscriptions ?? null) : null,
+    hostUserId: source.users ?? null,
   };
 }
 
