@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Alert, Field, formText, SubmitButton } from "./form";
+import { formText } from "./form";
+import { Banner } from "./ui/banner";
+import { Button } from "./ui/button";
+import { TextField } from "./ui/field";
 import { useSubmit } from "./use-submit";
 
 /** New password + confirmation; the server enforces the policy (12+ characters, not breached). */
@@ -28,8 +31,8 @@ export function PasswordForm({
         void run(() => onSubmit(password));
       }}
     >
-      {error && !fieldErrors.password ? <Alert tone="error">{error}</Alert> : null}
-      <Field
+      {error && !fieldErrors.password ? <Banner tone="danger">{error}</Banner> : null}
+      <TextField
         id="password"
         name="password"
         type="password"
@@ -39,7 +42,7 @@ export function PasswordForm({
         required
         error={fieldErrors.password ?? fieldErrors.token}
       />
-      <Field
+      <TextField
         id="confirm"
         name="confirm"
         type="password"
@@ -48,7 +51,9 @@ export function PasswordForm({
         required
         error={mismatch ? "The passwords don't match." : undefined}
       />
-      <SubmitButton busy={busy}>{submitLabel}</SubmitButton>
+      <Button type="submit" variant="primary" block loading={busy}>
+        {submitLabel}
+      </Button>
     </form>
   );
 }

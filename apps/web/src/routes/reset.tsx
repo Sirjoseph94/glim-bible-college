@@ -2,7 +2,7 @@ import type { auth } from "@glim/contracts";
 import { Link, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "../api/client";
-import { Alert } from "../components/form";
+import { Banner } from "../components/ui/banner";
 import { PasswordForm } from "../components/password-form";
 import { AuthLayout } from "../components/app/auth-layout";
 
@@ -13,12 +13,12 @@ export function ResetPage() {
   return (
     <AuthLayout title="Choose a new password">
       {done ? (
-        <Alert tone="success">
+        <Banner tone="success">
           Your password has been changed and you've been signed out everywhere.{" "}
           <Link to="/login" className="underline">
             Sign in
           </Link>
-        </Alert>
+        </Banner>
       ) : (
         <PasswordForm
           submitLabel="Change password"

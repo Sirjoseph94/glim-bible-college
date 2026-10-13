@@ -75,11 +75,11 @@ export default tseslint.config(
     },
   },
   {
-    // Design tokens only in the web app (UI-1); warnings until WP-UI-12 (decision UI-Q16).
+    // Design tokens only in the web app (UI-1); an error since WP-UI-12 (decision UI-Q16).
     files: ["apps/web/src/**/*.{ts,tsx}"],
     ignores: ["**/*.test.ts", "**/*.test.tsx"],
     plugins: { glim: { rules: { "design-tokens": designTokens } } },
-    rules: { "glim/design-tokens": "warn" },
+    rules: { "glim/design-tokens": "error" },
   },
   {
     // Routes compose screens from components/ui and components/app, never primitives directly.

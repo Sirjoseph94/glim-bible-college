@@ -2,7 +2,7 @@
 // Flags raw colours, px sizes and Tailwind arbitrary values in string literals. An approved
 // exception is a disable comment whose description starts with "design-exception:", e.g.
 //   // eslint-disable-next-line glim/design-tokens -- design-exception: Google's "G" mark
-// Severity is "warn" until WP-UI-12 makes it an error (decision UI-Q16).
+// Severity is "error" since WP-UI-12 (decision UI-Q16).
 
 const RAW_COLOUR = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/;
 const RAW_PX = /\b\d+(?:\.\d+)?px\b/;
