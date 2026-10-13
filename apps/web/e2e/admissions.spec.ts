@@ -207,7 +207,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   ).toBeVisible();
 
   // As a student they have a personal referral code to share.
-  await applicant.getByRole("link", { name: "Profile" }).click();
+  await openArea(applicant, "Profile");
   await expect(applicant.getByText(/^[A-HJ-NP-Z2-9]{7}$/)).toBeVisible();
 
   // The officer's reports count the application.

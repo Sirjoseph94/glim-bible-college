@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import { memoryStore, OfflineQueue, sendStep, type QueuedStep } from "./queue";
+import { memoryStore, OfflineQueue, sendStep, type QueuedStep, type QueuedWork } from "./queue";
 
 const submission = (key: string) => ({
   key,
@@ -169,5 +169,77 @@ describe("OfflineQueue.list", () => {
       "key-000000000001",
       "key-000000000003",
     ]);
+  });
+});
+
+describe("OfflineQueue.enqueue with merge (one request for a burst of offline changes)", () => {
+  type Body = { answers: string[] };
+  const save = (key: string, answers: string[], group = "quiz:q1"): QueuedWork => ({
+    key,
+    group,
+    steps: [
+      { method: "PATCH", path: "/quiz-attempts/:id", params: { id: "q1" }, body: { answers } },
+    ],
+  });
+  const answersOf = (work: QueuedWork) => (work.steps[0]?.body as Body).answers;
+  const merge = (older: QueuedWork, newer: QueuedWork): QueuedWork => ({
+    ...newer,
+    steps: newer.steps.map((step) => ({
+      ...step,
+      body: { answers: [...answersOf(older), ...answersOf(newer)] },
+    })),
+  });
+  const deferred = () => {
+    let release = () => {};
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { promise, release };
+  };
+
+  it("folds new work into the group's newest unsent item", async () => {
+    const queue = new OfflineQueue(memoryStore(), () => Promise.reject(offline()));
+    await queue.enqueue(save("key-000000000001", ["a"]), merge);
+    await queue.enqueue(save("key-000000000002", ["b"]), merge);
+    const items = await queue.list("quiz:q1");
+    expect(items.map((w) => w.key)).toEqual(["key-000000000001"]);
+    expect((items[0]?.steps[0]?.body as Body).answers).toEqual(["a", "b"]);
+  });
+
+  it("never folds into an item that is being sent: the new work queues after it", async () => {
+    const gate = deferred();
+    const sent: string[][] = [];
+    const queue = new OfflineQueue(memoryStore(), async (step) => {
+      if (sent.length === 0) await gate.promise;
+      sent.push((step.body as Body).answers);
+    });
+    await queue.enqueue(save("key-000000000001", ["a"]), merge);
+    const flushing = queue.flush();
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    await queue.enqueue(save("key-000000000002", ["b"]), merge);
+    gate.release();
+    await flushing;
+    await queue.flush();
+    expect(sent).toEqual([["a"], ["b"]]);
+  });
+
+  it("sends what was folded in after a flush began, not the copy it started with", async () => {
+    const gate = deferred();
+    const sent: string[][] = [];
+    const queue = new OfflineQueue(memoryStore(), async (step) => {
+      const answers = (step.body as Body).answers;
+      if (answers[0] === "other") await gate.promise;
+      sent.push(answers);
+    });
+    await queue.enqueue(save("key-000000000001", ["other"], "quiz:other"));
+    await queue.enqueue(save("key-000000000002", ["a"]), merge);
+    const flushing = queue.flush();
+    await new Promise((r) => setTimeout(r, 0));
+    await queue.enqueue(save("key-000000000003", ["b"]), merge);
+    gate.release();
+    await flushing;
+    expect(sent).toEqual([["other"], ["a", "b"]]);
+    expect(await queue.count()).toBe(0);
   });
 });

@@ -104,8 +104,15 @@ function retryable(error: unknown): boolean {
   return error.status >= 500 || error.status === 429 || error.code === "IDEMPOTENCY_IN_PROGRESS";
 }
 
+/** Folds newer work into an older, unsent item of the same group (e.g. two answer batches). */
+export type Merge = (older: QueuedWork, newer: QueuedWork) => QueuedWork;
+
 export class OfflineQueue {
   private flushing: Promise<FlushResult> | null = null;
+  /** The item being sent now, which a merge must leave alone. */
+  private sending: string | null = null;
+  /** Serialises merging and claiming an item to send, so neither sees the other half-done. */
+  private lock: Promise<unknown> = Promise.resolve();
   private readonly listeners = new Set<(result: FlushResult | null) => void>();
 
   constructor(
@@ -113,9 +120,31 @@ export class OfflineQueue {
     private readonly send: Send,
   ) {}
 
-  async enqueue(work: QueuedWork): Promise<void> {
-    await this.store.put({ ...work, queuedAt: new Date().toISOString(), done: 0 });
+  /**
+   * Keeps work on the device until it can be sent. With `merge`, work is folded into the group's
+   * newest item that hasn't started sending (keeping that item's key and place), so a burst of
+   * offline changes goes out as one request.
+   */
+  async enqueue(work: QueuedWork, merge?: Merge): Promise<void> {
+    await this.locked(async () => {
+      const target =
+        merge === undefined
+          ? undefined
+          : (await this.sorted())
+              .filter((w) => w.group === work.group && w.done === 0 && w.key !== this.sending)
+              .at(-1);
+      if (target && merge) {
+        const merged = merge(target, work);
+        await this.store.put({ ...merged, key: target.key, queuedAt: target.queuedAt, done: 0 });
+      } else await this.store.put({ ...work, queuedAt: new Date().toISOString(), done: 0 });
+    });
     this.notify(null);
+  }
+
+  private locked<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.lock.then(task, task);
+    this.lock = run.catch(() => undefined);
+    return run;
   }
 
   async count(group?: string): Promise<number> {
@@ -154,7 +183,14 @@ export class OfflineQueue {
     const result: FlushResult = { sent: [], rejected: [] };
     const all = await this.sorted();
     try {
-      for (const work of all) {
+      for (const listed of all) {
+        // Claim the item and read it again: a merge may have changed it since the list was read.
+        const work = await this.locked(async () => {
+          const current = (await this.store.all()).find((w) => w.key === listed.key);
+          this.sending = current?.key ?? null;
+          return current;
+        });
+        if (work === undefined) continue;
         try {
           for (let i = work.done; i < work.steps.length; i += 1) {
             const step = work.steps[i];
@@ -164,8 +200,10 @@ export class OfflineQueue {
             await this.store.put(work);
           }
           await this.store.remove(work.key);
+          this.sending = null;
           result.sent.push(work);
         } catch (error) {
+          this.sending = null;
           if (retryable(error)) return result; // still offline: keep this and everything after
           await this.store.remove(work.key);
           result.rejected.push({ request: work, error: error as ApiError });

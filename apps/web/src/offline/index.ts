@@ -6,6 +6,7 @@ import {
   OfflineQueue,
   sendStep,
   type FlushResult,
+  type Merge,
   type Request,
   type QueuedStep,
   type QueuedWork,
@@ -126,8 +127,8 @@ export function startOfflineQueue(): void {
 }
 
 /** Queues work and tries to send it straight away (the connection may already be back). */
-export async function queueWork(work: QueuedWork): Promise<void> {
-  await offlineQueue.enqueue(work);
+export async function queueWork(work: QueuedWork, merge?: Merge): Promise<void> {
+  await offlineQueue.enqueue(work, merge);
   void flushAndRetry();
 }
 
