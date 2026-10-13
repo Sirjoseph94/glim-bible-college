@@ -1,4 +1,4 @@
-import { createBoss, createPool, Db } from "@glim/db";
+import { bucketAcquire, createBoss, createPool, Db } from "@glim/db";
 import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -33,7 +33,7 @@ const app = await buildApp({
   identityProvider: createIdentityProvider(config),
   objectStorage: createObjectStorage(config),
   videoHost: createVideoHost(),
-  liveProvider: createLiveProvider(config),
+  liveProvider: createLiveProvider(config, { acquire: bucketAcquire(db.pool) }),
   transcriptRenderer: new ReactPdfTranscriptRenderer(),
 });
 await app.listen(config.port, "0.0.0.0");

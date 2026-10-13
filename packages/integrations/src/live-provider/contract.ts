@@ -203,7 +203,10 @@ export function liveProviderContract(name: string, setup: () => Promise<Contract
     });
 
     it("subscribes a host account and renews the subscription", async () => {
-      const sub = await s.provider.subscribe(HOST);
+      const sub = await s.provider.subscribe({
+        email: HOST,
+        userId: s.world.host(HOST).userId,
+      });
       expect(sub.expiresAt.getTime()).toBeGreaterThan(Date.now());
       const renewed = await s.provider.renewSubscription(HOST, sub.remoteName);
       expect(renewed.remoteName).toBe(sub.remoteName);

@@ -207,10 +207,11 @@ export class FakeLiveProvider implements LiveProvider {
     });
   }
 
-  subscribe(hostEmail: string): Promise<ProviderSubscription> {
+  subscribe(host: { email: string; userId: string }): Promise<ProviderSubscription> {
     return this.run("subscribe", () => {
+      const hostEmail = host.email;
       this.world.host(hostEmail);
-      const remoteName = `subscriptions/fake-${hostEmail}`;
+      const remoteName = `subscriptions/fake-${host.userId}`;
       const expiresAt = new Date(this.world.now().getTime() + this.world.subscriptionLifetimeMs);
       this.world.subscriptions.set(remoteName, { hostEmail, expiresAt });
       return { remoteName, expiresAt };

@@ -181,8 +181,11 @@ export interface LiveProvider {
   /** Event transport (§11.8): pull, then ack only after the inbox insert commits. */
   pullEvents(max: number): Promise<PulledEvent[]>;
   ackEvents(ackIds: string[]): Promise<void>;
-  /** One event subscription per host account. */
-  subscribe(hostEmail: string): Promise<ProviderSubscription>;
+  /**
+   * One event subscription per host account (S-04). `hostUserId` is the account's numeric
+   * directory id: the subscription's target is the user, not an email.
+   */
+  subscribe(host: { email: string; userId: string }): Promise<ProviderSubscription>;
   renewSubscription(hostEmail: string, remoteName: string): Promise<ProviderSubscription>;
   /** The host account's storage use (§11.2: alert at 70 % / 85 %). Limit null = unlimited. */
   storageUsage(hostEmail: string): Promise<{ usedBytes: number; limitBytes: number | null }>;

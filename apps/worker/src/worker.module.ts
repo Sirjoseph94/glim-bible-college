@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import type { Db } from "@glim/db";
+import { bucketAcquire, type Db } from "@glim/db";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
@@ -74,7 +74,9 @@ export function createWorkerContext(deps: {
       objectStorage: deps.objectStorage ?? createObjectStorage(config),
       videoHost: deps.videoHost ?? createVideoHost(),
       liveProvider:
-        deps.liveProvider === undefined ? createLiveProvider(config) : deps.liveProvider,
+        deps.liveProvider === undefined
+          ? createLiveProvider(config, { acquire: bucketAcquire(deps.db.pool) })
+          : deps.liveProvider,
       transcriptRenderer: new ReactPdfTranscriptRenderer(),
     }),
     { logger: false },
