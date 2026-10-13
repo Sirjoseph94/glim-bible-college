@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
 import { meQuery } from "../api/session";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 
 import { LandingPage } from "./landing";
 
@@ -12,7 +13,15 @@ const HomePage = lazy(() => import("./home").then((m) => ({ default: m.HomePage 
 export function IndexRoute() {
   const { data: me } = useQuery(meQuery);
   return me ? (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        // §10.1: a skeleton in the shape of Home (the greeting, then the first card).
+        <SkeletonGroup label="Loading your Home">
+          <Skeleton className="h-9 w-2/3" />
+          <Skeleton className="h-32" />
+        </SkeletonGroup>
+      }
+    >
       <HomePage />
     </Suspense>
   ) : (

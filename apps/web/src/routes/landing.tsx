@@ -1,11 +1,11 @@
-import type { CurrentIntake } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
 import { currentIntakeQuery, programmeLength } from "../api/intake";
 import { LoadFailed } from "../components/app/page-states";
+import { IntakeStatus } from "../components/app/intake-status";
 import { InstitutionName } from "../components/app/shell-parts";
-import { CalendarDate } from "../components/time";
+import { PublicTopBar } from "../components/app/signed-out-shell";
 import { Button, buttonClass } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
@@ -18,43 +18,44 @@ import { Icon, type IconName } from "../design/icons";
  * What studying here looks like, in the product's own terms (GLOSSARY.md). Every line is
  * something the platform does today; nothing here is made up about the college.
  */
-const STUDY: [IconName, string, string][] = [
-  [
-    "video",
-    "Join Class Meetings online",
-    "Online students join each Class Meeting on Google Meet from a phone or computer. On-campus students meet in the Room.",
-  ],
-  [
-    "play",
-    "Watch the recordings",
-    "Missed a class or want to go over it again? Recordings stay with the course, and you pick up where you left off.",
-  ],
-  [
-    "file",
-    "Hand in your work anywhere",
-    "Submit assignments and take quizzes on your phone. Your answers are kept on the device until the connection comes back.",
-  ],
-  [
-    "award",
-    "Follow your results",
-    "See your grades as Lecturers release them, then your semester results, and request a transcript that anyone can verify.",
-  ],
+const STUDY: { icon: IconName; title: string; body: string }[] = [
+  {
+    icon: "video",
+    title: "Join Class Meetings online",
+    body: "Online students join Class Meetings on Google Meet from a phone or computer. On-campus students meet in the Room.",
+  },
+  {
+    icon: "play",
+    title: "Watch the recordings",
+    body: "Missed a class or want to go over it again? Recordings stay with the course, and you pick up where you left off.",
+  },
+  {
+    icon: "file",
+    title: "Hand in your work anywhere",
+    body: "Submit assignments and take quizzes on your phone. Your answers are kept on the device until the connection comes back.",
+  },
+  {
+    icon: "award",
+    title: "Follow your results",
+    body: "See your grades as Lecturers release them, then your semester results, and request a transcript that anyone can verify.",
+  },
 ];
 
-const STEPS: [string, string][] = [
-  [
-    "Sign in with Google",
-    "You apply with your Google account. If you don't have one, it's free to create.",
-  ],
-  [
-    "Fill in your application",
-    "Choose a Programme and a Study Mode: On-campus or Online. Your draft is saved as you go.",
-  ],
-  ["Submit it", "You get a receipt by email with your Application Reference No."],
-  [
-    "Accept your Offer",
-    "If the college admits you, accept the Offer within 21 days to become a student.",
-  ],
+/** The steps of TRD §10. The Offer's deadline is set per Intake, so the Offer states it. */
+const STEPS: { title: string; body: string }[] = [
+  {
+    title: "Sign in with Google",
+    body: "You apply with your Google account. If you don't have one, it's free to create.",
+  },
+  {
+    title: "Fill in your application",
+    body: "Choose a Programme and a Study Mode: On-campus or Online. Your draft is saved as you go.",
+  },
+  { title: "Submit it", body: "You get a receipt by email with your Application Reference No." },
+  {
+    title: "Accept your Offer",
+    body: "If the college admits you, accept the Offer by the date it gives to become a student.",
+  },
 ];
 
 /**
@@ -83,17 +84,14 @@ export function LandingPage() {
 function TopBar() {
   const institution = useQuery(institutionQuery);
   return (
-    <header className="glim-safe-top border-b border-line bg-surface-raised">
-      <div className="glim-gutter mx-auto flex h-14 w-full max-w-content items-center justify-between gap-3">
-        <Link to="/" className="flex min-w-0 items-center gap-2">
-          <Crest size={28} />
-          <InstitutionName name={institution.data?.name} testId="institution-name" />
-        </Link>
+    <PublicTopBar
+      institutionName={institution.data?.name}
+      action={
         <Link to="/login" className={buttonClass({ variant: "secondary", size: "sm" })}>
           Sign in
         </Link>
-      </div>
-    </header>
+      }
+    />
   );
 }
 
@@ -126,70 +124,42 @@ function Hero() {
   );
 }
 
-/** The GLIM-green identity panel (§4.1): the crest and where the Intake stands. */
+/**
+ * Where the Intake stands. The GLIM-green band is the identity fill (§4.1); the crest sits on the
+ * card below it, never on the green (§7.3).
+ */
 function Admissions() {
   const current = useQuery(currentIntakeQuery);
   return (
     <section
       aria-labelledby="landing-admissions"
-      className="glim-identity-band space-y-4 rounded-lg p-5 lg:p-6"
+      className="overflow-hidden rounded-lg border border-line bg-surface-raised"
     >
-      <div className="flex items-center gap-3">
-        <Crest size={72} />
-        <h2 id="landing-admissions" className="text-title">
-          Admissions
-        </h2>
+      <div aria-hidden="true" className="glim-identity-band h-3" />
+      <div className="space-y-4 p-5 lg:p-6">
+        <div className="flex items-center gap-3">
+          <Crest size={72} />
+          <h2 id="landing-admissions" className="text-title">
+            Admissions
+          </h2>
+        </div>
+        <div aria-live="polite" className="min-h-12">
+          {current.isPending ? (
+            <SkeletonGroup label="Loading the Intake dates">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-2/3" />
+            </SkeletonGroup>
+          ) : current.isError ? (
+            <LoadFailed what="the Intake dates" onRetry={() => void current.refetch()} />
+          ) : (
+            <IntakeStatus intake={current.data.intake} />
+          )}
+        </div>
+        <p className="text-body-sm text-ink-muted">
+          The college admits students once a year. Everyone admitted in an Intake starts together.
+        </p>
       </div>
-      {/* Two lines are reserved, so the status replaces the placeholder without a shift. */}
-      <div aria-live="polite" className="min-h-12 text-body">
-        {current.isPending ? (
-          <p>Checking this year's Intake…</p>
-        ) : current.isError ? (
-          <p>
-            We couldn't load the Intake dates just now. The{" "}
-            <Link to="/apply" className="underline">
-              apply page
-            </Link>{" "}
-            has them.
-          </p>
-        ) : (
-          <IntakeStatus intake={current.data.intake} />
-        )}
-      </div>
-      <p className="text-body-sm">
-        The college admits students once a year. Everyone admitted in an Intake starts together.
-      </p>
     </section>
-  );
-}
-
-function IntakeStatus({ intake }: { intake: CurrentIntake["intake"] }) {
-  if (intake === null) return <p>There's no intake scheduled yet. Please check back soon.</p>;
-  if (intake.status === "OPEN")
-    return (
-      <p>
-        Applications for the <strong>{intake.academicSessionName}</strong> are open until{" "}
-        <strong>
-          <CalendarDate value={intake.closesOn} />
-        </strong>
-        .
-      </p>
-    );
-  if (intake.status === "PLANNED")
-    return (
-      <p>
-        Applications for the <strong>{intake.academicSessionName}</strong> open on{" "}
-        <strong>
-          <CalendarDate value={intake.opensOn} />
-        </strong>
-        .
-      </p>
-    );
-  return (
-    <p>
-      Applications for the <strong>{intake.academicSessionName}</strong> are closed. Please check
-      back for the next Intake.
-    </p>
   );
 }
 
@@ -261,7 +231,7 @@ function HowYouStudy() {
   return (
     <Section id="landing-study" title="How you study">
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {STUDY.map(([icon, title, body]) => (
+        {STUDY.map(({ icon, title, body }) => (
           <li key={title}>
             <Card className="h-full space-y-3">
               <span className="inline-flex size-11 items-center justify-center rounded-pill bg-brand-soft text-brand">
@@ -282,7 +252,7 @@ function HowToApply() {
     <Section id="landing-apply" title="How to apply">
       <Card>
         <ol className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map(([title, body], index) => (
+          {STEPS.map(({ title, body }, index) => (
             <li key={title} className="flex gap-3">
               <span
                 aria-hidden="true"

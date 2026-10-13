@@ -10,15 +10,14 @@ export const currentIntakeQuery = queryOptions({
   staleTime: 10 * 60 * 1000,
 });
 
-const LENGTH: Record<string, string> = {
+type Programme = CurrentIntake["programmes"][number];
+
+const LENGTH: Record<Programme["awardType"], string> = {
   CERTIFICATE: "1 year · Year 1",
   DIPLOMA: "2 years · Years 1 and 2",
 };
 
 /** How long a Programme takes, as the public pages say it. */
-export function programmeLength(programme: CurrentIntake["programmes"][number]): string {
-  return (
-    LENGTH[programme.awardType] ??
-    `${String(programme.levels)} ${programme.levels === 1 ? "year" : "years"}`
-  );
+export function programmeLength(programme: Programme): string {
+  return LENGTH[programme.awardType];
 }

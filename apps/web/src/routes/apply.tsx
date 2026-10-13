@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import { currentIntakeQuery, programmeLength } from "../api/intake";
 import { meQuery } from "../api/session";
+import { IntakeStatus } from "../components/app/intake-status";
 import { PageHeader } from "../components/app/page-header";
 import { LoadFailed } from "../components/app/page-states";
 import { GOOGLE_ERRORS, GoogleButton } from "../components/google";
-import { CalendarDate } from "../components/time";
 import { Banner } from "../components/ui/banner";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -74,30 +74,7 @@ function IntakeCard({
   return (
     <Card className="space-y-4">
       <div aria-live="polite">
-        {intake === null ? (
-          <p className="text-body">There's no intake scheduled yet. Please check back soon.</p>
-        ) : intake.status === "OPEN" ? (
-          <p className="text-body">
-            Applications for the <strong>{intake.academicSessionName}</strong> are open until{" "}
-            <strong>
-              <CalendarDate value={intake.closesOn} />
-            </strong>
-            .
-          </p>
-        ) : intake.status === "PLANNED" ? (
-          <p className="text-body">
-            Applications for the <strong>{intake.academicSessionName}</strong> open on{" "}
-            <strong>
-              <CalendarDate value={intake.opensOn} />
-            </strong>
-            .
-          </p>
-        ) : (
-          <Banner tone="warning">
-            Applications for the {intake.academicSessionName} are closed. You can't start an
-            application now.
-          </Banner>
-        )}
+        <IntakeStatus intake={intake} />
       </div>
       {intake?.status === "OPEN" ? (
         signedIn ? (
