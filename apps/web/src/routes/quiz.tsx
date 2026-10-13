@@ -265,6 +265,24 @@ function AttemptView({
   const inProgress = initial.status === "IN_PROGRESS";
   const online = useOnline();
   const queued = useQueued(group);
+  // While answers wait, try every 3 s, as the old page did (the shared queue retries every 30 s),
+  // and say so when they still don't go.
+  const [stuck, setStuck] = useState(false);
+  const hasWaiting = queued.count > 0;
+  useEffect(() => {
+    if (!hasWaiting) {
+      setStuck(false);
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      void offlineQueue.flush().then(async () => {
+        setStuck((await offlineQueue.count(group)) > 0);
+      });
+    }, RETRY_MS);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [hasWaiting, group]);
   const baseId = useId();
   const [legacy] = useState<Answers>(() => (inProgress ? takeLegacyAnswers(attemptId) : {}));
   const [answers, setAnswers] = useState<Answers>(() => {
@@ -329,7 +347,7 @@ function AttemptView({
   const handing = useRef<Promise<void>>(Promise.resolve());
   /** Hands the answers not yet batched to the queue, as one save. */
   const handOver = useCallback(() => {
-    handing.current = handing.current.then(async () => {
+    const handOverNow = async () => {
       window.clearTimeout(batchTimer.current);
       batchTimer.current = undefined;
       const batch = localRef.current;
@@ -337,7 +355,9 @@ function AttemptView({
       await queueBatch(batch);
       // Keep anything answered again while the batch was being stored.
       setLocalRef.current(changedSince(localRef.current, batch));
-    });
+    };
+    // A failed hand-over (storage refused) mustn't stop the next one: the answers stay in `local`.
+    handing.current = handing.current.then(handOverNow, handOverNow);
     return handing.current;
   }, [queueBatch]);
 
@@ -440,9 +460,11 @@ function AttemptView({
   const status = handingIn
     ? "Handing in your answers…"
     : waiting > 0
-      ? online
+      ? online && !stuck
         ? "Saving…"
-        : "Offline: your answers are kept and will be sent when you reconnect."
+        : online
+          ? "Not saved yet: your answers are kept on this device and sent as soon as the server answers."
+          : "Offline: your answers are kept and will be sent when you reconnect."
       : everSaved
         ? "Answers saved"
         : "";

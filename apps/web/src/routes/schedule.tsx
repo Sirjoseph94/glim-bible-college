@@ -8,6 +8,7 @@ import { byDay } from "../components/app/today";
 import { myScheduleQuery } from "../components/meetings";
 import { LecturerMeetingActions } from "../components/teaching/class-meetings";
 import { EmptyState } from "../components/ui/empty-state";
+import { OfflineBanner, useOnline } from "../components/ui/offline";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 
 /** "Today", "Tomorrow" or "Wed 14 Oct" (§10.6), for a YYYY-MM-DD day in the viewer's zone. */
@@ -35,16 +36,22 @@ function dayLabel(day: string, zone: string): string {
 export function SchedulePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const schedule = useQuery({ ...myScheduleQuery, refetchInterval: 30_000 });
+  const online = useOnline();
   if (me === null) return null;
   return (
     <div className="space-y-5">
+      {online ? null : <OfflineBanner />}
       <PageHeader title="Schedule" meta="Your Class Meetings in the next two weeks." />
+      {schedule.isError && schedule.data !== undefined ? (
+        // §10.1: a failed refresh keeps what was loaded visible below the message.
+        <LoadFailed what="the latest schedule" onRetry={() => void schedule.refetch()} />
+      ) : null}
       {schedule.isPending ? (
         <SkeletonGroup label="Loading your schedule">
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />
         </SkeletonGroup>
-      ) : schedule.isError ? (
+      ) : schedule.data === undefined ? (
         <LoadFailed what="your schedule" onRetry={() => void schedule.refetch()} />
       ) : schedule.data.items.length === 0 ? (
         <EmptyState icon="calendar" title="Nothing scheduled">

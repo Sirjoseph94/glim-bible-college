@@ -82,7 +82,9 @@ export function ProfilePage() {
       </Section>
       <TimezoneForm current={me.user.timezone} />
       <Section title="Notifications">
-        <p className="text-body-sm">Choose which notifications also come by email.</p>
+        <p className="text-body-sm">
+          Choose which notifications you get in the app and which also come by email.
+        </p>
         <Link to="/notifications" className={buttonClass({ variant: "secondary" })}>
           Notification settings
         </Link>
@@ -123,7 +125,7 @@ function ViewChoice({ roles }: { roles: { isStudent: boolean; isLecturer: boolea
         ))}
       </fieldset>
       <p className="text-body-sm text-ink-muted">
-        Both areas stay in the menu either way. This phone remembers your choice.
+        Both areas stay in the menu either way. This device remembers your choice.
       </p>
     </Section>
   );

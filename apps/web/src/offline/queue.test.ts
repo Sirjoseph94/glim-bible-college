@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import { memoryStore, OfflineQueue, sendStep, type QueuedStep, type QueuedWork } from "./queue";
+import {
+  memoryStore,
+  OfflineQueue,
+  sendStep,
+  storageStore,
+  type QueuedStep,
+  type QueuedWork,
+} from "./queue";
 
 const submission = (key: string) => ({
   key,
@@ -202,7 +209,8 @@ describe("OfflineQueue.enqueue with merge (one request for a burst of offline ch
     await queue.enqueue(save("key-000000000001", ["a"]), merge);
     await queue.enqueue(save("key-000000000002", ["b"]), merge);
     const items = await queue.list("quiz:q1");
-    expect(items.map((w) => w.key)).toEqual(["key-000000000001"]);
+    // One item, under the newer key: its body changed, so it's a new request.
+    expect(items.map((w) => w.key)).toEqual(["key-000000000002"]);
     expect((items[0]?.steps[0]?.body as Body).answers).toEqual(["a", "b"]);
   });
 
@@ -241,5 +249,98 @@ describe("OfflineQueue.enqueue with merge (one request for a burst of offline ch
     await flushing;
     expect(sent).toEqual([["other"], ["a", "b"]]);
     expect(await queue.count()).toBe(0);
+  });
+});
+
+describe("OfflineQueue: one screen's stuck work doesn't hold up another's", () => {
+  it("keeps sending other groups after a retryable failure, and keeps order within the failing one", async () => {
+    const sent: string[] = [];
+    const queue = new OfflineQueue(memoryStore(), (step) => {
+      const id = step.params?.id ?? "";
+      if (id === "stuck")
+        return Promise.reject(
+          new ApiError(503, {
+            error: { code: "INTERNAL", message: "Down.", requestId: "r1" },
+          }),
+        );
+      sent.push(id);
+      return Promise.resolve();
+    });
+    const work = (key: string, group: string, id: string): QueuedWork => ({
+      key,
+      group,
+      steps: [{ method: "PUT", path: "/x/:id", params: { id } }],
+    });
+    await queue.enqueue(work("key-000000000001", "assignment:a1", "stuck"));
+    await queue.enqueue(work("key-000000000002", "quiz:q1", "answers"));
+    await queue.enqueue(work("key-000000000003", "assignment:a1", "after-stuck"));
+    const result = await queue.flush();
+    expect(sent).toEqual(["answers"]);
+    expect(result.sent.map((w) => w.key)).toEqual(["key-000000000002"]);
+    expect((await queue.list("assignment:a1")).map((w) => w.key)).toEqual([
+      "key-000000000001",
+      "key-000000000003",
+    ]);
+  });
+});
+
+describe("OfflineQueue.flush picks up work queued while it was sending", () => {
+  it("runs again for work that arrived mid-flush, instead of leaving it for the retry timer", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sent: string[] = [];
+    const queue = new OfflineQueue(memoryStore(), async (step) => {
+      const id = step.params?.id ?? "";
+      if (id === "first") await gate;
+      sent.push(id);
+    });
+    const work = (key: string, id: string): QueuedWork => ({
+      key,
+      group: "quiz:q1",
+      steps: [{ method: "PATCH", path: "/x/:id", params: { id } }],
+    });
+    await queue.enqueue(work("key-000000000001", "first"));
+    const flushing = queue.flush();
+    await new Promise((r) => setTimeout(r, 0));
+    await queue.enqueue(work("key-000000000002", "second"));
+    release();
+    const result = await flushing;
+    expect(sent).toEqual(["first", "second"]);
+    expect(result.sent.map((w) => w.key)).toEqual(["key-000000000001", "key-000000000002"]);
+    expect(await queue.count()).toBe(0);
+  });
+});
+
+describe("storageStore (the fallback when IndexedDB is refused)", () => {
+  const fakeStorage = (): Storage => {
+    const map = new Map<string, string>();
+    return {
+      get length() {
+        return map.size;
+      },
+      clear: () => {
+        map.clear();
+      },
+      getItem: (k) => map.get(k) ?? null,
+      key: (i) => [...map.keys()][i] ?? null,
+      removeItem: (k) => {
+        map.delete(k);
+      },
+      setItem: (k, v) => {
+        map.set(k, v);
+      },
+    };
+  };
+
+  it("keeps queued work across a reload (a new store on the same storage)", async () => {
+    const storage = fakeStorage();
+    const before = new OfflineQueue(storageStore(storage), () => Promise.reject(offline()));
+    await before.enqueue(submission("key-000000000001"));
+    const after = new OfflineQueue(storageStore(storage), () => Promise.resolve());
+    expect(await after.count("assignment:a1")).toBe(1);
+    await after.flush();
+    expect(await after.count()).toBe(0);
   });
 });

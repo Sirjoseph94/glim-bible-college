@@ -411,7 +411,7 @@ function Decision({
       >
         {choice === "REJECT"
           ? "The applicant will be emailed a neutral letter, without your internal note. The decision can't be changed afterwards."
-          : "The applicant will be emailed an offer to accept within the intake's deadline. Your internal note isn't sent."}
+          : "The applicant will be emailed an offer to accept within the intake's acceptance period, counted from today. Your internal note isn't sent."}
       </ConfirmDialog>
     </Section>
   );

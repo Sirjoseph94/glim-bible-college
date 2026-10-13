@@ -5,6 +5,7 @@ import {
   memoryStore,
   OfflineQueue,
   sendStep,
+  storageStore,
   type FlushResult,
   type Merge,
   type Request,
@@ -62,19 +63,26 @@ function indexedDbStore(): QueueStore {
 }
 
 /**
- * IndexedDB when it opens; otherwise (some private windows refuse it) memory, so queued work at
- * least lasts until the tab closes. The switch happens on the first failure and sticks.
+ * IndexedDB when it opens; otherwise (some private windows refuse it) localStorage, so queued
+ * work still survives a reload; and if that is refused too, memory, until the tab closes. Each
+ * switch happens on the first failure and sticks.
  */
 function availableStore(): QueueStore {
-  const memory = memoryStore();
-  if (typeof indexedDB === "undefined") return memory;
-  let store: QueueStore = indexedDbStore();
+  const fallbacks: (() => QueueStore)[] = [
+    () => storageStore(window.localStorage),
+    () => memoryStore(),
+  ];
+  let store: QueueStore =
+    typeof indexedDB === "undefined" ? (fallbacks.shift() ?? memoryStore)() : indexedDbStore();
   const use = async <T>(call: (s: QueueStore) => Promise<T>): Promise<T> => {
-    try {
-      return await call(store);
-    } catch {
-      store = memory;
-      return call(store);
+    for (;;) {
+      try {
+        return await call(store);
+      } catch (error) {
+        const next = fallbacks.shift();
+        if (next === undefined) throw error;
+        store = next();
+      }
     }
   };
   return {

@@ -54,6 +54,33 @@ export function memoryStore(): QueueStore {
   };
 }
 
+const STORAGE_KEY = "glim-offline-queue";
+
+/**
+ * Queued work in Web Storage (localStorage): the fallback when IndexedDB is refused, so work
+ * still survives a reload, as the old per-screen queues did. Throws when storage is refused too.
+ */
+export function storageStore(storage: Storage): QueueStore {
+  const read = (): Stored[] => {
+    const raw = storage.getItem(STORAGE_KEY);
+    return raw === null ? [] : (JSON.parse(raw) as Stored[]);
+  };
+  const write = (items: Stored[]) => {
+    storage.setItem(STORAGE_KEY, JSON.stringify(items));
+  };
+  return {
+    all: () => Promise.resolve(read()),
+    put: (work) => {
+      write([...read().filter((w) => w.key !== work.key), work]);
+      return Promise.resolve();
+    },
+    remove: (key) => {
+      write(read().filter((w) => w.key !== key));
+      return Promise.resolve();
+    },
+  };
+}
+
 export type Send = (step: QueuedStep, idempotencyKey: string) => Promise<void>;
 
 /** The HTTP call `sendStep` makes; `api` in the app. */
@@ -104,7 +131,11 @@ function retryable(error: unknown): boolean {
   return error.status >= 500 || error.status === 429 || error.code === "IDEMPOTENCY_IN_PROGRESS";
 }
 
-/** Folds newer work into an older, unsent item of the same group (e.g. two answer batches). */
+/**
+ * Folds newer work into an older, unsent item of the same group (e.g. two answer batches). The
+ * result goes out under the newer work's Idempotency-Key: its body differs from anything an
+ * earlier, unanswered attempt may have sent under the older key.
+ */
 export type Merge = (older: QueuedWork, newer: QueuedWork) => QueuedWork;
 
 export class OfflineQueue {
@@ -113,6 +144,8 @@ export class OfflineQueue {
   private sending: string | null = null;
   /** Serialises merging and claiming an item to send, so neither sees the other half-done. */
   private lock: Promise<unknown> = Promise.resolve();
+  /** Work queued while a flush runs: that flush runs again for it rather than leave it waiting. */
+  private arrived = false;
   private readonly listeners = new Set<(result: FlushResult | null) => void>();
 
   constructor(
@@ -126,6 +159,7 @@ export class OfflineQueue {
    * offline changes goes out as one request.
    */
   async enqueue(work: QueuedWork, merge?: Merge): Promise<void> {
+    if (this.flushing !== null) this.arrived = true;
     await this.locked(async () => {
       const target =
         merge === undefined
@@ -135,7 +169,8 @@ export class OfflineQueue {
               .at(-1);
       if (target && merge) {
         const merged = merge(target, work);
-        await this.store.put({ ...merged, key: target.key, queuedAt: target.queuedAt, done: 0 });
+        await this.store.remove(target.key);
+        await this.store.put({ ...merged, key: work.key, queuedAt: target.queuedAt, done: 0 });
       } else await this.store.put({ ...work, queuedAt: new Date().toISOString(), done: 0 });
     });
     this.notify(null);
@@ -173,17 +208,38 @@ export class OfflineQueue {
 
   /** Sends what is queued, oldest first. Overlapping calls share one run, so nothing is sent twice. */
   flush(): Promise<FlushResult> {
-    this.flushing ??= this.run().finally(() => {
+    this.flushing ??= this.runUntilSettled().finally(() => {
       this.flushing = null;
     });
     return this.flushing;
+  }
+
+  /** Runs again while work arrived mid-run and the last run got answers (it isn't offline). */
+  private async runUntilSettled(): Promise<FlushResult> {
+    const total: FlushResult = { sent: [], rejected: [] };
+    for (;;) {
+      this.arrived = false;
+      const result = await this.run();
+      total.sent.push(...result.sent);
+      total.rejected.push(...result.rejected);
+      const progressed = result.sent.length + result.rejected.length > 0;
+      if (!this.arrivedDuringRun() || !progressed) return total;
+    }
+  }
+
+  /** Read through a method: `run()` sets it, which a narrowed `this.arrived` can't show. */
+  private arrivedDuringRun(): boolean {
+    return this.arrived;
   }
 
   private async run(): Promise<FlushResult> {
     const result: FlushResult = { sent: [], rejected: [] };
     const all = await this.sorted();
     try {
+      // A group whose item failed for now: its later items wait, so they stay in order.
+      const held = new Set<string>();
       for (const listed of all) {
+        if (held.has(listed.group)) continue;
         // Claim the item and read it again: a merge may have changed it since the list was read.
         const work = await this.locked(async () => {
           const current = (await this.store.all()).find((w) => w.key === listed.key);
@@ -204,9 +260,15 @@ export class OfflineQueue {
           result.sent.push(work);
         } catch (error) {
           this.sending = null;
-          if (retryable(error)) return result; // still offline: keep this and everything after
+          // No answer at all: the connection is down, so nothing else would get through either.
+          if (!(error instanceof ApiError)) return result;
+          // The server is struggling with this one: hold its group, carry on with the others.
+          if (retryable(error)) {
+            held.add(work.group);
+            continue;
+          }
           await this.store.remove(work.key);
-          result.rejected.push({ request: work, error: error as ApiError });
+          result.rejected.push({ request: work, error: error });
         }
       }
       return result;

@@ -448,9 +448,13 @@ export function VerifyPage() {
           <Skeleton className="h-24" />
         </SkeletonGroup>
       ) : check.isError ? (
-        <Banner tone="danger" title="No transcript has this code">
-          Check the code {code} on the transcript and try again.
-        </Banner>
+        isNotAvailable(check.error) ? (
+          <Banner tone="danger" title="No transcript has this code">
+            Check the code {code} on the transcript and try again.
+          </Banner>
+        ) : (
+          <LoadFailed what="the transcript check" onRetry={() => void check.refetch()} />
+        )
       ) : (
         <div className="space-y-4">
           {check.data.valid ? (
@@ -466,6 +470,18 @@ export function VerifyPage() {
           )}
           <Card>
             <dl className="space-y-3 text-body-sm">
+              <div>
+                <dt className="text-meta text-ink-muted">Status</dt>
+                <dd>
+                  {check.data.valid ? (
+                    <Badge tone="success">Valid</Badge>
+                  ) : (
+                    <Badge tone="danger">
+                      {check.data.status === "REVOKED" ? "Revoked" : "Replaced"}
+                    </Badge>
+                  )}
+                </dd>
+              </div>
               {(
                 [
                   ["Issued by", check.data.institutionName],
@@ -494,8 +510,9 @@ export function VerifyPage() {
 }
 
 /**
- * §11.11 "hash comparison input": paste the SHA-256 printed on the document to see that it is
- * this transcript, unaltered. Compared on this device; nothing is sent.
+ * §11.11 "hash comparison input": paste the SHA-256 printed on a copy to see that it is the
+ * fingerprint of this transcript's record. Compared on this device; nothing is sent. It can't
+ * show that the rest of the copy is unaltered, so it doesn't say so.
  */
 function HashCheck({ expected }: { expected: string }) {
   const [value, setValue] = useState("");
@@ -506,7 +523,7 @@ function HashCheck({ expected }: { expected: string }) {
       <TextField
         label="SHA-256 on your copy"
         optional
-        hint="Paste it to check that your copy is this transcript, unaltered."
+        hint="Paste the fingerprint printed on your copy to check it is this transcript's record."
         value={value}
         className="font-mono"
         onChange={(e) => {

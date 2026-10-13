@@ -215,8 +215,13 @@ export function AppShell({
 }) {
   const { pathname } = useLocation();
   const [detail, setDetail] = useState<DetailBar | null>(null);
-  // §6.3: "Lecturer view" in the top bar when a student who teaches chose it in Profile.
-  const alternate = isAlternateView(me.roles, useStoredView());
+  // §6.3: "Lecturer view" in the top bar when a student who teaches chose it in Profile. The
+  // choice changes only Home, so only Home says so.
+  const storedView = useStoredView();
+  const viewLabel =
+    pathname === "/" && isAlternateView(me.roles, storedView) ? (
+      <span className="block text-meta font-semibold text-ink-muted">Lecturer view</span>
+    ) : null;
   const items = navItems(me.roles);
   const current = activeItem(pathname, items);
   const actions = (
@@ -252,11 +257,7 @@ export function AppShell({
                     <Crest size={28} />
                     <span className="min-w-0">
                       <InstitutionName name={institutionName} testId="institution-name" />
-                      {alternate ? (
-                        <span className="block text-meta font-semibold text-ink-muted">
-                          Lecturer view
-                        </span>
-                      ) : null}
+                      {viewLabel}
                     </span>
                   </Link>
                   {actions}
@@ -277,11 +278,7 @@ export function AppShell({
                 ) : (
                   <span>
                     <InstitutionName name={institutionName} />
-                    {alternate ? (
-                      <span className="block text-meta font-semibold text-ink-muted">
-                        Lecturer view
-                      </span>
-                    ) : null}
+                    {viewLabel}
                   </span>
                 )}
                 {actions}

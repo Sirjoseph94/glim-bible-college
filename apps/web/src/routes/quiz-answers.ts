@@ -84,6 +84,7 @@ export function waitingCount(items: QueuedWork[], unbatched: Answers): number {
 export function mergeSaves(older: QueuedWork, newer: QueuedWork): QueuedWork {
   const answers = queuedAnswers([older, newer]);
   const seq = latestSeq([older, newer], 0);
-  const attemptId = newer.steps[0]?.params?.id ?? older.steps[0]?.params?.id ?? "";
+  const attemptId = newer.steps[0]?.params?.id ?? older.steps[0]?.params?.id;
+  if (attemptId === undefined) throw new Error("A quiz save names its attempt.");
   return { ...older, steps: [saveStep(attemptId, seq, answers)] };
 }

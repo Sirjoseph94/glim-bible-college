@@ -46,15 +46,14 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
   await page.getByRole("link", { name: "Semester results", exact: true }).click();
-  await page
-    .getByRole("listitem", { name: "Bola Online" })
-    .getByRole("button", { name: "Approve" })
-    .click();
+  // Each step lands (the request leaves the list it was in) before the filter changes.
+  const waiting = page.getByRole("listitem", { name: "Bola Online" });
+  await waiting.getByRole("button", { name: "Approve" }).click();
+  await expect(waiting).toHaveCount(0);
   await page.getByLabel("Show").selectOption("APPROVED");
-  await page
-    .getByRole("listitem", { name: "Bola Online" })
-    .getByRole("button", { name: "Issue" })
-    .click();
+  const approved = page.getByRole("listitem", { name: "Bola Online" });
+  await approved.getByRole("button", { name: "Issue" }).click();
+  await expect(approved).toHaveCount(0);
   await page.getByLabel("Show").selectOption("ISSUED");
   const issued = page.getByRole("listitem", { name: "Bola Online" }).filter({ hasText: /\/00002/ });
   await expect(issued).toContainText("Official");
