@@ -1,13 +1,21 @@
 import type { admissions, ReviewedApplication } from "@glim/contracts";
-import { BackLink } from "../components/app/back-link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { STATUS_LABEL } from "../api/applications";
 import { api } from "../api/client";
-import { Alert } from "../components/form";
+import { BackLink } from "../components/app/back-link";
+import { PageHeader } from "../components/app/page-header";
+import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { CalendarDate, Time } from "../components/time";
+import { Banner } from "../components/ui/banner";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { ConfirmDialog } from "../components/ui/dialog";
+import { TextField } from "../components/ui/field";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
+import { ApplicationStatusBadge } from "./application";
 
 const LABELS: Record<string, string> = {
   MR: "Mr",
@@ -43,11 +51,11 @@ const yesNo = (v: boolean | null) => (v === null ? null : v ? "Yes" : "No");
 function Rows({ rows }: { rows: [string, ReactNode][] }) {
   return (
     // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, label column width
-    <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[12rem_1fr]">
+    <dl className="grid gap-x-4 gap-y-2 text-body-sm sm:grid-cols-[12rem_1fr]">
       {rows.map(([term, value]) => (
         <div key={term} className="contents">
-          <dt className="text-slate-600">{term}</dt>
-          <dd>{value ?? "—"}</dd>
+          <dt className="text-ink-muted">{term}</dt>
+          <dd className="text-ink">{value ?? "—"}</dd>
         </div>
       ))}
     </dl>
@@ -56,10 +64,10 @@ function Rows({ rows }: { rows: [string, ReactNode][] }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="space-y-2 rounded border border-slate-200 bg-white p-4">
-      <h3 className="font-semibold">{title}</h3>
+    <Card className="space-y-3">
+      <h2 className="text-heading">{title}</h2>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -89,8 +97,20 @@ export function AdmissionsApplicationPage() {
     });
   }, [status, applicationId, queryClient]);
 
-  if (detail.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
-  if (detail.isError) return <Alert tone="error">We couldn't load this application.</Alert>;
+  if (detail.isPending)
+    return (
+      <SkeletonGroup label="Loading the application">
+        <Skeleton className="h-10 w-1/2" />
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
+      </SkeletonGroup>
+    );
+  if (detail.isError)
+    return isNotAvailable(detail.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="this application" onRetry={() => void detail.refetch()} />
+    );
   const a = detail.data;
   const update = (next: ReviewedApplication) => {
     queryClient.setQueryData(detailKey(applicationId), next);
@@ -98,20 +118,17 @@ export function AdmissionsApplicationPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <BackLink to="/admissions" label="All applications" />
-      <div>
-        <h1 className="text-title">
-          {[a.personal.firstName, a.personal.middleName, a.personal.lastName]
+      <div className="space-y-2">
+        <PageHeader
+          title={[a.personal.firstName, a.personal.middleName, a.personal.lastName]
             .filter(Boolean)
             .join(" ")}
-        </h1>
-        <p className="text-sm text-slate-600">
-          {a.referenceNo} · {a.programme.name} ·{" "}
-          {a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · {a.intake.academicSessionName}
-        </p>
-        <p className="mt-1">
-          Status: <strong>{STATUS_LABEL[a.status]}</strong>
+          meta={`${a.referenceNo ?? ""} · ${a.programme.name} · ${a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${a.intake.academicSessionName}`}
+        />
+        <p className="text-body">
+          Status: <ApplicationStatusBadge status={a.status} />
         </p>
       </div>
 
@@ -122,7 +139,7 @@ export function AdmissionsApplicationPage() {
           src={a.photo.downloadPath}
           alt="Applicant's passport photo"
           // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, passport-photo aspect ratio
-          className="h-48 w-[149px] rounded border border-slate-200 object-cover"
+          className="h-48 w-[149px] rounded-md border border-line object-cover"
         />
       ) : null}
 
@@ -172,6 +189,7 @@ export function AdmissionsApplicationPage() {
           ]}
         />
       </Section>
+      {/* Only sent to staff who may read it (INV-15); absent otherwise, so nothing to mask here. */}
       {a.spiritual ? (
         <Section title="5. Spiritual background (confidential)">
           <Rows
@@ -199,7 +217,7 @@ export function AdmissionsApplicationPage() {
               a.referral === null ? null : a.referral.matched ? (
                 `${a.referral.code} (${a.referral.referrerName ?? "matched"})`
               ) : (
-                <span className="text-amber-700">{a.referral.code}: not recognised</span>
+                <span className="text-warning">{a.referral.code}: not recognised</span>
               ),
             ],
           ]}
@@ -219,10 +237,14 @@ export function AdmissionsApplicationPage() {
       <Notes application={a} onChange={update} />
 
       <Section title="History">
-        <ol className="space-y-1 text-sm">
+        <ol className="space-y-2 border-l-2 border-line pl-4 text-body-sm">
           {a.timeline.map((e) => (
             <li key={`${e.status}-${e.at}`}>
-              {STATUS_LABEL[e.status]} · <Time value={e.at} />
+              <strong>{STATUS_LABEL[e.status]}</strong>
+              <span className="text-ink-muted">
+                {" "}
+                · <Time value={e.at} />
+              </span>
             </li>
           ))}
         </ol>
@@ -238,24 +260,30 @@ function Notes({
   application: ReviewedApplication;
   onChange: (next: ReviewedApplication) => void;
 }) {
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const [note, setNote] = useState("");
   return (
     <Section title="Internal notes">
-      <p className="text-sm text-slate-600">Only Admissions staff see these.</p>
-      <ul className="space-y-2 text-sm">
-        {application.notes.map((n) => (
-          <li key={n.id} className="rounded bg-slate-50 p-2">
-            <p className="whitespace-pre-wrap">{n.note}</p>
-            <p className="text-slate-500">
-              {n.by ?? "Unknown"} · <Time value={n.at} />
-            </p>
-          </li>
-        ))}
-      </ul>
-      {error ? <Alert tone="error">{error}</Alert> : null}
+      <p className="text-body-sm text-ink-muted">Only Admissions staff see these.</p>
+      {application.notes.length === 0 ? null : (
+        <ul className="space-y-2 text-body-sm">
+          {application.notes.map((n) => (
+            <li key={n.id} className="space-y-1 rounded-md bg-surface-sunken p-3">
+              <p className="whitespace-pre-wrap text-ink">{n.note}</p>
+              <p className="text-meta text-ink-muted">
+                {n.by ?? "Unknown"} · <Time value={n.at} />
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       <form
-        className="space-y-2"
+        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           void run(async () => {
@@ -270,26 +298,20 @@ function Notes({
           });
         }}
       >
-        <label htmlFor="note" className="block text-sm font-medium text-slate-700">
-          Add a note (e.g. from an interview)
-        </label>
-        <textarea
+        <TextField
           id="note"
+          label="Add a note (e.g. from an interview)"
+          multiline
           rows={3}
           required
           value={note}
           onChange={(e) => {
             setNote(e.target.value);
           }}
-          className="block w-full rounded border border-slate-300 px-3 py-2"
         />
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded border border-slate-300 bg-white px-3 py-1"
-        >
+        <Button type="submit" variant="secondary" loading={busy}>
           Add note
-        </button>
+        </Button>
       </form>
     </Section>
   );
@@ -302,7 +324,6 @@ function Decision({
   application: ReviewedApplication;
   onChange: (next: ReviewedApplication) => void;
 }) {
-  const { busy, error, run } = useSubmit();
   const [choice, setChoice] = useState<"ADMIT" | "REJECT" | null>(null);
   const [note, setNote] = useState("");
   // One key per decision attempt, so a retried request can't decide twice.
@@ -330,85 +351,68 @@ function Decision({
     return <Reopen application={application} onChange={onChange} />;
   if (application.status !== "UNDER_REVIEW") return null;
 
+  // ConfirmDialog shows a failure itself, so the request's error is left to throw.
+  const decide = async () => {
+    if (choice === null) return;
+    onChange(
+      await api<typeof admissions.decideApplication>(
+        "POST",
+        "/admissions/applications/:id/decide",
+        {
+          params: { id: application.id },
+          headers: { "idempotency-key": key.current },
+          body: { decision: choice, ...(note.trim() === "" ? {} : { note }) },
+        },
+      ),
+    );
+    key.current = crypto.randomUUID();
+    setChoice(null);
+  };
+
   return (
     <Section title="Decision">
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <label htmlFor="decision-note" className="block text-sm font-medium text-slate-700">
-        Internal note (never sent to the applicant)
-      </label>
-      <textarea
+      <TextField
         id="decision-note"
+        label="Internal note (never sent to the applicant)"
+        multiline
         rows={2}
         value={note}
         onChange={(e) => {
           setNote(e.target.value);
         }}
-        className="block w-full rounded border border-slate-300 px-3 py-2"
       />
-      {choice === null ? (
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setChoice("ADMIT");
-            }}
-            className="rounded bg-brand px-4 py-2 font-medium text-white"
-          >
-            Admit
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setChoice("REJECT");
-            }}
-            className="rounded border border-red-300 bg-white px-4 py-2 text-red-700"
-          >
-            Reject
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2 rounded border border-slate-300 bg-slate-50 p-3 text-sm">
-          <p>
-            {choice === "ADMIT"
-              ? "Admit this applicant? They'll be emailed an offer to accept within the intake's deadline."
-              : "Reject this application? The applicant will be emailed a neutral letter."}
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  onChange(
-                    await api<typeof admissions.decideApplication>(
-                      "POST",
-                      "/admissions/applications/:id/decide",
-                      {
-                        params: { id: application.id },
-                        headers: { "idempotency-key": key.current },
-                        body: { decision: choice, ...(note.trim() === "" ? {} : { note }) },
-                      },
-                    ),
-                  );
-                  key.current = crypto.randomUUID();
-                })
-              }
-              className="rounded bg-brand px-3 py-1 font-medium text-white"
-            >
-              {choice === "ADMIT" ? "Yes, admit" : "Yes, reject"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setChoice(null);
-              }}
-              className="underline"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="flex flex-col gap-2 md:flex-row">
+        <Button
+          variant="primary"
+          onClick={() => {
+            setChoice("ADMIT");
+          }}
+        >
+          Admit
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => {
+            setChoice("REJECT");
+          }}
+        >
+          Reject
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={choice !== null}
+        onOpenChange={(open) => {
+          if (!open) setChoice(null);
+        }}
+        title={choice === "REJECT" ? "Reject this application?" : "Admit this applicant?"}
+        confirmLabel={choice === "REJECT" ? "Reject application" : "Admit applicant"}
+        tone={choice === "REJECT" ? "danger" : "primary"}
+        onConfirm={decide}
+      >
+        {choice === "REJECT"
+          ? "The applicant will be emailed a neutral letter, without your internal note. The decision can't be changed afterwards."
+          : "The applicant will be emailed an offer to accept within the intake's deadline. Your internal note isn't sent."}
+      </ConfirmDialog>
     </Section>
   );
 }
@@ -421,52 +425,41 @@ function Reopen({
   application: ReviewedApplication;
   onChange: (next: ReviewedApplication) => void;
 }) {
-  const { busy, error, run } = useSubmit();
-  const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
   return (
     <Section title="Offer lapsed">
-      <p className="text-sm text-slate-600">
+      <p className="text-body-sm text-ink-muted">
         The offer wasn't accepted by <Time value={application.decision.offerExpiresAt} />. Reopening
         gives the applicant a new deadline and emails them the offer again.
       </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <form
-        className="space-y-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void run(async () => {
-            onChange(
-              await api<typeof admissions.reopenOffer>(
-                "POST",
-                "/admissions/applications/:id/reopen-offer",
-                { params: { id: application.id }, body: { reason } },
-              ),
-            );
-          });
+      <Button
+        variant="primary"
+        onClick={() => {
+          setConfirming(true);
         }}
       >
-        <label htmlFor="reopen-reason" className="block text-sm font-medium text-slate-700">
-          Reason for reopening
-        </label>
-        <textarea
-          id="reopen-reason"
-          rows={2}
-          required
-          minLength={3}
-          value={reason}
-          onChange={(e) => {
-            setReason(e.target.value);
-          }}
-          className="block w-full rounded border border-slate-300 px-3 py-2"
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded bg-brand px-4 py-2 font-medium text-white"
-        >
-          Reopen offer
-        </button>
-      </form>
+        Reopen offer
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Reopen this offer?"
+        confirmLabel="Reopen offer"
+        reason={{ label: "Reason for reopening", minLength: 3 }}
+        onConfirm={async (reason) => {
+          onChange(
+            await api<typeof admissions.reopenOffer>(
+              "POST",
+              "/admissions/applications/:id/reopen-offer",
+              { params: { id: application.id }, body: { reason } },
+            ),
+          );
+          setConfirming(false);
+        }}
+      >
+        The applicant gets a new deadline and is emailed the offer again. Your reason is kept with
+        the application as an internal note.
+      </ConfirmDialog>
     </Section>
   );
 }

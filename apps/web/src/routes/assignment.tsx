@@ -8,12 +8,13 @@ import { meQuery } from "../api/session";
 import { PageHeader } from "../components/app/page-header";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { useDetailBar } from "../components/app/shell-parts";
-import { Alert, formText } from "../components/form";
+import { formText } from "../components/form";
 import { Time } from "../components/time";
 import { Badge } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
 import { Button, buttonClass } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { EmptyState } from "../components/ui/empty-state";
 import { TextField } from "../components/ui/field";
 import { OfflineBanner, QueuedPill, useOnline } from "../components/ui/offline";
 import { ProgressBar } from "../components/ui/progress-bar";
@@ -562,29 +563,91 @@ export function GradeAssignmentPage() {
         signal,
       }),
   });
+  useDetailBar(
+    assignment.data
+      ? {
+          back: {
+            to: "/teach/$offeringId",
+            params: { offeringId: assignment.data.courseOfferingId },
+            search: { tab: "work" },
+            label: "Work",
+          },
+        }
+      : { back: { to: "/teach", label: "Teaching" } },
+  );
   if (list.isPending || assignment.isPending)
-    return <div className="h-40 animate-pulse rounded bg-slate-200" />;
-  if (list.isError || assignment.isError)
-    return <Alert tone="error">We couldn't load the submissions.</Alert>;
+    return (
+      <SkeletonGroup label="Loading the submissions">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-40" />
+      </SkeletonGroup>
+    );
+  if (assignment.isError)
+    return isNotAvailable(assignment.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="this assignment" onRetry={() => void assignment.refetch()} />
+    );
+  if (list.isError)
+    return isNotAvailable(list.error) ? (
+      <NotAvailable />
+    ) : (
+      <LoadFailed what="the submissions" onRetry={() => void list.refetch()} />
+    );
   const a = assignment.data;
+  const items = list.data.items;
+  const submitted = items.filter((item) => item.latest !== null).length;
   return (
-    <div className="space-y-4">
-      <h1 className="text-title">Grade: {a.title}</h1>
-      <p className="text-sm text-slate-600">
-        Out of {a.maxScore}. Grades stay hidden from students until you release them in the
-        gradebook.
-      </p>
-      <ul className="space-y-3">
-        {list.data.items.map((item) => (
-          <GradeRow
-            key={item.studentId}
-            item={item}
-            assessmentId={a.assessmentId}
-            maxScore={a.maxScore}
-            listKey={["assignment", id, "submissions"]}
-          />
-        ))}
-      </ul>
+    <div className="space-y-5">
+      <PageHeader
+        title={`Grade: ${a.title}`}
+        meta={
+          <>
+            Out of {a.maxScore} · {submitted} of {items.length} submitted. Grades stay hidden from
+            students until you release them in the gradebook.
+          </>
+        }
+      />
+      {items.length === 0 ? (
+        <EmptyState icon="users" title="No students yet">
+          Students registered on the course appear here.
+        </EmptyState>
+      ) : (
+        <Card list role="list">
+          {items.map((item) => (
+            <GradeRow
+              key={item.studentId}
+              item={item}
+              assessmentId={a.assessmentId}
+              maxScore={a.maxScore}
+              listKey={["assignment", id, "submissions"]}
+            />
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** The submission's state and the grade's, as words (§9.3). */
+function GradeBadges({ item }: { item: SubmissionForGrading }) {
+  const s = item.latest;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {s === null ? (
+        <Badge tone="neutral">Not submitted</Badge>
+      ) : s.isLate ? (
+        <Badge tone="warning">Late</Badge>
+      ) : (
+        <Badge tone="info">Submitted</Badge>
+      )}
+      {item.grade?.status === "RELEASED" ? (
+        <Badge tone="success">Released</Badge>
+      ) : item.grade?.status === "EXCUSED" ? (
+        <Badge status="excused" />
+      ) : item.grade !== null && item.grade.score !== null ? (
+        <Badge tone="brand">Graded</Badge>
+      ) : null}
     </div>
   );
 }
@@ -601,28 +664,28 @@ function GradeRow({
   listKey: string[];
 }) {
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const { busy, problem, fieldErrors, run } = useSubmit();
   const [done, setDone] = useState(false);
   const s = item.latest;
   return (
-    <li
-      className="space-y-2 rounded border border-slate-200 bg-white p-3 text-sm"
-      aria-label={item.studentName}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">{item.studentName}</span>
-        <span className="text-slate-500">{item.matricNumber}</span>
+    <div role="listitem" aria-label={item.studentName} className="space-y-3 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-subhead text-ink">{item.studentName}</p>
+          {item.matricNumber === null ? null : (
+            <p className="font-mono text-code text-ink-muted">{item.matricNumber}</p>
+          )}
+        </div>
+        <GradeBadges item={item} />
       </div>
-      {s === null ? (
-        <p className="text-slate-600">Not submitted.</p>
-      ) : (
-        <div className="space-y-1">
-          <p className="text-slate-600">
+      {s === null ? null : (
+        <div className="space-y-2">
+          <p className="text-meta text-ink-muted">
             Attempt {s.attemptNo} of {item.submittedAttempts}, <Time value={s.submittedAt} />
             {s.isLate ? (
-              <span className="text-amber-700">
+              <span className="text-warning">
                 {" "}
-                — {item.daysLate} day{item.daysLate === 1 ? "" : "s"} late
+                · {item.daysLate} day{item.daysLate === 1 ? "" : "s"} late
                 {item.suggestedPenaltyPercent > 0
                   ? ` (policy suggests −${String(item.suggestedPenaltyPercent)}%)`
                   : ""}
@@ -630,16 +693,22 @@ function GradeRow({
             ) : null}
           </p>
           {s.textBody === null ? null : (
-            <p className="whitespace-pre-wrap rounded bg-slate-50 p-2">{s.textBody}</p>
+            <p className="rounded-md bg-surface-sunken p-3 text-body whitespace-pre-wrap">
+              {s.textBody}
+            </p>
           )}
           <SubmissionFiles submission={s} />
         </div>
       )}
-      {error ? <Alert tone="error">{error}</Alert> : null}
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       <form
         // Remounts with the stored values after each save (e.g. "18.5" shows as "18.50").
         key={item.grade?.version ?? 0}
-        className="space-y-2"
+        className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           const data = new FormData(e.currentTarget);
@@ -662,47 +731,42 @@ function GradeRow({
           });
         }}
       >
-        <label className="block">
-          <span className="block font-medium text-slate-700">Score (out of {maxScore})</span>
-          <input
-            name="score"
-            inputMode="decimal"
-            defaultValue={item.grade?.score ?? ""}
-            className="w-32 rounded border border-slate-300 px-3 py-2"
-            aria-invalid={fieldErrors.score === undefined ? undefined : true}
-          />
-        </label>
-        <label className="block">
-          <span className="block font-medium text-slate-700">Feedback</span>
-          <textarea
-            name="feedback"
-            rows={3}
-            defaultValue={item.grade?.feedbackMd ?? ""}
-            className="block w-full rounded border border-slate-300 px-3 py-2"
-          />
-        </label>
+        <TextField
+          name="score"
+          inputMode="decimal"
+          label={`Score (out of ${maxScore})`}
+          defaultValue={item.grade?.score ?? ""}
+          className="max-w-40"
+          error={fieldErrors.score}
+        />
+        <TextField
+          name="feedback"
+          label="Feedback"
+          multiline
+          rows={3}
+          defaultValue={item.grade?.feedbackMd ?? ""}
+          error={fieldErrors.feedbackMd}
+        />
         {item.grade?.status === "RELEASED" ? (
-          <label className="block">
-            <span className="block font-medium text-slate-700">
-              Reason for changing a released grade
-            </span>
-            <input
-              name="reason"
-              maxLength={500}
-              className="block w-full rounded border border-slate-300 px-3 py-2"
-              aria-invalid={fieldErrors.reason === undefined ? undefined : true}
-            />
-          </label>
+          <TextField
+            name="reason"
+            label="Reason for changing a released grade"
+            maxLength={500}
+            error={fieldErrors.reason}
+          />
         ) : null}
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
-        >
-          Save grade
-        </button>
-        {done ? <span className="ml-2 text-green-700">Saved</span> : null}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" variant="primary" loading={busy}>
+            Save grade
+          </Button>
+          {done ? (
+            <span role="status" className="flex items-center gap-1 text-body-sm text-success">
+              <Icon name="check" size={16} />
+              Saved
+            </span>
+          ) : null}
+        </div>
       </form>
-    </li>
+    </div>
   );
 }

@@ -18,6 +18,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
 
   await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Intakes" }).click();
+  await page.getByRole("button", { name: "Plan an intake" }).click();
   await page.getByLabel("Intake (year students start, e.g. 2027)").fill("2030");
   await page
     .getByLabel("Academic Session students start in")
@@ -26,8 +27,13 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await page.getByLabel("Applications close (June)").fill("2030-06-30");
   await page.getByRole("button", { name: "Plan intake" }).click();
   await expect(page.getByText("Intake 2030 · 2030/2031 Session")).toBeVisible();
-  await page.getByRole("button", { name: "Open now" }).click();
-  await expect(page.getByText("open", { exact: true })).toBeVisible();
+  const intake2030 = page.getByRole("listitem", { name: "Intake 2030" });
+  await intake2030.getByRole("button", { name: "Open now" }).click();
+  await page
+    .getByRole("dialog", { name: "Open Intake 2030 now?" })
+    .getByRole("button", { name: "Open intake" })
+    .click();
+  await expect(intake2030.getByText("Open", { exact: true })).toBeVisible();
 
   // An applicant, in a browser of their own without the officer's session.
   const applicant = await (
@@ -171,7 +177,10 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   ).toBeVisible();
   await page.getByLabel("Internal note (never sent to the applicant)").fill("Clear calling");
   await page.getByRole("button", { name: "Admit", exact: true }).click();
-  await page.getByRole("button", { name: "Yes, admit" }).click();
+  await page
+    .getByRole("dialog", { name: "Admit this applicant?" })
+    .getByRole("button", { name: "Admit applicant" })
+    .click();
   await expect(page.getByText("Status: Admitted: offer made")).toBeVisible();
   await expect
     .poll(async () => (await lastEmail("chioma.applicant@gmail.com"))?.subject, {
@@ -208,8 +217,17 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
 
   await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Intakes" }).click();
-  await page.getByRole("button", { name: "Close now" }).click();
-  await expect(page.getByText("closed", { exact: true })).toBeVisible();
+  await page
+    .getByRole("listitem", { name: "Intake 2030" })
+    .getByRole("button", { name: "Close now" })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Close Intake 2030 now?" })
+    .getByRole("button", { name: "Close intake" })
+    .click();
+  await expect(
+    page.getByRole("listitem", { name: "Intake 2030" }).getByText("Closed", { exact: true }),
+  ).toBeVisible();
   await applicant.goto("/apply");
   await expect(
     applicant.getByText("Applications for the 2030/2031 Session are closed."),

@@ -1,13 +1,22 @@
 import type { Application, ApplicationSection, applications } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Navigate, useNavigate } from "@tanstack/react-router";
+import { Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { applicationQuery, ENDED, mineQuery } from "../api/applications";
 import { api, ApiError } from "../api/client";
-import { Alert, SubmitButton } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
 import { preparePassportPhoto, uploadPassportPhoto } from "../components/passport-photo";
 import { CalendarDate } from "../components/time";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Checkbox, Radio } from "../components/ui/choice";
+import { Select, TextField } from "../components/ui/field";
+import { ProgressBar } from "../components/ui/progress-bar";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
+import { Icon } from "../design/icons";
 import { currentIntakeQuery } from "./apply";
 
 /** Autosave interval (TRD §10.2: every 5–10 s). */
@@ -244,9 +253,9 @@ function toBody(values: Record<string, Value>): Record<string, Value> {
 /** The applicant's application wizard (TRD §10.2; spec stories 4–11, 13–16). */
 export function ApplicationEditPage() {
   const mine = useQuery(mineQuery);
-  if (mine.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
+  if (mine.isPending) return <Loading />;
   if (mine.isError)
-    return <Alert tone="error">We couldn't load your application. Please try again.</Alert>;
+    return <LoadFailed what="your application" onRetry={() => void mine.refetch()} />;
   const draft = mine.data.items.find((a) => a.status === "DRAFT");
   if (draft !== undefined) return <LoadApplication id={draft.id} />;
   // A submitted application can't be edited; after one ends, the applicant may start again.
@@ -254,16 +263,37 @@ export function ApplicationEditPage() {
   return <StartApplication />;
 }
 
+function Loading() {
+  return (
+    <SkeletonGroup label="Loading your application">
+      <Skeleton className="h-10 w-1/2" />
+      <Skeleton className="h-64" />
+    </SkeletonGroup>
+  );
+}
+
 function StartApplication() {
   const intake = useQuery(currentIntakeQuery);
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
-  if (intake.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
-  if (intake.isError || intake.data.intake?.status !== "OPEN")
+  const { busy, problem, run } = useSubmit();
+  if (intake.isPending) return <Loading />;
+  if (intake.isError)
+    return <LoadFailed what="the admissions information" onRetry={() => void intake.refetch()} />;
+  if (intake.data.intake?.status !== "OPEN")
     return (
-      <Alert tone="error">
-        Applications aren't open at the moment. The apply page shows when they open.
-      </Alert>
+      <div className="space-y-5">
+        <PageHeader title="Start your application" />
+        <Banner
+          tone="warning"
+          action={
+            <Button asChild variant="secondary" size="sm">
+              <Link to="/apply">See when they open</Link>
+            </Button>
+          }
+        >
+          Applications aren't open at the moment. The apply page shows when they open.
+        </Banner>
+      </div>
     );
   const { intake: open, programmes } = intake.data;
 
@@ -282,41 +312,43 @@ function StartApplication() {
         });
       }}
     >
-      <div className="space-y-1">
-        <h1 className="text-title">Start your application</h1>
-        <p className="text-sm text-slate-600">
-          For the {open.academicSessionName}. Applications close on{" "}
-          <CalendarDate value={open.closesOn} />.
-        </p>
-      </div>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <fieldset className="space-y-2">
-        <legend className="font-medium">Programme</legend>
-        {programmes.map((p, index) => (
-          <label key={p.id} className="flex items-center gap-2">
-            <input
-              type="radio"
+      <PageHeader
+        title="Start your application"
+        meta={
+          <>
+            For the {open.academicSessionName}. Applications close on{" "}
+            <CalendarDate value={open.closesOn} />.
+          </>
+        }
+      />
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
+      <Card className="space-y-5">
+        <fieldset>
+          <legend className="text-label text-ink">Programme</legend>
+          {programmes.map((p, index) => (
+            <Radio
+              key={p.id}
               name="programmeId"
               value={p.id}
               required
               defaultChecked={index === 0}
+              label={p.name}
             />
-            {p.name}
-          </label>
-        ))}
-      </fieldset>
-      <fieldset className="space-y-2">
-        <legend className="font-medium">Study mode</legend>
-        <label className="flex items-center gap-2">
-          <input type="radio" name="studyMode" value="ON_CAMPUS" required />
-          On campus
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="radio" name="studyMode" value="ONLINE" required />
-          Online
-        </label>
-      </fieldset>
-      <SubmitButton busy={busy}>Start my application</SubmitButton>
+          ))}
+        </fieldset>
+        <fieldset>
+          <legend className="text-label text-ink">Study mode</legend>
+          <Radio name="studyMode" value="ON_CAMPUS" required label="On campus" />
+          <Radio name="studyMode" value="ONLINE" required label="Online" />
+        </fieldset>
+      </Card>
+      <Button type="submit" variant="primary" block loading={busy}>
+        Start my application
+      </Button>
     </form>
   );
 }
@@ -328,9 +360,9 @@ function LoadApplication({ id }: { id: string }) {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
-  if (application.isPending) return <div className="h-48 animate-pulse rounded bg-slate-200" />;
+  if (application.isPending) return <Loading />;
   if (application.isError)
-    return <Alert tone="error">We couldn't load your application. Please try again.</Alert>;
+    return <LoadFailed what="your application" onRetry={() => void application.refetch()} />;
   return <Wizard initial={application.data} />;
 }
 
@@ -484,89 +516,85 @@ function Wizard({ initial }: { initial: Application }) {
 
   const section = SECTIONS[step];
   const done = SECTIONS.filter((s) => application.missing[s.key].length === 0).length;
+  const gaps = SECTIONS.some((s) => application.missing[s.key].length > 0);
+  const intakeOpen = application.intake.status === "OPEN";
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-title">Your application</h1>
-          <p className="text-sm text-slate-600">
-            {application.programme.name} ·{" "}
-            {application.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} ·{" "}
-            {application.intake.academicSessionName}
-          </p>
-        </div>
-        <p role="status" aria-live="polite" className="text-sm text-slate-600">
-          {SAVE_LABEL[saveState]}
-        </p>
-      </div>
+      <PageHeader
+        title="Your application"
+        meta={`${application.programme.name} · ${application.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${application.intake.academicSessionName}`}
+      />
       {saveState === "conflict" ? (
-        <Alert tone="error">
-          Your application was changed in another window or tab.{" "}
-          <button
-            type="button"
-            className="underline"
-            onClick={() => {
-              window.location.reload();
-            }}
-          >
-            Reload
-          </button>{" "}
-          to carry on from the latest version.
-        </Alert>
+        <Banner
+          tone="danger"
+          title="Your application was changed in another window or tab"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                window.location.reload();
+              }}
+            >
+              Reload
+            </Button>
+          }
+        >
+          Reload to carry on from the latest version.
+        </Banner>
       ) : null}
 
-      <nav aria-label="Sections">
-        <p className="mb-2 text-sm text-slate-600">
+      <nav aria-label="Sections" className="space-y-2">
+        <p className="text-body-sm text-ink-muted">
           {done} of {SECTIONS.length} sections complete
         </p>
-        <ol className="flex flex-wrap gap-2 text-sm">
+        <ol className="flex flex-wrap gap-2">
           {SECTIONS.map((s, index) => {
             const complete = application.missing[s.key].length === 0;
             return (
               <li key={s.key}>
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  variant={index === step ? "primary" : "secondary"}
+                  aria-current={index === step ? "step" : undefined}
                   onClick={() => {
                     go(index);
                   }}
-                  aria-current={index === step ? "step" : undefined}
-                  className={`rounded border px-2 py-1 ${index === step ? "border-brand bg-brand text-white" : "border-slate-300 bg-white"}`}
                 >
                   {index + 1}. {s.title}
-                  {complete ? <span aria-label=" (complete)"> ✓</span> : null}
-                </button>
+                  {complete ? (
+                    <>
+                      <Icon name="check" size={16} />
+                      <span className="sr-only"> (complete)</span>
+                    </>
+                  ) : null}
+                </Button>
               </li>
             );
           })}
           <li>
-            <button
-              type="button"
+            <Button
+              size="sm"
+              variant={step === REVIEW ? "primary" : "secondary"}
+              aria-current={step === REVIEW ? "step" : undefined}
               onClick={() => {
                 go(REVIEW);
               }}
-              aria-current={step === REVIEW ? "step" : undefined}
-              className={`rounded border px-2 py-1 ${step === REVIEW ? "border-brand bg-brand text-white" : "border-slate-300 bg-white"}`}
             >
               Review and submit
-            </button>
+            </Button>
           </li>
         </ol>
       </nav>
 
       {section === undefined ? (
-        <Review
-          application={application}
-          onGo={go}
-          submitting={submitting}
-          error={submitError}
-          onSubmit={() => void submit()}
-        />
+        <Review application={application} onGo={go} error={submitError} />
       ) : (
-        <section className="space-y-4 rounded border border-slate-200 bg-white p-4">
-          <h3 className="text-lg font-semibold">
+        <Card className="space-y-4">
+          <h2 className="text-heading">
             {step + 1}. {section.title}
-          </h3>
+          </h2>
           <SectionIntro section={section.key} application={application} />
           {section.fields
             .filter((f) => f.when?.(values[section.key]) ?? true)
@@ -582,31 +610,58 @@ function Wizard({ initial }: { initial: Application }) {
                 }}
               />
             ))}
-        </section>
+        </Card>
       )}
 
-      <div className="flex justify-between">
-        <button
-          type="button"
-          disabled={step === 0}
-          onClick={() => {
-            go(step - 1);
-          }}
-          className="rounded border border-slate-300 bg-white px-4 py-2 disabled:opacity-50"
+      {/* Save state and the way on: pinned to the bottom of the screen on phones. */}
+      <div className="sticky bottom-0 z-nav -mx-4 space-y-2 border-t border-line bg-surface-raised px-4 pt-3 pb-5 shadow-sheet md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+        <p
+          role="status"
+          aria-live="polite"
+          className={
+            saveState === "invalid" || saveState === "conflict"
+              ? "text-body-sm text-danger"
+              : "text-body-sm text-ink-muted"
+          }
         >
-          Back
-        </button>
-        {step < REVIEW ? (
-          <button
-            type="button"
+          {SAVE_LABEL[saveState]}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            icon="chevronLeft"
+            disabled={step === 0}
             onClick={() => {
-              go(step + 1);
+              go(step - 1);
             }}
-            className="rounded bg-brand px-4 py-2 font-medium text-white"
           >
-            Next
-          </button>
-        ) : null}
+            Back
+          </Button>
+          {step < REVIEW ? (
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={() => {
+                go(step + 1);
+              }}
+            >
+              Next
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              className="flex-1"
+              loading={submitting}
+              // Disabled only while answers are missing or the intake has closed; the review
+              // above says which.
+              disabled={gaps || !intakeOpen}
+              aria-describedby="review-reason"
+              onClick={() => void submit()}
+            >
+              Submit application
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -622,21 +677,21 @@ function SectionIntro({
   switch (section) {
     case "personal":
       return (
-        <p className="text-sm text-slate-600">
+        <p className="text-body-sm text-ink-muted">
           You must be at least {application.minimumAgeYears} on{" "}
-          <CalendarDate value={application.intake.startsOn} />, when the session starts.
+          <CalendarDate value={application.intake.startsOn} />, when the Academic Session starts.
         </p>
       );
     case "spiritual":
       return (
-        <p className="text-sm text-slate-600">
+        <Banner tone="info">
           Only the Admissions Officers and the System Admin see your answers in this section.
-        </p>
+        </Banner>
       );
     case "declaration":
       return (
-        <div className="space-y-2 text-sm">
-          <p className="rounded bg-slate-50 p-3">{application.texts.declarationText}</p>
+        <div className="space-y-2 text-body-sm">
+          <p className="rounded-md bg-surface-sunken p-3">{application.texts.declarationText}</p>
           {application.texts.statementOfFaithUrl ? (
             <p>
               <a
@@ -653,10 +708,14 @@ function SectionIntro({
         </div>
       );
     case "consent":
-      return <p className="rounded bg-slate-50 p-3 text-sm">{application.texts.consentText}</p>;
+      return (
+        <p className="rounded-md bg-surface-sunken p-3 text-body-sm">
+          {application.texts.consentText}
+        </p>
+      );
     case "photo":
       return (
-        <p className="text-sm text-slate-600">
+        <p className="text-body-sm text-ink-muted">
           A recent head-and-shoulders photo, as for a passport, with a plain background. We crop and
           shrink it on your phone before sending it, so it uploads quickly.
         </p>
@@ -664,6 +723,19 @@ function SectionIntro({
     default:
       return null;
   }
+}
+
+/** A refused answer under a group of choices, worded as the server sent it. */
+function ChoiceError({ id, error }: { id: string; error: string | undefined }) {
+  if (error === undefined) return null;
+  return (
+    <p id={`${id}-error`} className="flex items-start gap-1 text-body-sm text-danger">
+      <span className="mt-0.5 shrink-0">
+        <Icon name="alert" size={16} />
+      </span>
+      {error}
+    </p>
+  );
 }
 
 function FieldInput({
@@ -679,22 +751,18 @@ function FieldInput({
   error: string | undefined;
   onChange: (value: Value) => void;
 }) {
-  const described = error ? `${id}-error` : field.hint ? `${id}-hint` : undefined;
-  const common = {
-    id,
-    "aria-invalid": error ? true : undefined,
-    "aria-describedby": described,
-    className:
-      "block w-full rounded border border-slate-300 bg-white px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30",
-  } as const;
   const str = typeof value === "string" ? value : "";
+  const described = error ? `${id}-error` : undefined;
 
-  let control: ReactNode;
   switch (field.kind) {
     case "textarea":
-      control = (
-        <textarea
-          {...common}
+      return (
+        <TextField
+          id={id}
+          label={field.label}
+          hint={field.hint}
+          error={error}
+          multiline
           rows={3}
           value={str}
           onChange={(e) => {
@@ -702,11 +770,13 @@ function FieldInput({
           }}
         />
       );
-      break;
     case "select":
-      control = (
-        <select
-          {...common}
+      return (
+        <Select
+          id={id}
+          label={field.label}
+          hint={field.hint}
+          error={error}
           value={str}
           onChange={(e) => {
             onChange(e.target.value);
@@ -718,44 +788,43 @@ function FieldInput({
               {label}
             </option>
           ))}
-        </select>
+        </Select>
       );
-      break;
     case "yesno":
       return (
-        <fieldset className="space-y-1" aria-describedby={described}>
-          <legend className="text-sm font-medium text-slate-700">{field.label}</legend>
-          <div className="flex gap-4">
+        <fieldset aria-describedby={described}>
+          <legend className="text-label text-ink">{field.label}</legend>
+          <div className="flex gap-6">
             {([true, false] as const).map((answer) => (
-              <label key={String(answer)} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={id}
-                  checked={value === answer}
-                  onChange={() => {
-                    onChange(answer);
-                  }}
-                />
-                {answer ? "Yes" : "No"}
-              </label>
+              <Radio
+                key={String(answer)}
+                name={id}
+                label={answer ? "Yes" : "No"}
+                checked={value === answer}
+                onChange={() => {
+                  onChange(answer);
+                }}
+              />
             ))}
           </div>
+          <ChoiceError id={id} error={error} />
         </fieldset>
       );
     case "check":
       return (
-        <label className="flex items-start gap-2">
-          <input
+        <div>
+          <Checkbox
             id={id}
-            type="checkbox"
-            className="mt-1"
+            label={field.label}
+            aria-describedby={described}
+            aria-invalid={error ? true : undefined}
             checked={value === true}
             onChange={(e) => {
               onChange(e.target.checked);
             }}
           />
-          <span>{field.label}</span>
-        </label>
+          <ChoiceError id={id} error={error} />
+        </div>
       );
     case "photo":
       return (
@@ -764,29 +833,31 @@ function FieldInput({
     case "multi": {
       const chosen = Array.isArray(value) ? value : [];
       return (
-        <fieldset className="space-y-1">
-          <legend className="text-sm font-medium text-slate-700">{field.label}</legend>
-          <div className="grid grid-cols-2 gap-1">
+        <fieldset aria-describedby={described}>
+          <legend className="text-label text-ink">{field.label}</legend>
+          <div className="grid gap-x-4 sm:grid-cols-2">
             {field.options?.map(([v, label]) => (
-              <label key={v} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(v)}
-                  onChange={(e) => {
-                    onChange(e.target.checked ? [...chosen, v] : chosen.filter((c) => c !== v));
-                  }}
-                />
-                {label}
-              </label>
+              <Checkbox
+                key={v}
+                label={label}
+                checked={chosen.includes(v)}
+                onChange={(e) => {
+                  onChange(e.target.checked ? [...chosen, v] : chosen.filter((c) => c !== v));
+                }}
+              />
             ))}
           </div>
+          <ChoiceError id={id} error={error} />
         </fieldset>
       );
     }
     default:
-      control = (
-        <input
-          {...common}
+      return (
+        <TextField
+          id={id}
+          label={field.label}
+          hint={field.hint}
+          error={error}
           type={field.kind}
           autoComplete={field.kind === "email" ? "email" : field.kind === "tel" ? "tel" : "off"}
           value={str}
@@ -796,24 +867,6 @@ function FieldInput({
         />
       );
   }
-  return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
-        {field.label}
-      </label>
-      {control}
-      {field.hint && !error ? (
-        <p id={`${id}-hint`} className="text-sm text-slate-500">
-          {field.hint}
-        </p>
-      ) : null}
-      {error ? (
-        <p id={`${id}-error`} className="text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function PhotoField({
@@ -837,51 +890,51 @@ function PhotoField({
   const src = preview ?? (fileId === null ? null : `/api/v1/files/${fileId}/download`);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {src === null ? null : (
         <img
           src={src}
           alt="Your passport photo"
           // eslint-disable-next-line glim/design-tokens -- design-exception: geometry, passport-photo aspect ratio
-          className="h-48 w-[149px] rounded border border-slate-200 object-cover"
+          className="h-48 w-[149px] rounded-md border border-line object-cover"
         />
       )}
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
+      <label
+        htmlFor={id}
+        className={`${buttonClass({ variant: "secondary" })} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus ${progress === null ? "" : "opacity-55"}`}
+      >
+        <Icon name="upload" />
         {src === null ? "Choose a photo" : "Choose a different photo"}
+        <input
+          id={id}
+          type="file"
+          accept="image/jpeg,image/png"
+          className="sr-only"
+          disabled={progress !== null}
+          onChange={(event) => {
+            const input = event.currentTarget;
+            const file = input.files?.[0];
+            if (file === undefined) return;
+            setError(null);
+            setProgress(0);
+            void (async () => {
+              try {
+                const photo = await preparePassportPhoto(file);
+                setPreview(URL.createObjectURL(photo));
+                onChange(await uploadPassportPhoto(photo, setProgress));
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "The photo couldn't be uploaded.");
+              } finally {
+                setProgress(null);
+                input.value = "";
+              }
+            })();
+          }}
+        />
       </label>
-      <input
-        id={id}
-        type="file"
-        accept="image/jpeg,image/png"
-        disabled={progress !== null}
-        onChange={(event) => {
-          const input = event.currentTarget;
-          const file = input.files?.[0];
-          if (file === undefined) return;
-          setError(null);
-          setProgress(0);
-          void (async () => {
-            try {
-              const photo = await preparePassportPhoto(file);
-              setPreview(URL.createObjectURL(photo));
-              onChange(await uploadPassportPhoto(photo, setProgress));
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "The photo couldn't be uploaded.");
-            } finally {
-              setProgress(null);
-              input.value = "";
-            }
-          })();
-        }}
-      />
-      {progress === null ? null : (
-        <div className="space-y-1">
-          <p className="text-sm text-slate-600">Uploading… {Math.round(progress * 100)}%</p>
-          <progress className="w-full" value={progress} max={1} />
-        </div>
-      )}
+      {progress === null ? null : <ProgressBar label="Uploading" value={progress * 100} />}
       {error === null ? null : (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-body-sm text-danger">
           {error}
         </p>
       )}
@@ -889,18 +942,15 @@ function PhotoField({
   );
 }
 
+/** The step after the last section: what's still missing, and whether it can be submitted. */
 function Review({
   application,
   onGo,
-  submitting,
   error,
-  onSubmit,
 }: {
   application: Application;
   onGo: (step: number) => void;
-  submitting: boolean;
   error: string | null;
-  onSubmit: () => void;
 }) {
   const gaps = SECTIONS.map((section, index) => ({
     section,
@@ -912,49 +962,46 @@ function Review({
   const open = application.intake.status === "OPEN";
 
   return (
-    <section className="space-y-4 rounded border border-slate-200 bg-white p-4">
-      <h3 className="text-lg font-semibold">Review and submit</h3>
-      {open ? null : (
-        <Alert tone="error">
-          Applications for the {application.intake.academicSessionName} have closed, so this
-          application can't be submitted.
-        </Alert>
-      )}
-      {gaps.length > 0 ? (
-        <div className="space-y-2">
-          <p>These answers are still needed before you can submit:</p>
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {gaps.map((gap) => (
-              <li key={gap.section.key}>
-                <button
-                  type="button"
-                  className="text-brand underline"
-                  onClick={() => {
-                    onGo(gap.index);
-                  }}
-                >
-                  {gap.index + 1}. {gap.section.title}
-                </button>
-                : {gap.fields.map((f) => label(gap.section, f)).join(", ")}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <p>
-          Everything's answered. Check your answers in each section, then submit. You can't change
-          them after submitting.
-        </p>
-      )}
-      {error === null ? null : <Alert tone="error">{error}</Alert>}
-      <button
-        type="button"
-        disabled={gaps.length > 0 || !open || submitting}
-        onClick={onSubmit}
-        className="w-full rounded bg-brand px-4 py-2 font-medium text-white disabled:opacity-60"
-      >
-        {submitting ? "Submitting…" : "Submit application"}
-      </button>
-    </section>
+    <Card className="space-y-4">
+      <h2 className="text-heading">Review and submit</h2>
+      <div id="review-reason" className="space-y-3">
+        {open ? null : (
+          <Banner tone="warning">
+            Applications for the {application.intake.academicSessionName} have closed, so this
+            application can't be submitted.
+          </Banner>
+        )}
+        {gaps.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-body">These answers are still needed before you can submit:</p>
+            <ul className="space-y-2">
+              {gaps.map((gap) => (
+                <li key={gap.section.key} className="text-body-sm">
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    onClick={() => {
+                      onGo(gap.index);
+                    }}
+                  >
+                    {gap.index + 1}. {gap.section.title}
+                  </Button>
+                  <span className="text-ink-muted">
+                    {" "}
+                    {gap.fields.map((f) => label(gap.section, f)).join(", ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="text-body">
+            Everything's answered. Check your answers in each section, then submit. You can't change
+            them after submitting.
+          </p>
+        )}
+      </div>
+      {error === null ? null : <Banner tone="danger">{error}</Banner>}
+    </Card>
   );
 }

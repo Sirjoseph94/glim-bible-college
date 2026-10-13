@@ -3,8 +3,18 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { api } from "../api/client";
-import { Alert } from "../components/form";
+import { PageHeader } from "../components/app/page-header";
+import { LoadFailed } from "../components/app/page-states";
 import { Time } from "../components/time";
+import { Badge } from "../components/ui/badge";
+import { Banner } from "../components/ui/banner";
+import { Button, buttonClass } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Switch } from "../components/ui/choice";
+import { Disclosure } from "../components/ui/disclosure";
+import { EmptyState } from "../components/ui/empty-state";
+import { NotificationDot } from "../components/ui/notification-dot";
+import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 
 export const notificationsKey = ["notifications"];
@@ -25,62 +35,80 @@ export function NotificationsPage() {
       }),
     getNextPageParam: (last) => last.nextBefore ?? undefined,
   });
-  const { busy, error, run } = useSubmit();
+  const { busy, problem, run } = useSubmit();
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const unread = list.data?.pages[0]?.unread ?? 0;
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-title">Notifications</h1>
-        {unread > 0 ? (
-          <button
-            type="button"
-            disabled={busy}
-            className="text-sm text-brand underline"
-            onClick={() => {
-              void run(async () => {
-                await api<typeof notifications.readAllNotifications>(
-                  "POST",
-                  "/me/notifications/read-all",
-                  {},
-                );
-                await queryClient.invalidateQueries({ queryKey: notificationsKey });
-              });
-            }}
-          >
-            Mark all read ({unread})
-          </button>
-        ) : null}
-      </div>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {list.isPending ? <div className="h-24 animate-pulse rounded bg-slate-200" /> : null}
-      {list.isSuccess && items.length === 0 ? (
-        <p className="text-sm text-slate-600">Nothing yet.</p>
+    <div className="space-y-5">
+      <PageHeader
+        title="Notifications"
+        meta={unread > 0 ? `${String(unread)} new` : "You're up to date."}
+        actions={
+          unread > 0 ? (
+            <Button
+              variant="secondary"
+              icon="check"
+              loading={busy}
+              onClick={() => {
+                void run(async () => {
+                  await api<typeof notifications.readAllNotifications>(
+                    "POST",
+                    "/me/notifications/read-all",
+                    {},
+                  );
+                  await queryClient.invalidateQueries({ queryKey: notificationsKey });
+                });
+              }}
+            >
+              Mark all read ({unread})
+            </Button>
+          ) : undefined
+        }
+      />
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
       ) : null}
-      <ul className="space-y-2 text-sm">
-        {items.map((n) => (
-          <Item key={n.id} notification={n} />
-        ))}
-      </ul>
+      {list.isPending ? (
+        <SkeletonGroup label="Loading notifications">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </SkeletonGroup>
+      ) : list.isError ? (
+        <LoadFailed what="your notifications" onRetry={() => void list.refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState icon="bell" title="Nothing yet">
+          Grades, results, announcements and other news for you appear here.
+        </EmptyState>
+      ) : (
+        <Card list role="list">
+          {items.map((n) => (
+            <Item key={n.id} notification={n} />
+          ))}
+        </Card>
+      )}
       {list.hasNextPage ? (
-        <button
-          type="button"
-          disabled={list.isFetchingNextPage}
-          className="text-sm text-brand underline"
+        <Button
+          variant="secondary"
+          loading={list.isFetchingNextPage}
           onClick={() => {
             void list.fetchNextPage();
           }}
         >
           Older
-        </button>
+        </Button>
       ) : null}
-      <Preferences />
+      <Card>
+        <Preferences />
+      </Card>
     </div>
   );
 }
 
 function Item({ notification: n }: { notification: Notification }) {
   const queryClient = useQueryClient();
+  const isNew = n.readAt === null;
   const markRead = () => {
     if (n.readAt !== null) return;
     void api<typeof notifications.readNotification>("POST", "/me/notifications/:id/read", {
@@ -88,30 +116,41 @@ function Item({ notification: n }: { notification: Notification }) {
     }).then(() => queryClient.invalidateQueries({ queryKey: notificationsKey }));
   };
   return (
-    <li
+    <div
+      role="listitem"
       aria-label={n.title}
-      className={`rounded border p-3 ${n.readAt === null ? "border-brand/40 bg-white" : "border-slate-200 bg-slate-50"}`}
+      className={isNew ? "flex gap-3 bg-brand-soft px-4 py-3" : "flex gap-3 px-4 py-3"}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className={n.readAt === null ? "font-medium" : ""}>{n.title}</span>
-        <span className="text-xs text-slate-500">
+      <span className="w-2 shrink-0 pt-2">{isNew ? <NotificationDot /> : null}</span>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={isNew ? "text-subhead text-ink" : "text-body text-ink"}>{n.title}</p>
+          {isNew ? <Badge tone="brand">New</Badge> : null}
+        </div>
+        <p className="text-meta text-ink-muted">
           <Time value={n.createdAt} />
-        </span>
-      </div>
-      {n.body === null ? null : <p className="text-slate-700">{n.body}</p>}
-      <div className="flex gap-3">
-        {n.link === null ? null : (
-          <Link to={n.link} className="text-brand underline" onClick={markRead}>
-            Open
-          </Link>
+        </p>
+        {n.body === null ? null : <p className="text-body-sm text-ink">{n.body}</p>}
+        {n.link === null && !isNew ? null : (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {n.link === null ? null : (
+              <Link
+                to={n.link}
+                className={buttonClass({ variant: "secondary", size: "sm" })}
+                onClick={markRead}
+              >
+                Open
+              </Link>
+            )}
+            {isNew ? (
+              <Button variant="quiet" size="sm" onClick={markRead}>
+                Mark read
+              </Button>
+            ) : null}
+          </div>
         )}
-        {n.readAt === null ? (
-          <button type="button" className="text-slate-600 underline" onClick={markRead}>
-            Mark read
-          </button>
-        ) : null}
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -124,7 +163,7 @@ function Preferences() {
         signal,
       }),
   });
-  const { error, run } = useSubmit();
+  const { problem, run } = useSubmit();
   const save = (
     p: NotificationPreference,
     change: Partial<Pick<NotificationPreference, "inApp" | "email">>,
@@ -140,28 +179,32 @@ function Preferences() {
     });
   };
   return (
-    <details className="rounded border border-slate-200 bg-white p-3 text-sm">
-      <summary className="cursor-pointer font-medium">What you get</summary>
-      <p className="mt-2 text-slate-600">
-        Important messages are always emailed straight away. Everything else comes in one summary
-        email at 06:00, never between 21:00 and 06:00 where you are.
-      </p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <table className="mt-2 w-full text-left">
-        <thead className="text-slate-600">
-          <tr>
-            <th className="font-normal">Kind</th>
-            <th className="font-normal">In the app</th>
-            <th className="font-normal">Email</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(prefs.data?.items ?? []).map((p) => (
-            <PreferenceRow key={p.kind} preference={p} onSave={save} />
-          ))}
-        </tbody>
-      </table>
-    </details>
+    <Disclosure summary="What you get">
+      <div className="space-y-3">
+        <p className="text-body-sm text-ink-muted">
+          Important messages are always emailed straight away. Everything else comes in one summary
+          email at 06:00, never between 21:00 and 06:00 where you are.
+        </p>
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        {prefs.isPending ? (
+          <SkeletonGroup label="Loading your choices">
+            <Skeleton className="h-24" />
+          </SkeletonGroup>
+        ) : prefs.isError ? (
+          <LoadFailed what="your choices" onRetry={() => void prefs.refetch()} />
+        ) : (
+          <div className="divide-y divide-line">
+            {prefs.data.items.map((p) => (
+              <PreferenceRow key={p.kind} preference={p} onSave={save} />
+            ))}
+          </div>
+        )}
+      </div>
+    </Disclosure>
   );
 }
 
@@ -183,32 +226,29 @@ function PreferenceRow({
     onSave({ ...preference, ...merged }, next);
   };
   return (
-    <tr className="border-t border-slate-100">
-      <td className="py-1 pr-2">{preference.label}</td>
-      <td>
-        <input
-          type="checkbox"
-          aria-label={`${preference.label} in the app`}
-          checked={choice.inApp}
-          onChange={(e) => {
-            change({ inApp: e.target.checked });
+    <div role="group" aria-label={preference.label} className="py-3">
+      <p className="text-subhead text-ink">{preference.label}</p>
+      <Switch
+        label="In the app"
+        checked={choice.inApp}
+        onCheckedChange={(checked) => {
+          change({ inApp: checked });
+        }}
+      />
+      {preference.critical ? (
+        <div className="flex min-h-tap items-center justify-between gap-4">
+          <span className="text-label text-ink">By email</span>
+          <Badge tone="info">Always</Badge>
+        </div>
+      ) : (
+        <Switch
+          label="By email"
+          checked={choice.email}
+          onCheckedChange={(checked) => {
+            change({ email: checked });
           }}
         />
-      </td>
-      <td>
-        {preference.critical ? (
-          <span className="text-slate-500">Always</span>
-        ) : (
-          <input
-            type="checkbox"
-            aria-label={`${preference.label} by email`}
-            checked={choice.email}
-            onChange={(e) => {
-              change({ email: e.target.checked });
-            }}
-          />
-        )}
-      </td>
-    </tr>
+      )}
+    </div>
   );
 }

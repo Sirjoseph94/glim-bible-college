@@ -2,41 +2,64 @@ import type { Announcement, BodyOf, content, Material } from "@glim/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api } from "../api/client";
-import { Alert, Field, formText } from "./form";
+import { fileSize } from "../design/format";
+import { Icon, type IconName } from "../design/icons";
+import { formText } from "./form";
+import { LoadFailed } from "./app/page-states";
 import { Time } from "./time";
+import { Badge } from "./ui/badge";
+import { Banner } from "./ui/banner";
+import { Button, buttonClass } from "./ui/button";
+import { Card } from "./ui/card";
+import { Checkbox, Radio } from "./ui/choice";
+import { ConfirmDialog, Sheet } from "./ui/dialog";
+import { EmptyState } from "./ui/empty-state";
+import { TextField } from "./ui/field";
+import { ProgressBar } from "./ui/progress-bar";
+import { Skeleton, SkeletonGroup } from "./ui/skeleton";
 import { uploadFile } from "./upload";
 import { useSubmit } from "./use-submit";
 
 const materialsKey = (offeringId: string) => ["materials", offeringId];
 const announcementsKey = (offeringId: string) => ["announcements", offeringId];
 
-function size(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
-    : `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
-}
-
 /** HTML from the server, rendered from Markdown and sanitized there with an allow-list (§14.1). */
 export function SafeHtml({ html }: { html: string }) {
   return (
     <div
-      className="prose-sm space-y-2 [&_a]:text-blue-700 [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+      className="max-w-prose space-y-2 text-body [&_a]:text-brand [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
       // Sanitized on the server (renderMarkdown), so it is safe to insert as it is.
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
 
+const KIND_ICON: Record<Material["kind"], IconName> = {
+  FILE: "download",
+  LINK: "book",
+  TEXT: "file",
+};
+
 function MaterialBody({ material: m }: { material: Material }) {
   if (m.kind === "FILE" && m.file !== null)
     return (
-      <a href={m.file.downloadPath} className="text-blue-700 underline">
-        Download {m.file.name} ({size(m.file.sizeBytes)})
+      <a
+        href={m.file.downloadPath}
+        className={`${buttonClass({ variant: "secondary", size: "sm" })} max-w-full`}
+      >
+        <Icon name="download" size={16} />
+        <span className="truncate">Download {m.file.name}</span>
+        <span className="text-ink-muted">{fileSize(m.file.sizeBytes)}</span>
       </a>
     );
   if (m.kind === "LINK" && m.url !== null)
     return (
-      <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">
+      <a
+        href={m.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={buttonClass({ variant: "secondary", size: "sm" })}
+      >
         Open link
       </a>
     );
@@ -63,22 +86,33 @@ export function CourseMaterials({ offeringId, manage }: { offeringId: string; ma
     sections.set(label, [...(sections.get(label) ?? []), m]);
   }
   return (
-    <div className="space-y-3 text-sm">
-      {list.isError ? <Alert tone="error">We couldn't load the materials.</Alert> : null}
-      {list.isSuccess && items.length === 0 ? (
-        <p className="text-slate-600">No materials yet.</p>
-      ) : null}
-      {[...sections].map(([label, materials]) => (
-        <section key={label} className="space-y-2">
-          <h4 className="font-medium text-slate-700">{label}</h4>
-          <ul className="space-y-2">
-            {materials.map((m) => (
-              <MaterialItem key={m.id} material={m} manage={manage} offeringId={offeringId} />
-            ))}
-          </ul>
-        </section>
-      ))}
+    <div className="space-y-5">
       {manage ? <AddMaterial offeringId={offeringId} /> : null}
+      {list.isPending ? (
+        <SkeletonGroup label="Loading materials">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </SkeletonGroup>
+      ) : list.isError ? (
+        <LoadFailed what="the materials" onRetry={() => void list.refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState icon="file" title="No materials yet">
+          {manage
+            ? "Add files, links or notes with the button above."
+            : "Handouts, links and notes for this course appear here."}
+        </EmptyState>
+      ) : (
+        [...sections].map(([label, materials]) => (
+          <section key={label} className="space-y-2">
+            <h2 className="text-heading">{label}</h2>
+            <Card list role="list">
+              {materials.map((m) => (
+                <MaterialItem key={m.id} material={m} manage={manage} offeringId={offeringId} />
+              ))}
+            </Card>
+          </section>
+        ))
+      )}
     </div>
   );
 }
@@ -93,56 +127,71 @@ function MaterialItem({
   offeringId: string;
 }) {
   const queryClient = useQueryClient();
-  const { busy, error, run } = useSubmit();
-  const notes = [
-    m.status === "DRAFT" ? "draft" : null,
-    m.visibility === "STAFF_ONLY" ? "staff only" : null,
-  ].filter((n) => n !== null);
+  const [removing, setRemoving] = useState(false);
+  const scheduled = m.publishAt !== null && new Date(m.publishAt) > new Date();
   return (
-    <li className="space-y-1 rounded border border-slate-200 p-2" aria-label={m.title}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">
-          {m.title}
-          {notes.length > 0 ? (
-            <span className="font-normal text-slate-500"> ({notes.join(", ")})</span>
-          ) : null}
-        </span>
-        {manage ? (
-          <button
-            type="button"
-            disabled={busy}
-            className="text-red-700 underline"
-            onClick={() =>
-              void run(async () => {
-                await api<typeof content.deleteMaterial>("DELETE", "/course-materials/:id", {
-                  params: { id: m.id },
-                });
-                await queryClient.invalidateQueries({ queryKey: materialsKey(offeringId) });
-              })
-            }
+    <div role="listitem" aria-label={m.title} className="flex gap-3 px-4 py-3">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand">
+        <Icon name={KIND_ICON[m.kind]} />
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-subhead text-ink">{m.title}</p>
+          {m.status === "DRAFT" ? <Badge status="draft" /> : null}
+          {m.visibility === "STAFF_ONLY" ? <Badge tone="neutral">Staff only</Badge> : null}
+          {manage && scheduled ? <Badge tone="info">Scheduled</Badge> : null}
+        </div>
+        {manage && scheduled && m.publishAt !== null ? (
+          <p className="text-meta text-ink-muted">
+            Shown to students from <Time value={m.publishAt} />
+          </p>
+        ) : null}
+        <MaterialBody material={m} />
+      </div>
+      {manage ? (
+        <>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              setRemoving(true);
+            }}
           >
             Remove
-          </button>
-        ) : null}
-      </div>
-      {manage && m.publishAt !== null && new Date(m.publishAt) > new Date() ? (
-        <p className="text-slate-500">
-          Shown to students from <Time value={m.publishAt} />
-        </p>
+          </Button>
+          <ConfirmDialog
+            open={removing}
+            onOpenChange={setRemoving}
+            title={`Remove "${m.title}"?`}
+            confirmLabel="Remove material"
+            tone="danger"
+            onConfirm={async () => {
+              await api<typeof content.deleteMaterial>("DELETE", "/course-materials/:id", {
+                params: { id: m.id },
+              });
+              setRemoving(false);
+              await queryClient.invalidateQueries({ queryKey: materialsKey(offeringId) });
+            }}
+          >
+            It leaves the course: students no longer see it, and it goes from this list. Any file
+            stays on the college's records.
+          </ConfirmDialog>
+        </>
       ) : null}
-      <MaterialBody material={m} />
-      {error ? <Alert tone="error">{error}</Alert> : null}
-    </li>
+    </div>
   );
 }
 
+const KIND_LABEL: Record<Material["kind"], string> = { FILE: "File", LINK: "Link", TEXT: "Text" };
+
+/** "Add material": a primary button opening a Sheet with the form (§10.2). */
 function AddMaterial({ offeringId }: { offeringId: string }) {
   const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
+  const { busy, problem, fieldErrors, run } = useSubmit();
+  const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<Material["kind"]>("FILE");
   const [progress, setProgress] = useState<number | null>(null);
-  const [formKey, setFormKey] = useState(0);
-  const id = useId();
+  const formId = useId();
 
   const submit = (form: HTMLFormElement) => {
     const data = new FormData(form);
@@ -175,96 +224,99 @@ function AddMaterial({ offeringId }: { offeringId: string }) {
         headers: { "idempotency-key": crypto.randomUUID() },
       });
       await queryClient.invalidateQueries({ queryKey: materialsKey(offeringId) });
-      setProgress(null);
-      setFormKey((k) => k + 1);
+      setOpen(false);
     }).finally(() => {
       setProgress(null);
     });
   };
 
   return (
-    <form
-      key={formKey}
-      className="space-y-2 rounded border border-dashed border-slate-300 p-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit(e.currentTarget);
-      }}
-    >
-      <p className="font-medium">Add material</p>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      <div className="flex gap-3" role="radiogroup" aria-label="Kind">
-        {(["FILE", "LINK", "TEXT"] as const).map((k) => (
-          <label key={k} className="flex items-center gap-1">
-            <input
-              type="radio"
-              name="kind"
-              checked={kind === k}
-              onChange={() => {
-                setKind(k);
-              }}
-            />
-            {k === "FILE" ? "File" : k === "LINK" ? "Link" : "Text"}
-          </label>
-        ))}
-      </div>
-      <Field id={`${id}-title`} name="title" label="Title" required error={fieldErrors.title} />
-      <Field
-        id={`${id}-section`}
-        name="sectionLabel"
-        label="Section (optional), e.g. Week 1"
-        error={fieldErrors.sectionLabel}
-      />
-      {kind === "FILE" ? (
-        <div className="space-y-1">
-          <label htmlFor={`${id}-file`} className="block font-medium text-slate-700">
-            File (up to 100 MB)
-          </label>
-          <input id={`${id}-file`} name="file" type="file" required />
-          {progress !== null ? (
-            <progress className="w-full" value={progress} max={1} aria-label="Upload progress" />
-          ) : null}
-        </div>
-      ) : kind === "LINK" ? (
-        <Field
-          id={`${id}-url`}
-          name="url"
-          label="Web address"
-          type="url"
-          required
-          error={fieldErrors.url}
-        />
-      ) : (
-        <div className="space-y-1">
-          <label htmlFor={`${id}-body`} className="block font-medium text-slate-700">
-            Text (Markdown)
-          </label>
-          <textarea
-            id={`${id}-body`}
-            name="bodyMd"
-            required
-            rows={5}
-            className="block w-full rounded border border-slate-300 px-3 py-2"
-          />
-        </div>
-      )}
-      <Field
-        id={`${id}-publish`}
-        name="publishAt"
-        type="datetime-local"
-        label="Show to students from (optional)"
-      />
-      <label className="flex items-center gap-2">
-        <input type="checkbox" name="staffOnly" /> Staff only
-      </label>
-      <button
-        type="submit"
-        disabled={busy}
-        className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
+    <>
+      <Button
+        variant="primary"
+        icon="upload"
+        onClick={() => {
+          setOpen(true);
+        }}
       >
         Add material
-      </button>
-    </form>
+      </Button>
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        title="Add material"
+        description="A file, a link or some notes. Students see it once it's shown."
+        footer={
+          <Button type="submit" form={formId} variant="primary" block loading={busy}>
+            Add material
+          </Button>
+        }
+      >
+        <form
+          id={formId}
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(e.currentTarget);
+          }}
+        >
+          {problem ? (
+            <Banner tone="danger" title={problem.title}>
+              {problem.body}
+            </Banner>
+          ) : null}
+          <fieldset>
+            <legend className="text-label text-ink">Kind</legend>
+            <div className="flex flex-wrap gap-x-5">
+              {(["FILE", "LINK", "TEXT"] as const).map((k) => (
+                <Radio
+                  key={k}
+                  name="kind"
+                  label={KIND_LABEL[k]}
+                  checked={kind === k}
+                  onChange={() => {
+                    setKind(k);
+                  }}
+                />
+              ))}
+            </div>
+          </fieldset>
+          <TextField name="title" label="Title" required error={fieldErrors.title} />
+          <TextField
+            name="sectionLabel"
+            label="Section"
+            optional
+            hint="e.g. Week 1"
+            error={fieldErrors.sectionLabel}
+          />
+          {kind === "FILE" ? (
+            <div className="space-y-2">
+              <TextField name="file" type="file" label="File (up to 100 MB)" required />
+              {progress !== null ? <ProgressBar label="Uploading" value={progress * 100} /> : null}
+            </div>
+          ) : kind === "LINK" ? (
+            <TextField name="url" label="Web address" type="url" required error={fieldErrors.url} />
+          ) : (
+            <TextField
+              name="bodyMd"
+              label="Text (Markdown)"
+              multiline
+              rows={5}
+              required
+              error={fieldErrors.bodyMd}
+            />
+          )}
+          <TextField
+            name="publishAt"
+            type="datetime-local"
+            label="Show to students from"
+            optional
+            hint="Leave empty to show it now."
+          />
+          <Checkbox name="staffOnly" label="Staff only" />
+        </form>
+      </Sheet>
+    </>
   );
 }
 
@@ -276,10 +328,6 @@ export function CourseAnnouncements({
   offeringId: string;
   manage: boolean;
 }) {
-  const queryClient = useQueryClient();
-  const { busy, error, fieldErrors, run } = useSubmit();
-  const [formKey, setFormKey] = useState(0);
-  const id = useId();
   const list = useQuery({
     queryKey: announcementsKey(offeringId),
     queryFn: ({ signal }) =>
@@ -288,34 +336,64 @@ export function CourseAnnouncements({
         signal,
       }),
   });
-  const refresh = () => queryClient.invalidateQueries({ queryKey: announcementsKey(offeringId) });
   const items = list.data?.items ?? [];
   return (
-    <div className="space-y-3 text-sm">
-      {list.isSuccess && items.length === 0 ? (
-        <p className="text-slate-600">No announcements yet.</p>
-      ) : null}
-      <ul className="space-y-2">
-        {items.map((a) => (
-          <AnnouncementItem
-            key={a.id}
-            announcement={a}
-            manage={manage}
-            busy={busy}
-            act={(action) =>
-              void run(async () => {
-                await action();
-                await refresh();
-              })
-            }
-          />
-        ))}
-      </ul>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {manage ? (
+    <div className="space-y-4">
+      {manage ? <NewAnnouncement offeringId={offeringId} /> : null}
+      {list.isPending ? (
+        <SkeletonGroup label="Loading announcements">
+          <Skeleton className="h-24" />
+        </SkeletonGroup>
+      ) : list.isError ? (
+        <LoadFailed what="the announcements" onRetry={() => void list.refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState icon="bell" title="No announcements yet" headingLevel={3}>
+          {manage
+            ? "Post one with the button above; students on the course see it in their notifications."
+            : "News from your Lecturer appears here."}
+        </EmptyState>
+      ) : (
+        <Card list role="list">
+          {items.map((a) => (
+            <AnnouncementItem key={a.id} announcement={a} manage={manage} offeringId={offeringId} />
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** "New announcement": a primary button opening a Sheet with the form. */
+function NewAnnouncement({ offeringId }: { offeringId: string }) {
+  const queryClient = useQueryClient();
+  const { busy, problem, fieldErrors, run } = useSubmit();
+  const [open, setOpen] = useState(false);
+  const formId = useId();
+  return (
+    <>
+      <Button
+        variant="primary"
+        icon="bell"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        New announcement
+      </Button>
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        title="New announcement"
+        description="Students on the course see it here and in their notifications."
+        footer={
+          <Button type="submit" form={formId} variant="primary" block loading={busy}>
+            Post
+          </Button>
+        }
+      >
         <form
-          key={formKey}
-          className="space-y-2 rounded border border-dashed border-slate-300 p-2"
+          id={formId}
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             const data = new FormData(e.currentTarget);
@@ -333,93 +411,107 @@ export function CourseAnnouncements({
                   headers: { "idempotency-key": crypto.randomUUID() },
                 },
               );
-              await refresh();
-              setFormKey((k) => k + 1);
+              await queryClient.invalidateQueries({ queryKey: announcementsKey(offeringId) });
+              setOpen(false);
             });
           }}
         >
-          <p className="font-medium">Post an announcement</p>
-          <Field id={`${id}-title`} name="title" label="Title" required error={fieldErrors.title} />
-          <label htmlFor={`${id}-body`} className="block font-medium text-slate-700">
-            Message (Markdown)
-          </label>
-          <textarea
-            id={`${id}-body`}
+          {problem ? (
+            <Banner tone="danger" title={problem.title}>
+              {problem.body}
+            </Banner>
+          ) : null}
+          <TextField name="title" label="Title" required error={fieldErrors.title} />
+          <TextField
             name="bodyMd"
-            required
+            label="Message (Markdown)"
+            multiline
             rows={4}
-            className="block w-full rounded border border-slate-300 px-3 py-2"
+            required
+            error={fieldErrors.bodyMd}
           />
-          <label className="flex items-center gap-2">
-            <input type="checkbox" name="pinned" /> Pin to the top
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded bg-brand px-3 py-2 text-white disabled:opacity-60"
-          >
-            Post
-          </button>
+          <Checkbox name="pinned" label="Pin to the top" />
         </form>
-      ) : null}
-    </div>
+      </Sheet>
+    </>
   );
 }
 
 function AnnouncementItem({
   announcement: a,
   manage,
-  busy,
-  act,
+  offeringId,
 }: {
   announcement: Announcement;
   manage: boolean;
-  busy: boolean;
-  act: (action: () => Promise<unknown>) => void;
+  offeringId: string;
 }) {
+  const queryClient = useQueryClient();
+  const { busy, problem, run } = useSubmit();
+  const [deleting, setDeleting] = useState(false);
   const params = { id: a.id };
+  const refresh = () => queryClient.invalidateQueries({ queryKey: announcementsKey(offeringId) });
   return (
-    <li className="space-y-1 rounded border border-slate-200 p-2" aria-label={a.title}>
-      <div className="font-medium">
-        {a.pinned ? "📌 " : null}
-        {a.title}
+    <div role="listitem" aria-label={a.title} className="space-y-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-subhead text-ink">{a.title}</p>
+        {a.pinned ? <Badge tone="brand">Pinned</Badge> : null}
       </div>
-      <div className="text-xs text-slate-500">
+      <p className="text-meta text-ink-muted">
         {a.authorName} · <Time value={a.publishedAt} />
-      </div>
+      </p>
       <SafeHtml html={a.bodyHtml} />
+      {problem ? (
+        <Banner tone="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+      ) : null}
       {manage ? (
-        <div className="flex gap-3">
-          <button
-            type="button"
-            disabled={busy}
-            className="underline"
-            onClick={() => {
-              act(() =>
-                api<typeof content.updateAnnouncement>("PATCH", "/announcements/:id", {
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={busy}
+            onClick={() =>
+              void run(async () => {
+                await api<typeof content.updateAnnouncement>("PATCH", "/announcements/:id", {
                   params,
                   body: { pinned: !a.pinned },
                   headers: { "if-match": `"${String(a.version)}"` },
-                }),
-              );
-            }}
+                });
+                await refresh();
+              })
+            }
           >
             {a.pinned ? "Unpin" : "Pin"}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            className="text-red-700 underline"
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
             onClick={() => {
-              act(() =>
-                api<typeof content.deleteAnnouncement>("DELETE", "/announcements/:id", { params }),
-              );
+              setDeleting(true);
             }}
           >
             Delete
-          </button>
+          </Button>
+          <ConfirmDialog
+            open={deleting}
+            onOpenChange={setDeleting}
+            title="Delete this announcement?"
+            confirmLabel="Delete announcement"
+            tone="danger"
+            onConfirm={async () => {
+              await api<typeof content.deleteAnnouncement>("DELETE", "/announcements/:id", {
+                params,
+              });
+              setDeleting(false);
+              await refresh();
+            }}
+          >
+            "{a.title}" is removed from the course for everyone. This can't be undone.
+          </ConfirmDialog>
         </div>
       ) : null}
-    </li>
+    </div>
   );
 }
