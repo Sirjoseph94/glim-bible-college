@@ -81,6 +81,8 @@ export const ENDPOINTS = [
   attendance.overrideAttendance,
   attendance.clearAttendanceOverride,
   attendance.getAttendanceReport,
+  attendance.getParticipants,
+  attendance.matchParticipant,
   assessment.listAssignments,
   assessment.createAssignment,
   assessment.getAssignment,
@@ -289,6 +291,7 @@ export type {
   AttendanceReport,
   MeetingAttendance,
   MyAttendance,
+  Participant,
   RollCall,
   RollCallMark,
 } from "./attendance";

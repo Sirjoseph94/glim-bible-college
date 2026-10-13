@@ -1,7 +1,7 @@
 import { QUEUES, type DomainEvent, type QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService, UserAdminService } from "@glim/modules/identity";
-import { AttendanceService } from "@glim/modules/attendance";
+import { AttendanceService, ParticipantsService } from "@glim/modules/attendance";
 import { LIVE_PROVIDER, type LiveProvider } from "@glim/integrations/live-provider/port";
 import {
   MeetEventsService,
@@ -49,6 +49,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const provisioning = deps.context.get(ProvisioningService);
   const meetEvents = deps.context.get(MeetEventsService);
   const subscriptions = deps.context.get(SubscriptionsService);
+  const participants = deps.context.get(ParticipantsService);
   // Google Meet (integration slice): without a provider these queues get no handler, so their
   // cron schedules are removed and nothing polls Google.
   const google: HandlerRegistry =
@@ -64,6 +65,10 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
           "class-meeting.end": (job) =>
             provisioning.endConference((job.data as { meetingId: string }).meetingId),
           "meeting.reconcile": () => meetEvents.reconcile(),
+          "conference.sync": (job) =>
+            participants.syncConference(
+              (job.data as { conferenceRecordId: string }).conferenceRecordId,
+            ),
           // The 15-minute sweep, or one subscription a lifecycle event named.
           "subscription.renew": (job) =>
             subscriptions.run((job.data as { remoteName?: string } | null)?.remoteName),

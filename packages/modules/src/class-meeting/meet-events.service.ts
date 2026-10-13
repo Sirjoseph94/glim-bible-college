@@ -225,6 +225,34 @@ export class MeetEventsService implements OnModuleInit {
     return counts;
   }
 
+  /** A conference record with its meeting and host, for `conference.sync` (attendance). */
+  async conferenceForSync(conferenceRecordId: string): Promise<{
+    record: typeof schema.conferenceRecords.$inferSelect;
+    meeting: MeetingRow;
+    hostEmail: string;
+  } | null> {
+    const c = schema.conferenceRecords;
+    const m = schema.classMeetings;
+    const h = schema.providerHostAccounts;
+    const [row] = await this.db.read
+      .select({ record: c, meeting: m, hostEmail: h.email })
+      .from(c)
+      .innerJoin(m, eq(m.id, c.classMeetingId))
+      .innerJoin(h, eq(h.id, m.hostAccountId))
+      .where(eq(c.id, conferenceRecordId));
+    return row ?? null;
+  }
+
+  /** Attendance read the conference's participants: it is no longer dirty. */
+  async markSynced(db: Database, conferenceRecordId: string): Promise<void> {
+    const c = schema.conferenceRecords;
+    const now = this.clock.now();
+    await db
+      .update(c)
+      .set({ dirty: false, lastSyncedAt: now, updatedAt: now })
+      .where(eq(c.id, conferenceRecordId));
+  }
+
   // ---- helpers ----
 
   /** The meeting an event is about, and the host account that owns its space. */

@@ -357,6 +357,8 @@ export class GoogleMeetProvider implements LiveProvider {
           kind,
           providerUserId: p.signedinUser?.user ?? null,
           displayName: who?.displayName ?? null,
+          // Meet's REST API reports no participant email (S-01): MEMBER_EMAIL stays off.
+          email: null,
           startedAt: new Date(s.startTime),
           endedAt: date(s.endTime),
           raw: { participant: p, session: s },

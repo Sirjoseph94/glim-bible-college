@@ -85,6 +85,8 @@ export interface ProviderParticipantSession {
   /** The provider's stable user id (signed-in participants only). */
   providerUserId: string | null;
   displayName: string | null;
+  /** An email, if the provider exposes one (Meet doesn't today; S-01). */
+  email: string | null;
   startedAt: Date;
   endedAt: Date | null;
   raw: Record<string, unknown>;

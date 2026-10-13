@@ -36,6 +36,7 @@ export interface WorldSession {
   kind: ParticipantKind;
   providerUserId: string | null;
   displayName: string | null;
+  email: string | null;
   startedAt: Date;
   endedAt: Date | null;
 }
@@ -172,6 +173,7 @@ export class MeetWorld {
       kind?: ParticipantKind;
       providerUserId?: string | null;
       displayName?: string | null;
+      email?: string | null;
       startedAt: Date;
       endedAt?: Date | null;
     },
@@ -184,6 +186,7 @@ export class MeetWorld {
       kind: input.kind ?? "SIGNED_IN",
       providerUserId: input.providerUserId ?? null,
       displayName: input.displayName ?? null,
+      email: input.email ?? null,
       startedAt: input.startedAt,
       endedAt: input.endedAt ?? null,
     };

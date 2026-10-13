@@ -146,3 +146,22 @@ export const providerParticipantSessions = pgTable(
     index("provider_participant_sessions_meeting_user").on(t.classMeetingId, t.matchedUserId),
   ],
 );
+
+/**
+ * Owner: attendance. A Meet user id a person confirmed belongs to a user, so later meetings
+ * match it automatically (TRD §12.4 MANUAL, "persisting the Google id"). Kept apart from
+ * `identities` on purpose: a staff member's match must never become a way to sign in.
+ */
+export const participantAliases = pgTable(
+  "participant_aliases",
+  {
+    ...std(),
+    provider: text().notNull().default("google_meet"),
+    providerUserId: text("provider_user_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [uniqueIndex("participant_aliases_provider_user").on(t.provider, t.providerUserId)],
+);

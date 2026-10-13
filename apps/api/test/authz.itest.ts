@@ -638,6 +638,17 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/reprovision`,
     offering: "O1",
   }),
+  // No Meet call happened: allowed callers get an empty list.
+  "GET /class-meetings/:id/participants": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/participants`,
+    offering: "O1",
+  }),
+  // Someone not on the course: allowed callers get 400; nothing changes.
+  "POST /class-meetings/:id/participants/:pid/match": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/participants/nobody/match`,
+    offering: "O1",
+    payload: { userId: "00000000-0000-4000-8000-000000000000" },
+  }),
   "GET /class-meetings/:id/roll-call": async (t) => ({
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/roll-call`,
     offering: "O1",
