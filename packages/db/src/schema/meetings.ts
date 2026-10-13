@@ -15,9 +15,48 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { courseOfferings, rooms } from "./academic";
-import { enumCheck, std, stdRo, tstz } from "./columns";
+import { citext, enumCheck, std, stdRo, tstz } from "./columns";
 import { users } from "./identity";
 import { lecturers } from "./lecturing";
+
+/**
+ * Owner: class-meeting. The Workspace accounts that own Meet spaces (TRD §6.2, §11.2, C-05). The
+ * provider acts as one of them; `HostSelector` spreads meetings across the ACTIVE ones.
+ */
+export const providerHostAccounts = pgTable(
+  "provider_host_accounts",
+  {
+    ...std(),
+    provider: text().notNull().default("google_meet"),
+    email: citext().notNull(),
+    providerUserId: text("provider_user_id"),
+    status: text().notNull().default("ACTIVE"),
+    weight: integer().notNull().default(1),
+  },
+  (t) => [
+    uniqueIndex("provider_host_accounts_email").on(t.provider, t.email),
+    enumCheck("provider_host_accounts.status", t.status),
+  ],
+);
+
+/** Owner: class-meeting. One Workspace Events subscription per host account (TRD §11.8). */
+export const providerSubscriptions = pgTable(
+  "provider_subscriptions",
+  {
+    ...std(),
+    hostAccountId: uuid("host_account_id")
+      .notNull()
+      .references(() => providerHostAccounts.id, { onDelete: "cascade" }),
+    targetResource: text("target_resource").notNull().unique(),
+    eventTypes: text("event_types").array().notNull(),
+    remoteName: text("remote_name"),
+    expiresAt: tstz("expires_at"),
+    status: text().notNull().default("ACTIVE"),
+    lastRenewedAt: tstz("last_renewed_at"),
+    lastError: text("last_error"),
+  },
+  (t) => [enumCheck("provider_subscriptions.status", t.status)],
+);
 
 /** A Postgres `tstzrange`, read and written as its text form (e.g. `["…","…")`). */
 export const tstzrange = customType<{ data: string }>({ dataType: () => "tstzrange" });
@@ -55,7 +94,7 @@ export const classMeetingSeries = pgTable(
 /**
  * Owner: class-meeting. A hybrid Class Meeting: an optional Room and an online link (TRD §6.4,
  * §11). In v1 the Lecturer pastes the link (`online_link`); the provider columns stay nullable and
- * unused until the Google integration. Rooms can't be double-booked: `no_room_double_booking`
+ * set when a provider (Google Meet, the integration slice) is switched on. Rooms can't be double-booked: `no_room_double_booking`
  * (custom SQL).
  */
 export const classMeetings = pgTable(
@@ -82,8 +121,9 @@ export const classMeetings = pgTable(
     providerMeetingCode: text("provider_meeting_code"),
     joinUrl: text("join_url"),
     dialIn: jsonb("dial_in"),
-    // References provider_host_accounts once the Google integration creates it.
-    hostAccountId: uuid("host_account_id"),
+    hostAccountId: uuid("host_account_id").references(() => providerHostAccounts.id, {
+      onDelete: "restrict",
+    }),
     provisionedAt: tstz("provisioned_at"),
     provisionError: text("provision_error"),
     recordingMode: text("recording_mode").notNull().default("AUTO"),
@@ -170,5 +210,32 @@ export const meetingJoinLog = pgTable(
   (t) => [
     enumCheck("meeting_join_log.outcome", t.outcome),
     index("meeting_join_log_meeting").on(t.classMeetingId, t.authorizedAt),
+  ],
+);
+
+/**
+ * Owner: class-meeting. A conference held in a meeting's space; a space can host several over
+ * time (a restart after an accidental end). `dirty` asks `conference.sync` to read it again.
+ */
+export const conferenceRecords = pgTable(
+  "conference_records",
+  {
+    ...std(),
+    classMeetingId: uuid("class_meeting_id")
+      .notNull()
+      .references(() => classMeetings.id, { onDelete: "cascade" }),
+    providerConferenceId: text("provider_conference_id").notNull().unique(),
+    status: text().notNull().default("ACTIVE"),
+    startedAt: tstz("started_at").notNull(),
+    endedAt: tstz("ended_at"),
+    dirty: boolean().notNull().default(true),
+    lastSyncedAt: tstz("last_synced_at"),
+  },
+  (t) => [
+    enumCheck("conference_records.status", t.status),
+    index("conference_records_meeting").on(t.classMeetingId),
+    index("conference_records_dirty")
+      .on(t.dirty, t.lastSyncedAt)
+      .where(sql`dirty`),
   ],
 );

@@ -30,6 +30,17 @@ describe("policy defaults", () => {
     });
   });
 
+  it("keeps Meet matching in review mode until spike S-01 passes (Q-02)", () => {
+    expect(defaultPolicy("GOOGLE_MEET")).toEqual({
+      accessType: "RESTRICTED",
+      moderation: true,
+      presentRestriction: "HOSTS_ONLY",
+      provisionLeadHours: 24,
+      syncAccessWithinDays: 14,
+      matching: { googleId: false, memberEmail: false, nameAssisted: true },
+    });
+  });
+
   it("reject unknown keys and inconsistent thresholds", () => {
     expect(POLICY_SCHEMAS.JOIN_WINDOW.safeParse({ studentOpensBefore: 5 }).success).toBe(false);
     expect(

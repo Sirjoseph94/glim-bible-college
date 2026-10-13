@@ -193,3 +193,29 @@ describe("withSavepoint", () => {
     expect(codes).toEqual(["SP-1", "SP-3"]);
   });
 });
+
+describe("rl_acquire (Google quota buckets, TRD §11.7)", () => {
+  const acquire = async (key: string, capacity: number, refill: number, cost = 1) => {
+    const { rows } = await db.pool.query<{ wait: number }>(
+      "SELECT rl_acquire($1, $2, $3, $4) AS wait",
+      [key, capacity, refill, cost],
+    );
+    return rows[0]?.wait;
+  };
+
+  it("starts full, hands out tokens, then says how long to wait", async () => {
+    expect(await acquire("test:a", 2, 1)).toBe(0);
+    expect(await acquire("test:a", 2, 1)).toBe(0);
+    const wait = await acquire("test:a", 2, 1);
+    expect(wait).toBeGreaterThan(900);
+    expect(wait).toBeLessThanOrEqual(1000);
+  });
+
+  it("refills over time and keeps buckets apart", async () => {
+    expect(await acquire("test:b", 1, 1000)).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await acquire("test:b", 1, 1000)).toBe(0);
+    expect(await acquire("test:c", 5, 1, 5)).toBe(0);
+    expect(await acquire("test:c", 5, 1, 5)).toBeGreaterThan(4000);
+  });
+});

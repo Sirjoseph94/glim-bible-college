@@ -6,6 +6,7 @@ import { buildApp } from "./app";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { createLiveProvider } from "@glim/integrations/live-provider/factory";
 import { createVideoHost } from "@glim/integrations/video-host/factory";
 import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 
@@ -32,6 +33,7 @@ const app = await buildApp({
   identityProvider: createIdentityProvider(config),
   objectStorage: createObjectStorage(config),
   videoHost: createVideoHost(),
+  liveProvider: createLiveProvider(config),
   transcriptRenderer: new ReactPdfTranscriptRenderer(),
 });
 await app.listen(config.port, "0.0.0.0");

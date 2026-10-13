@@ -3,6 +3,8 @@ import type { Db } from "@glim/db";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { createLiveProvider } from "@glim/integrations/live-provider/factory";
+import type { LiveProvider } from "@glim/integrations/live-provider/port";
 import { createVideoHost } from "@glim/integrations/video-host/factory";
 import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 import type { VideoHost } from "@glim/integrations/video-host/port";
@@ -60,6 +62,7 @@ export function createWorkerContext(deps: {
   mailer?: Mailer;
   objectStorage?: ObjectStorage;
   videoHost?: VideoHost;
+  liveProvider?: LiveProvider | null;
 }): Promise<INestApplicationContext> {
   const config = deps.config ?? loadConfig({ NODE_ENV: "test" });
   return NestFactory.createApplicationContext(
@@ -70,6 +73,8 @@ export function createWorkerContext(deps: {
       identityProvider: createIdentityProvider(config),
       objectStorage: deps.objectStorage ?? createObjectStorage(config),
       videoHost: deps.videoHost ?? createVideoHost(),
+      liveProvider:
+        deps.liveProvider === undefined ? createLiveProvider(config) : deps.liveProvider,
       transcriptRenderer: new ReactPdfTranscriptRenderer(),
     }),
     { logger: false },

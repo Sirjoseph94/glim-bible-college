@@ -14,12 +14,52 @@ import {
 import { courseOfferings } from "./academic";
 import { enumCheck, std, tstz } from "./columns";
 import { users } from "./identity";
-import { classMeetings } from "./meetings";
+import { classMeetings, conferenceRecords } from "./meetings";
+
+/**
+ * Owner: video. One Meet recording file (TRD §6.5, §13.3; a conference may have several), from
+ * discovery in the host's Drive to a processed YouTube upload. Drive metadata is kept so the
+ * upload can be checked against it (INV-9).
+ */
+export const recordings = pgTable(
+  "recordings",
+  {
+    ...std(),
+    classMeetingId: uuid("class_meeting_id")
+      .notNull()
+      .references(() => classMeetings.id, { onDelete: "restrict" }),
+    conferenceRecordId: uuid("conference_record_id")
+      .notNull()
+      .references(() => conferenceRecords.id, { onDelete: "restrict" }),
+    partNo: integer("part_no").notNull().default(1),
+    providerRecordingId: text("provider_recording_id").notNull().unique(),
+    driveFileId: text("drive_file_id").unique(),
+    status: text().notNull().default("DISCOVERED"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    lastError: text("last_error"),
+    sourceSizeBytes: bigint("source_size_bytes", { mode: "number" }),
+    sourceMd5: text("source_md5"),
+    sourceMime: text("source_mime"),
+    sourceDurationMs: bigint("source_duration_ms", { mode: "number" }),
+    recordingStartedAt: tstz("recording_started_at"),
+    recordingEndedAt: tstz("recording_ended_at"),
+    uploadedAt: tstz("uploaded_at"),
+    driveCleanupStatus: text("drive_cleanup_status").notNull().default("NOT_REQUESTED"),
+  },
+  (t) => [
+    enumCheck("recordings.status", t.status),
+    enumCheck("recordings.drive_cleanup_status", t.driveCleanupStatus),
+    index("recordings_open")
+      .on(t.status, t.updatedAt)
+      .where(sql`status <> 'READY'`),
+  ],
+);
 
 /**
  * Owner: video. A course video: an unlisted YouTube video on GLIM's channel (TRD §6.5, §13,
- * ADR-0003). In v1 every video is `origin='LINK'`, pasted by staff; `recording_id` and the
- * `recordings` table come with the Google integration slice.
+ * ADR-0003). `origin='LINK'` is pasted by staff; `origin='RECORDING'` is a Meet recording the
+ * worker uploaded (integration slice), linked through `recording_id`.
  */
 export const videos = pgTable(
   "videos",
@@ -31,6 +71,9 @@ export const videos = pgTable(
     classMeetingId: uuid("class_meeting_id").references(() => classMeetings.id, {
       onDelete: "set null",
     }),
+    recordingId: uuid("recording_id")
+      .unique()
+      .references(() => recordings.id, { onDelete: "restrict" }),
     origin: text().notNull(),
     title: text().notNull(),
     description: text(),
