@@ -223,24 +223,22 @@ export class VideosService {
   /**
    * Each Class Meeting's recording as this viewer may see it (ui-overhaul #01), in one query.
    * Students get the same rule as the video list and playback; people who manage an offering's
-   * videos, decided per offering, see the rest. A null viewer is the system and sees everything.
+   * videos, decided per offering, see the rest.
    */
   async recordingsFor(
     meetings: readonly { id: string; courseOfferingId: string }[],
-    viewerUserId: string | null,
+    viewerUserId: string,
   ): Promise<Map<string, MeetingRecording>> {
     const found = new Map<string, MeetingRecording>();
     if (meetings.length === 0) return found;
     const v = schema.videos;
-    const studentVisible = this.visible(false) ?? sql`false`;
     const rows = await this.db.read
       .select({
         id: v.id,
         classMeetingId: v.classMeetingId,
-        courseOfferingId: v.courseOfferingId,
         status: v.status,
         createdAt: v.createdAt,
-        studentVisible: sql<boolean>`coalesce(${studentVisible}, false)`,
+        forStudents: sql<boolean>`coalesce(${this.forStudents() ?? sql`false`}, false)`,
       })
       .from(v)
       .where(
@@ -253,29 +251,31 @@ export class VideosService {
         ),
       );
     if (rows.length === 0) return found;
-    const manages = new Map<string, boolean>();
-    for (const offeringId of new Set(rows.map((r) => r.courseOfferingId)))
-      manages.set(
-        offeringId,
-        viewerUserId === null || (await this.manages(viewerUserId, offeringId)),
-      );
-    const byMeeting = new Map<string, { offeringId: string; videos: MeetingVideo[] }>();
+    const offeringOf = new Map(meetings.map((m) => [m.id, m.courseOfferingId]));
+    const videosOf = new Map<string, MeetingVideo[]>();
     for (const row of rows) {
       if (row.classMeetingId === null) continue;
-      const entry = byMeeting.get(row.classMeetingId) ?? {
-        offeringId: row.courseOfferingId,
-        videos: [],
-      };
-      entry.videos.push({
+      const list = videosOf.get(row.classMeetingId) ?? [];
+      list.push({
         id: row.id,
         status: row.status as VideoStatus,
-        studentVisible: row.studentVisible,
+        forStudents: row.forStudents,
         createdAt: row.createdAt,
       });
-      byMeeting.set(row.classMeetingId, entry);
+      videosOf.set(row.classMeetingId, list);
     }
-    for (const [meetingId, { offeringId, videos }] of byMeeting) {
-      const recording = pickMeetingRecording(videos, manages.get(offeringId) ?? false);
+    const manages = new Map<string, boolean>();
+    for (const meetingId of videosOf.keys()) {
+      const offeringId = offeringOf.get(meetingId);
+      if (offeringId !== undefined && !manages.has(offeringId))
+        manages.set(offeringId, await this.manages(viewerUserId, offeringId));
+    }
+    for (const [meetingId, videos] of videosOf) {
+      const offeringId = offeringOf.get(meetingId);
+      const recording = pickMeetingRecording(
+        videos,
+        offeringId !== undefined && manages.get(offeringId) === true,
+      );
       if (recording !== null) found.set(meetingId, recording);
     }
     return found;
@@ -460,8 +460,13 @@ export class VideosService {
   private visible(manages: boolean): SQL | undefined {
     const v = schema.videos;
     if (manages) return ne(v.status, "DELETED");
+    return and(eq(v.status, "PUBLISHED"), this.forStudents());
+  }
+
+  /** Meant for enrolled students and released: the part of `visible` that isn't the status. */
+  private forStudents(): SQL | undefined {
+    const v = schema.videos;
     return and(
-      eq(v.status, "PUBLISHED"),
       eq(v.visibility, "ENROLLED"),
       or(isNull(v.publishAfter), lte(v.publishAfter, this.clock.now())),
     );

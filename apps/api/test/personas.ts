@@ -232,7 +232,7 @@ let matric = 0;
  * Makes a persona a student of the persona programme, with a semester enrollment in the persona
  * semester and course enrollments on its offerings, written directly (no admissions needed).
  */
-async function enrollStudent(
+export async function enrollStudent(
   t: TestApp,
   world: PersonaWorld,
   userId: string,

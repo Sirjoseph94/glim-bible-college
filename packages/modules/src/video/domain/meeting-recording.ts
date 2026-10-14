@@ -1,7 +1,8 @@
 /**
  * Which of a Class Meeting's videos its card shows, and as what (ui-overhaul #01), pure. Students
- * see a video as PUBLISHED only when they could play it now, and never learn of one they can't:
- * anything else is PROCESSING or nothing. People who manage the offering's videos see the rest.
+ * see a video only if it's meant for them (for enrolled students, released): PUBLISHED when they
+ * could play it now, PROCESSING while it gets there. Nothing hints at a video that isn't for them.
+ * People who manage the offering's videos see the rest.
  */
 
 import type { MeetingRecordingStatus, VideoStatus } from "@glim/contracts";
@@ -9,8 +10,8 @@ import type { MeetingRecordingStatus, VideoStatus } from "@glim/contracts";
 export interface MeetingVideo {
   id: string;
   status: VideoStatus;
-  /** The student playback rule (published, for enrolled students, released), evaluated in SQL. */
-  studentVisible: boolean;
+  /** For enrolled students and released: the student rule apart from the status (in SQL). */
+  forStudents: boolean;
   createdAt: Date;
 }
 
@@ -19,53 +20,37 @@ export interface MeetingRecording {
   status: MeetingRecordingStatus;
 }
 
-/** Best first; a status missing from a ranking is never shown to that viewer. */
-const STUDENT_RANK: MeetingRecordingStatus[] = ["PUBLISHED", "PROCESSING"];
-const MANAGER_RANK: MeetingRecordingStatus[] = [
-  "PUBLISHED",
-  "NOT_PUBLISHED",
-  "PROCESSING",
-  "FAILED",
-];
+/** How each viewer sees each video status, with its rank (lower is better); absent: not shown. */
+type Seen = Partial<Record<VideoStatus, { status: MeetingRecordingStatus; rank: number }>>;
 
-function asSeenBy(video: MeetingVideo, manages: boolean): MeetingRecordingStatus | null {
-  if (!manages) {
-    if (video.studentVisible) return "PUBLISHED";
-    return video.status === "PROCESSING" ? "PROCESSING" : null;
-  }
-  switch (video.status) {
-    case "PUBLISHED":
-      return "PUBLISHED";
-    case "UNPUBLISHED":
-      return "NOT_PUBLISHED";
-    case "PROCESSING":
-      return "PROCESSING";
-    case "FAILED":
-    case "UNAVAILABLE":
-      return "FAILED";
-    case "DELETED":
-      return null;
-  }
-}
+const STUDENT: Seen = {
+  PUBLISHED: { status: "PUBLISHED", rank: 0 },
+  PROCESSING: { status: "PROCESSING", rank: 1 },
+};
+
+const MANAGER: Seen = {
+  PUBLISHED: { status: "PUBLISHED", rank: 0 },
+  UNPUBLISHED: { status: "NOT_PUBLISHED", rank: 1 },
+  PROCESSING: { status: "PROCESSING", rank: 2 },
+  FAILED: { status: "FAILED", rank: 3 },
+  UNAVAILABLE: { status: "FAILED", rank: 3 },
+};
 
 export function pickMeetingRecording(
   videos: readonly MeetingVideo[],
   manages: boolean,
 ): MeetingRecording | null {
-  const rank = manages ? MANAGER_RANK : STUDENT_RANK;
-  let best: { video: MeetingVideo; rank: number } | null = null;
+  let best: { video: MeetingVideo; status: MeetingRecordingStatus; rank: number } | null = null;
   for (const video of videos) {
-    const status = asSeenBy(video, manages);
-    if (status === null) continue;
-    const r = rank.indexOf(status);
+    if (!manages && !video.forStudents) continue;
+    const seen = (manages ? MANAGER : STUDENT)[video.status];
+    if (seen === undefined) continue;
     if (
       best === null ||
-      r < best.rank ||
-      (r === best.rank && video.createdAt.getTime() > best.video.createdAt.getTime())
+      seen.rank < best.rank ||
+      (seen.rank === best.rank && video.createdAt.getTime() > best.video.createdAt.getTime())
     )
-      best = { video, rank: r };
+      best = { video, ...seen };
   }
-  if (best === null) return null;
-  const status = rank[best.rank];
-  return status === undefined ? null : { videoId: best.video.id, status };
+  return best === null ? null : { videoId: best.video.id, status: best.status };
 }

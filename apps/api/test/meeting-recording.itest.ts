@@ -4,7 +4,7 @@ import { ClassMeetingsService } from "@glim/modules/class-meeting";
 import { unwrap } from "@glim/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "./harness";
-import { createPersonas, type PersonaName, type Personas } from "./personas";
+import { createPersonas, enrollStudent, type PersonaName, type Personas } from "./personas";
 
 /**
  * A Class Meeting's recording as each viewer may see it (ui-overhaul #01). Students get PUBLISHED
@@ -19,13 +19,13 @@ let day = 0;
 const q = <R extends object>(text: string, values: unknown[] = []) =>
   t.db.pool.query<R>(text, values);
 
-/** A meeting of O1 on its own day, so none clash. */
-async function meeting(): Promise<string> {
+/** A meeting on its own day, so none clash. */
+async function meeting(offering: "O1" | "O2" = "O1"): Promise<string> {
   day += 1;
   const date = `2026-12-${String(day).padStart(2, "0")}`;
   const created = unwrap(
     await t.app.get(ClassMeetingsService).create(
-      p.world.offerings.O1,
+      p.world.offerings[offering],
       {
         title: `Lecture ${date}`,
         scheduledStart: `${date}T09:00:00Z`,
@@ -45,6 +45,7 @@ async function video(
     visibility?: "ENROLLED" | "STAFF_ONLY";
     publishAfter?: string;
     createdAt?: string;
+    offering?: "O1" | "O2";
   } = {},
 ): Promise<string> {
   youtubeIds += 1;
@@ -55,7 +56,7 @@ async function video(
      VALUES ($1, $2, 'LINK', 'Recording', $3, $4, $5, $6, coalesce($7::timestamptz, now()))
      RETURNING id`,
     [
-      p.world.offerings.O1,
+      p.world.offerings[over.offering ?? "O1"],
       meetingId,
       status,
       over.visibility ?? "ENROLLED",
@@ -138,6 +139,13 @@ describe("a Class Meeting's recording, for a student", () => {
     expect(await seenBy("sEnrolled", id)).toEqual({ videoId: link, status: "PUBLISHED" });
   });
 
+  it("shows nothing while a staff-only video processes", async () => {
+    const id = await meeting();
+    await video(id, { status: "PROCESSING", visibility: "STAFF_ONLY" });
+    expect(await seenBy("sEnrolled", id)).toBeNull();
+    expect(await seenBy("l1Primary", id)).toMatchObject({ status: "PROCESSING" });
+  });
+
   it("gives nothing to students of other offerings", async () => {
     const id = await meeting();
     await video(id);
@@ -189,11 +197,48 @@ describe("a Class Meeting's recording, for staff", () => {
       headers: p.l1Primary.headers,
     });
     expect(one.json<ClassMeeting>().recording).toEqual({ videoId: v, status: "NOT_PUBLISHED" });
+    const edited = await t.request({
+      method: "PATCH",
+      url: `/api/v1/class-meetings/${id}`,
+      headers: {
+        ...p.l1Primary.headers,
+        "if-match": `"${String(one.json<ClassMeeting>().version)}"`,
+      },
+      payload: { title: "Renamed" },
+    });
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json<{ meeting: ClassMeeting }>().meeting.recording).toEqual({
+      videoId: v,
+      status: "NOT_PUBLISHED",
+    });
     const student = await t.request({
       url: `/api/v1/class-meetings/${id}`,
       headers: p.sEnrolled.headers,
     });
     expect(student.json<ClassMeeting>().recording).toBeNull();
+  });
+
+  it("decides per offering for someone who teaches one course and studies another", async () => {
+    // l4Other is the primary Lecturer of O2; here they also take O1.
+    await enrollStudent(t, p.world, p.l4Other.userId, "Other", {
+      roles: [],
+      studies: { O1: "ENROLLED" },
+    });
+    const taught = await meeting("O2");
+    const shown = await video(taught, { status: "UNPUBLISHED", offering: "O2" });
+    const studied = await meeting("O1");
+    await video(studied, { status: "UNPUBLISHED" });
+    const schedule = await t.request({
+      url: "/api/v1/me/schedule?from=2026-12-01T00:00:00Z&to=2027-01-01T00:00:00Z",
+      headers: p.l4Other.headers,
+    });
+    expect(schedule.statusCode, schedule.body).toBe(200);
+    const items = schedule.json<{ items: (ClassMeeting & { as: string })[] }>().items;
+    expect(items.find((m) => m.id === taught)).toMatchObject({
+      as: "LECTURER",
+      recording: { videoId: shown, status: "NOT_PUBLISHED" },
+    });
+    expect(items.find((m) => m.id === studied)).toMatchObject({ as: "STUDENT", recording: null });
   });
 
   it("keeps each list item small (≤ 2 KB)", async () => {

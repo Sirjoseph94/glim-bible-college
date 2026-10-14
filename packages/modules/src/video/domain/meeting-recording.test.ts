@@ -3,7 +3,7 @@ import { pickMeetingRecording, type MeetingVideo } from "./meeting-recording";
 
 const video = (over: Partial<MeetingVideo> & { id: string }): MeetingVideo => ({
   status: "PUBLISHED",
-  studentVisible: true,
+  forStudents: true,
   createdAt: new Date("2026-10-01T10:00:00Z"),
   ...over,
 });
@@ -23,30 +23,32 @@ describe("pickMeetingRecording, for a student", () => {
   });
 
   it("shows nothing for a published video the student can't watch (staff-only or not released)", () => {
-    expect(pickMeetingRecording([video({ id: "a", studentVisible: false })], false)).toBeNull();
+    expect(pickMeetingRecording([video({ id: "a", forStudents: false })], false)).toBeNull();
   });
 
-  it("shows PROCESSING while a video processes", () => {
+  it("shows PROCESSING while a video they'll be able to watch processes", () => {
+    expect(pickMeetingRecording([video({ id: "a", status: "PROCESSING" })], false)).toEqual({
+      videoId: "a",
+      status: "PROCESSING",
+    });
+  });
+
+  it("shows nothing for a processing video that won't be for them", () => {
     expect(
-      pickMeetingRecording(
-        [video({ id: "a", status: "PROCESSING", studentVisible: false })],
-        false,
-      ),
-    ).toEqual({ videoId: "a", status: "PROCESSING" });
+      pickMeetingRecording([video({ id: "a", status: "PROCESSING", forStudents: false })], false),
+    ).toBeNull();
   });
 
   it.each(["UNPUBLISHED", "UNAVAILABLE", "FAILED", "DELETED"] as const)(
     "shows nothing for a %s video",
     (status) => {
-      expect(
-        pickMeetingRecording([video({ id: "a", status, studentVisible: false })], false),
-      ).toBeNull();
+      expect(pickMeetingRecording([video({ id: "a", status })], false)).toBeNull();
     },
   );
 
   it("prefers a playable video over a processing one, whatever their age", () => {
     const videos = [
-      video({ id: "upload", status: "PROCESSING", studentVisible: false, createdAt: newer }),
+      video({ id: "upload", status: "PROCESSING", createdAt: newer }),
       video({ id: "link", createdAt: older }),
     ];
     expect(pickMeetingRecording(videos, false)).toEqual({ videoId: "link", status: "PUBLISHED" });
@@ -59,11 +61,17 @@ describe("pickMeetingRecording, for a student", () => {
 });
 
 describe("pickMeetingRecording, for staff who manage the offering's videos", () => {
-  it("is PUBLISHED for any published video, visible to students or not", () => {
-    expect(pickMeetingRecording([video({ id: "a", studentVisible: false })], true)).toEqual({
+  it("is PUBLISHED for any published video, meant for students or not", () => {
+    expect(pickMeetingRecording([video({ id: "a", forStudents: false })], true)).toEqual({
       videoId: "a",
       status: "PUBLISHED",
     });
+  });
+
+  it("shows PROCESSING for a staff-only video too", () => {
+    expect(
+      pickMeetingRecording([video({ id: "a", status: "PROCESSING", forStudents: false })], true),
+    ).toEqual({ videoId: "a", status: "PROCESSING" });
   });
 
   it("maps UNPUBLISHED to NOT_PUBLISHED, and FAILED and UNAVAILABLE to FAILED", () => {

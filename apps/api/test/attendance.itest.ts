@@ -227,8 +227,16 @@ describe("finalization", () => {
     const service = t.app.get(AttendanceService);
     expect(await service.finalize(m.id)).toBe("SKIPPED"); // not ended yet
     await at("2026-11-03T09:05:00Z");
-    unwrap(await t.app.get(MeetingLifecycleService).start(m.id, SYSTEM_ACTOR));
-    unwrap(await t.app.get(MeetingLifecycleService).end(m.id, SYSTEM_ACTOR));
+    unwrap(
+      await t.app
+        .get(MeetingLifecycleService)
+        .start(m.id, { ...SYSTEM_ACTOR, userId: p.l1Primary.userId }),
+    );
+    unwrap(
+      await t.app
+        .get(MeetingLifecycleService)
+        .end(m.id, { ...SYSTEM_ACTOR, userId: p.l1Primary.userId }),
+    );
     // The worker's subscriber queues finalization after the 10-minute finalize delay.
     const dispatch = createDispatcher(createSubscribers(t.app));
     await drainQueues(t.boss, { "domain-event": (job) => dispatch(job.data as DomainEvent) });

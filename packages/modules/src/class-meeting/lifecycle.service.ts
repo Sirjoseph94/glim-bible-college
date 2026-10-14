@@ -230,7 +230,7 @@ export class MeetingLifecycleService {
    */
   async start(
     id: string,
-    actor: AuditActor,
+    actor: AuditActor & { userId: string },
   ): Promise<
     DomainResult<{ meeting: ClassMeeting; onlineLink: string | null; recordingNotice: string }>
   > {
@@ -259,7 +259,10 @@ export class MeetingLifecycleService {
   }
 
   /** End: a LIVE class (or one with roll call that never went online) becomes ENDED. */
-  async end(id: string, actor: AuditActor): Promise<DomainResult<ClassMeeting>> {
+  async end(
+    id: string,
+    actor: AuditActor & { userId: string },
+  ): Promise<DomainResult<ClassMeeting>> {
     const changed = await this.apply(id, "END", actor);
     if (!changed.ok) return changed;
     const [meeting] = await this.meetings.viewAll([id], actor.userId);

@@ -114,7 +114,10 @@ const videoOf = async (meetingId: string) =>
     )
   ).rows[0];
 
-/** The meeting's `recording` in the student's list of O1's Class Meetings. */
+/**
+ * The meeting's `recording` in the student's list of O1's Class Meetings. Signs sEnrolled in
+ * afresh first (and keeps the new headers): the clock has moved past their last sign-in.
+ */
 async function recordingSeenBySEnrolled(meetingId: string) {
   p.sEnrolled.headers = await sessionFor(t, p.sEnrolled.userId);
   const list = await t.request({
