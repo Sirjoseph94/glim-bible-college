@@ -227,7 +227,7 @@ const AREA_HINTS: Record<string, string> = {
   "/results/semesters": "Course and semester results.",
   "/admin/users": "Accounts and roles.",
   "/admin/settings": "College details, videos and the audit log.",
-  "/admin/ops": "Failures and job queues.",
+  "/admin/ops": "Failures, job queues and the Google and YouTube integrations.",
 };
 
 /**

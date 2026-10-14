@@ -2,6 +2,7 @@ import type { StaffRole } from "@glim/contracts";
 // The stack Playwright drives (ticket 03): the real API and SPA on a fresh database, with an
 // in-memory mailer whose messages are readable on a separate, test-only port.
 import "reflect-metadata";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createBoss, createPool, Db } from "@glim/db";
 import { createTestDatabase, startTestServices } from "@glim/db/testing";
@@ -38,7 +39,12 @@ export const E2E_ADMIN = { email: "e2e-admin@glim.test", displayName: "Esther Ad
 const services = await startTestServices();
 const base = loadConfig();
 // The browser uploads straight to this bucket, so presigned URLs (and the CSP) name its server.
-const config = { ...base, storage: { ...base.storage, endpoint: services.s3.endpoint } };
+const config = {
+  ...base,
+  storage: { ...base.storage, endpoint: services.s3.endpoint },
+  // Lets the integrations spec connect the fake YouTube channel (its grant is sealed with it).
+  tokenEncryptionKey: randomBytes(32),
+};
 const logger = createLogger({ service: "e2e", level: "warn" });
 const objectStorage = new S3ObjectStorage({
   endpoint: services.s3.endpoint,
@@ -90,6 +96,7 @@ const E2E_STAFF: [email: string, displayName: string, role: StaffRole][] = [
   ["e2e-videos@glim.test", "Vera Videos", "SYSTEM_ADMIN"],
   ["e2e-registrar@glim.test", "Remi Registrar", "REGISTRAR"],
   ["e2e-opspage@glim.test", "Opal Ops", "SYSTEM_ADMIN"],
+  ["e2e-integrations@glim.test", "Ina Integrations", "SYSTEM_ADMIN"],
 ];
 for (const [email, displayName, role] of E2E_STAFF) {
   await app

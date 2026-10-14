@@ -15,6 +15,7 @@ import { PageHeader } from "../components/app/page-header";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { useDetailBar } from "../components/app/shell-parts";
 import { AttendanceRow } from "../components/teaching/attendance-row";
+import { MeetParticipants } from "../components/teaching/meet-participants";
 import { Time } from "../components/time";
 import { Badge, type BadgeStatus, type Tone } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
@@ -585,6 +586,8 @@ export function MeetingAttendancePage() {
           </>
         ) : view.attendanceState === "PENDING" ? (
           "Not taken yet."
+        ) : view.attendanceState === "REVIEW_REQUIRED" ? (
+          "Needs your check: someone in the Google Meet call isn't identified yet, or the call was much shorter than the class."
         ) : (
           "Provisional: it becomes final shortly after the class ends."
         )}
@@ -638,6 +641,10 @@ export function MeetingAttendancePage() {
               </p>
             </>
           )}
+          {/* Google Meet classes: who was online, to confirm (integration slice). */}
+          {meeting.data !== undefined && meeting.data.providerStatus !== null ? (
+            <MeetParticipants meetingId={meetingId} />
+          ) : null}
         </div>
         {/* Desktop: the class's facts beside the list (§11.8). */}
         <aside aria-label="About this class" className="space-y-3">

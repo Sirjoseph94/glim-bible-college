@@ -14,6 +14,9 @@ const base = {
   room: null,
   hasOnlineLink: true,
   onlineLink: null,
+  providerStatus: null,
+  joinUrl: null,
+  provisionError: null,
 } as unknown as ClassMeeting;
 
 function render(state: ClassMeeting["state"], extra: Partial<ClassMeeting> = {}) {
@@ -75,6 +78,12 @@ describe("ClassMeetingCard for a student (handoff §9.14)", () => {
     });
     expect(html).toContain("On campus: Chapel");
     expect(buttons(html)).toEqual([]);
+  });
+
+  it("lets students try a Google Meet class whose link is still being made, or join by phone", () => {
+    const html = render("OPEN", { hasOnlineLink: false, providerStatus: "PENDING" });
+    expect(html).toContain("Online");
+    expect(buttons(html)).toEqual(["Join class", "Join by phone instead"]);
   });
 
   it("never shows the Meet link itself", () => {

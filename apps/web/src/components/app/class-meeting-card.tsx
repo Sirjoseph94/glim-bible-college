@@ -39,7 +39,25 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
   const [problem, setProblem] = useState<{ text: string; linkGoogle: boolean } | null>(null);
+  const [phone, setPhone] = useState<
+    { region: string; phone: string; pin: string }[] | "none" | null
+  >(null);
   const live = meeting.state === "LIVE";
+  const join = () =>
+    api<typeof meetings.joinClassMeeting>("POST", "/class-meetings/:id/join", {
+      params: { id: meeting.id },
+    });
+  const failed = (error: unknown) => {
+    setProblem({
+      text: errorText(error),
+      linkGoogle: error instanceof ApiError && error.code === "GOOGLE_ACCOUNT_REQUIRED",
+    });
+    // The class closed (or isn't open yet): fetch its real state for the card.
+    if (error instanceof ApiError && error.code === "JOIN_WINDOW_CLOSED") {
+      void queryClient.invalidateQueries({ queryKey: ["me", "schedule"] });
+      void queryClient.invalidateQueries({ queryKey: ["class-meetings"] });
+    }
+  };
   return (
     <div className="space-y-2 pt-2">
       <Button
@@ -49,24 +67,12 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
         onClick={() => {
           setBusy(true);
           setProblem(null);
-          api<typeof meetings.joinClassMeeting>("POST", "/class-meetings/:id/join", {
-            params: { id: meeting.id },
-          })
+          join()
             .then((joined) => {
               setOpening(true);
               window.location.assign(joined.onlineLink);
             })
-            .catch((error: unknown) => {
-              setProblem({
-                text: errorText(error),
-                linkGoogle: error instanceof ApiError && error.code === "GOOGLE_ACCOUNT_REQUIRED",
-              });
-              // The class closed (or isn't open yet): fetch its real state for the card.
-              if (error instanceof ApiError && error.code === "JOIN_WINDOW_CLOSED") {
-                void queryClient.invalidateQueries({ queryKey: ["me", "schedule"] });
-                void queryClient.invalidateQueries({ queryKey: ["class-meetings"] });
-              }
-            })
+            .catch(failed)
             .finally(() => {
               setBusy(false);
             });
@@ -74,6 +80,44 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
       >
         {live ? "Join live class" : "Join class"}
       </Button>
+      {/* Low data (§11.5): Google Meet's dial-in numbers, when Google gives them. */}
+      {meeting.providerStatus !== null && phone === null ? (
+        <Button
+          variant="quiet"
+          size="sm"
+          block
+          onClick={() => {
+            setProblem(null);
+            join()
+              .then((joined) => {
+                setPhone(joined.dialIn === null ? "none" : joined.dialIn.numbers);
+              })
+              .catch(failed);
+          }}
+        >
+          Join by phone instead
+        </Button>
+      ) : null}
+      {phone === "none" ? (
+        <p className="text-body-sm text-ink-muted">
+          Joining by phone isn't available for this class.
+        </p>
+      ) : phone !== null ? (
+        <ul aria-label="Dial-in numbers" className="space-y-1 text-body-sm">
+          {phone.map((n) => (
+            <li key={n.phone}>
+              {n.region}:{" "}
+              <a
+                href={`tel:${n.phone.replaceAll(" ", "")},,${n.pin}#`}
+                className="font-semibold underline"
+              >
+                {n.phone}
+              </a>
+              , PIN {n.pin}#
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div role="status" className="text-body-sm">
         {opening ? <p className="text-ink-muted">Opening Google Meet…</p> : null}
       </div>
@@ -110,12 +154,10 @@ export function ClassMeetingCard({
   const live = meeting.state === "LIVE";
   const soon = startsIn(meeting.scheduledStart, new Date());
   const cancelled = meeting.state === "CANCELLED";
-  const joinable =
-    (meeting.state === "OPEN" || live) && meeting.hasOnlineLink && actions === undefined;
-  const where = [
-    meeting.room ? `On campus: ${meeting.room.name}` : null,
-    meeting.hasOnlineLink ? "Online" : null,
-  ]
+  // A Google Meet class can be joined while its link is being prepared: the server says so.
+  const online = meeting.hasOnlineLink || meeting.providerStatus !== null;
+  const joinable = (meeting.state === "OPEN" || live) && online && actions === undefined;
+  const where = [meeting.room ? `On campus: ${meeting.room.name}` : null, online ? "Online" : null]
     .filter(Boolean)
     .join(" · ");
   return (

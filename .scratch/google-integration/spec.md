@@ -1,6 +1,6 @@
 # Spec: the Google integration slice (Meet, Meet attendance, recording ingest to YouTube)
 
-Status: ready-for-agent
+Status: done
 
 Source documents: `docs/TRD.md` (v3.0) §11, §12.4–12.6, §13.1–13.3, §13.8, §15.3, §17, §19.2, §22.3, Appendix A.1–A.2, A.4.5 and Appendix B; `GLOSSARY.md`; `docs/decisions.md` (C-05, C-16, C-26, C-39, C-43, D-07, D-09, Q-02); ADR-0003. This slice is the follow-up named in `.scratch/school-management-v1/spec.md` → "Follow-up slice: Google Meet integration". **The TRD is the spec here**; this file records only scope, ordering and the decisions the TRD leaves open.
 
