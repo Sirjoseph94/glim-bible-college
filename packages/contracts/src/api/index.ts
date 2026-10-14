@@ -319,8 +319,10 @@ export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollm
 export type { Me } from "./me";
 export {
   MEET_LINK_PATTERN,
+  MEETING_RECORDING_STATUSES,
   type ClassMeeting,
   type ClassMeetingSeries,
+  type MeetingRecordingStatus,
   type ScheduleWarning,
 } from "./meetings";
 export type { AdmissionsReport, ReferralReport } from "./reports";

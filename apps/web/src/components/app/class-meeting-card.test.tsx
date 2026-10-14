@@ -1,5 +1,12 @@
 import type { ClassMeeting } from "@glim/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterContextProvider,
+} from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ClassMeetingCard } from "./class-meeting-card";
@@ -17,14 +24,23 @@ const base = {
   providerStatus: null,
   joinUrl: null,
   provisionError: null,
+  recording: null,
 } as unknown as ClassMeeting;
 
-function render(state: ClassMeeting["state"], extra: Partial<ClassMeeting> = {}) {
-  return renderToStaticMarkup(
-    <QueryClientProvider client={new QueryClient()}>
-      <ClassMeetingCard meeting={{ ...base, ...extra, state }} />
-    </QueryClientProvider>,
+/** Links need a router to build their href; this one has no pages. */
+const router = createRouter({
+  routeTree: createRootRoute(),
+  history: createMemoryHistory({ initialEntries: ["/"] }),
+});
+const markup = (node: ReactNode) =>
+  renderToStaticMarkup(
+    <RouterContextProvider router={router}>
+      <QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>
+    </RouterContextProvider>,
   );
+
+function render(state: ClassMeeting["state"], extra: Partial<ClassMeeting> = {}) {
+  return markup(<ClassMeetingCard meeting={{ ...base, ...extra, state }} />);
 }
 const buttons = (html: string) =>
   [...html.matchAll(/<button[^>]*>(?:<svg.*?<\/svg>)?([^<]*)<\/button>/g)].map((m) => m[1]);
@@ -65,6 +81,28 @@ describe("ClassMeetingCard for a student (handoff §9.14)", () => {
     expect(render("ENDED", { recordingMode: "OFF" })).not.toContain("Recording expected");
   });
 
+  it("says a recording is processing instead of expected", () => {
+    const html = render("ENDED", {
+      recordingMode: "AUTO",
+      recording: { videoId: "v1", status: "PROCESSING" },
+    });
+    expect(html).toContain("Recording processing");
+    expect(html).not.toContain("Recording expected");
+    expect(html).not.toContain("Watch recording");
+  });
+
+  it("links a ready recording to its player", () => {
+    const html = render("ENDED", {
+      recordingMode: "AUTO",
+      recording: { videoId: "v1", status: "PUBLISHED" },
+    });
+    expect(html).toContain("Recording ready");
+    expect(html).toMatch(
+      /<a[^>]*href="\/recordings\/v1"[^>]*>(?:<svg.*?<\/svg>)?Watch recording<\/a>/,
+    );
+    expect(html).not.toContain("Recording expected");
+  });
+
   it("strikes through a cancelled class and offers nothing", () => {
     const html = render("CANCELLED");
     expect(html).toContain("line-through");
@@ -90,5 +128,33 @@ describe("ClassMeetingCard for a student (handoff §9.14)", () => {
     expect(render("LIVE", { onlineLink: "https://meet.google.com/abc-defg-hij" })).not.toContain(
       "meet.google.com",
     );
+  });
+});
+
+describe("ClassMeetingCard for staff who manage the offering's videos", () => {
+  const lecturer = (recording: ClassMeeting["recording"]) =>
+    markup(
+      <ClassMeetingCard
+        meeting={{ ...base, state: "ENDED", recordingMode: "AUTO", recording }}
+        actions={<span>Roll call</span>}
+      />,
+    );
+
+  it("says an unpublished recording is ready to publish", () => {
+    const html = lecturer({ videoId: "v1", status: "NOT_PUBLISHED" });
+    expect(html).toContain("Ready to publish");
+    expect(html).not.toContain("Watch recording");
+  });
+
+  it("says a recording failed", () => {
+    const html = lecturer({ videoId: "v1", status: "FAILED" });
+    expect(html).toContain("Recording failed");
+    expect(html).not.toContain("Watch recording");
+  });
+
+  it("links a published recording next to their own actions", () => {
+    const html = lecturer({ videoId: "v1", status: "PUBLISHED" });
+    expect(html).toContain("Watch recording");
+    expect(html).toContain("Roll call");
   });
 });

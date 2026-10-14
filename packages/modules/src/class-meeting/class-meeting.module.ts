@@ -4,6 +4,7 @@ import { IdentityModule } from "@glim/modules/identity";
 import { NotificationsModule } from "@glim/modules/notifications";
 import { OpsModule } from "@glim/modules/ops";
 import { SchedulingModule } from "@glim/modules/scheduling";
+import { VideoModule } from "@glim/modules/video";
 import { isUuid } from "@glim/shared";
 import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
@@ -41,6 +42,7 @@ class ClassMeetingResources implements OnModuleInit {
     NotificationsModule,
     OpsModule,
     SchedulingModule,
+    VideoModule,
   ],
   providers: [
     ProvisioningService,

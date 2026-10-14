@@ -2,7 +2,7 @@
 
 **What to build:** Class Meeting responses say whether the meeting's recording is expected, processing or ready to watch. The Class Meeting card (`docs/ui-design-handoff.md` §9.14) can then show "Recording processing" and "Recording ready" with a "Watch recording" link, instead of leaving an ended meeting with no next step.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Category:** enhancement
 

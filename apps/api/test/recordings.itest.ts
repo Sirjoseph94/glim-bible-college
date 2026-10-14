@@ -114,6 +114,17 @@ const videoOf = async (meetingId: string) =>
     )
   ).rows[0];
 
+/** The meeting's `recording` in the student's list of O1's Class Meetings. */
+async function recordingSeenBySEnrolled(meetingId: string) {
+  p.sEnrolled.headers = await sessionFor(t, p.sEnrolled.userId);
+  const list = await t.request({
+    url: `/api/v1/course-offerings/${p.world.offerings.O1}/class-meetings`,
+    headers: p.sEnrolled.headers,
+  });
+  expect(list.statusCode, list.body).toBe(200);
+  return list.json<{ items: ClassMeeting[] }>().items.find((m) => m.id === meetingId)?.recording;
+}
+
 beforeAll(async () => {
   world = new MeetWorld(() => t.clock.now());
   provider = new FakeLiveProvider(world);
@@ -271,6 +282,8 @@ describe("failures (§13.8)", () => {
       recording_status: "DISCOVERED",
       error_code: "QUOTA",
     });
+    // Found but not uploaded yet: the card already says it's processing (ui-overhaul #01).
+    expect(await recordingSeenBySEnrolled(c.meeting.id)).toMatchObject({ status: "PROCESSING" });
     const later = await q<{ start_after: Date }>(
       "SELECT start_after FROM pgboss.job WHERE name = 'recording.ingest' AND state = 'created'",
     );
@@ -279,7 +292,12 @@ describe("failures (§13.8)", () => {
     );
     channel().failure = null;
     await settle();
-    expect((await videoOf(c.meeting.id))?.status).toBe("PUBLISHED");
+    const published = await videoOf(c.meeting.id);
+    expect(published?.status).toBe("PUBLISHED");
+    expect(await recordingSeenBySEnrolled(c.meeting.id)).toEqual({
+      videoId: published?.id,
+      status: "PUBLISHED",
+    });
   });
 
   it("degrades the integration when the channel grant is revoked", async () => {

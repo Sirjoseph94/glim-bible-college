@@ -14,6 +14,14 @@ export const MEET_LINK_PATTERN = /^https:\/\/meet\.google\.com\/[A-Za-z0-9-]+(\?
 
 const onlineLink = z.string().trim().max(300).nullable();
 
+export const MEETING_RECORDING_STATUSES = [
+  "PROCESSING",
+  "PUBLISHED",
+  "NOT_PUBLISHED",
+  "FAILED",
+] as const;
+export type MeetingRecordingStatus = (typeof MEETING_RECORDING_STATUSES)[number];
+
 export const classMeetingSchema = z.object({
   id: z.uuid(),
   courseOfferingId: z.uuid(),
@@ -44,6 +52,12 @@ export const classMeetingSchema = z.object({
   provisionError: z.string().nullable(),
   state: z.enum(ENUMS["class_meetings.state"]),
   recordingMode: z.enum(ENUMS["class_meetings.recording_mode"]),
+  /**
+   * The meeting's recording as this viewer may see it; null when there's none to show. Students
+   * get PUBLISHED only when they can play it now, PROCESSING, or null. People who manage the
+   * offering's videos also get NOT_PUBLISHED and FAILED (failed, or taken down by YouTube).
+   */
+  recording: z.object({ videoId: z.uuid(), status: z.enum(MEETING_RECORDING_STATUSES) }).nullable(),
   version: z.number().int(),
 });
 

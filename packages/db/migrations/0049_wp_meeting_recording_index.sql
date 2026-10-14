@@ -1,0 +1,1 @@
+CREATE INDEX "videos_class_meeting" ON "videos" USING btree ("class_meeting_id") WHERE class_meeting_id IS NOT NULL;

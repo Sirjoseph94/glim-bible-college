@@ -246,7 +246,7 @@ export class MeetingLifecycleService {
     });
     if (!changed.ok) return changed;
     const recording = await this.policies.current("RECORDING");
-    const [meeting] = await this.meetings.viewAll([id]);
+    const [meeting] = await this.meetings.viewAll([id], actor.userId);
     if (meeting === undefined) return err(domainError("NOT_FOUND", "Not found."));
     // Latecomers to the course are let in without knocking too (§11.6: sync at start).
     if (meeting.providerStatus === "READY")
@@ -262,7 +262,7 @@ export class MeetingLifecycleService {
   async end(id: string, actor: AuditActor): Promise<DomainResult<ClassMeeting>> {
     const changed = await this.apply(id, "END", actor);
     if (!changed.ok) return changed;
-    const [meeting] = await this.meetings.viewAll([id]);
+    const [meeting] = await this.meetings.viewAll([id], actor.userId);
     return meeting === undefined ? err(domainError("NOT_FOUND", "Not found.")) : ok(meeting);
   }
 

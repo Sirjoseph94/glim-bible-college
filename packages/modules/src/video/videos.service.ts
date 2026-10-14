@@ -1,4 +1,4 @@
-import type { ErrorCode, Video } from "@glim/contracts";
+import type { ErrorCode, Video, VideoStatus } from "@glim/contracts";
 import { Db, PG, pgError, schema, type Database } from "@glim/db";
 import {
   normaliseChannelUrl,
@@ -21,7 +21,12 @@ import {
   type DomainResult,
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, isNull, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  pickMeetingRecording,
+  type MeetingRecording,
+  type MeetingVideo,
+} from "./domain/meeting-recording";
 
 type VideoRow = typeof schema.videos.$inferSelect;
 type Actor = AuditActor & { userId: string };
@@ -213,6 +218,67 @@ export class VideosService {
       .from(v)
       .where(and(eq(v.id, id), this.visible(manages)));
     return visible === undefined ? null : toView(visible);
+  }
+
+  /**
+   * Each Class Meeting's recording as this viewer may see it (ui-overhaul #01), in one query.
+   * Students get the same rule as the video list and playback; people who manage an offering's
+   * videos, decided per offering, see the rest. A null viewer is the system and sees everything.
+   */
+  async recordingsFor(
+    meetings: readonly { id: string; courseOfferingId: string }[],
+    viewerUserId: string | null,
+  ): Promise<Map<string, MeetingRecording>> {
+    const found = new Map<string, MeetingRecording>();
+    if (meetings.length === 0) return found;
+    const v = schema.videos;
+    const studentVisible = this.visible(false) ?? sql`false`;
+    const rows = await this.db.read
+      .select({
+        id: v.id,
+        classMeetingId: v.classMeetingId,
+        courseOfferingId: v.courseOfferingId,
+        status: v.status,
+        createdAt: v.createdAt,
+        studentVisible: sql<boolean>`coalesce(${studentVisible}, false)`,
+      })
+      .from(v)
+      .where(
+        and(
+          inArray(
+            v.classMeetingId,
+            meetings.map((m) => m.id),
+          ),
+          ne(v.status, "DELETED"),
+        ),
+      );
+    if (rows.length === 0) return found;
+    const manages = new Map<string, boolean>();
+    for (const offeringId of new Set(rows.map((r) => r.courseOfferingId)))
+      manages.set(
+        offeringId,
+        viewerUserId === null || (await this.manages(viewerUserId, offeringId)),
+      );
+    const byMeeting = new Map<string, { offeringId: string; videos: MeetingVideo[] }>();
+    for (const row of rows) {
+      if (row.classMeetingId === null) continue;
+      const entry = byMeeting.get(row.classMeetingId) ?? {
+        offeringId: row.courseOfferingId,
+        videos: [],
+      };
+      entry.videos.push({
+        id: row.id,
+        status: row.status as VideoStatus,
+        studentVisible: row.studentVisible,
+        createdAt: row.createdAt,
+      });
+      byMeeting.set(row.classMeetingId, entry);
+    }
+    for (const [meetingId, { offeringId, videos }] of byMeeting) {
+      const recording = pickMeetingRecording(videos, manages.get(offeringId) ?? false);
+      if (recording !== null) found.set(meetingId, recording);
+    }
+    return found;
   }
 
   /**

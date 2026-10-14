@@ -115,7 +115,7 @@ export class ClassMeetingsController {
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof meetings.reprovisionClassMeeting>> {
     unwrap(await this.provisioning.reprovision(params.id, { ...actor, userId: session.userId }));
-    const [meeting] = await this.meetings.viewAll([params.id]);
+    const [meeting] = await this.meetings.viewAll([params.id], session.userId);
     if (meeting === undefined) throw new AppError("NOT_FOUND", "Not found.");
     return meeting;
   }

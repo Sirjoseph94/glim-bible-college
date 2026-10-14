@@ -114,6 +114,9 @@ export const videos = pgTable(
     index("videos_delete_after")
       .on(t.deleteAfter)
       .where(sql`status = 'DELETED'`),
+    index("videos_class_meeting")
+      .on(t.classMeetingId)
+      .where(sql`class_meeting_id IS NOT NULL`),
   ],
 );
 

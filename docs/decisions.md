@@ -109,7 +109,7 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 |---|---|---|---|
 | UI-Q1 | Vocabulary | **`GLOSSARY.md` wins.** UI copy and code say Lecturer, Class Meeting and Matric Number, never "teacher", unqualified "session" or "student number". The handoff's SessionCard is built as `ClassMeetingCard`, and its "Teacher" role and copy are read as Lecturer. | handoff §6.3, §9.14, §12 |
 | UI-Q2 | Player | **Keep the YouTube embed for now** (ADR-0003). WP-UI-06 restyles the facade, stage, resume banner and data-saver tip. No QualityMenu, no Audio only, and no 180-day purge state (recordings are kept indefinitely). | handoff §9.16, §11.4 |
-| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. Until it lands, the card shows only the six real states, with `NO_SHOW` as "Didn't take place". | handoff §9.14 |
+| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. **Done (14 Oct 2026):** the card shows Recording expected, processing, ready (with Watch recording), and for staff Ready to publish or Recording failed. | handoff §9.14 |
 | UI-Q4 | Roll call | Compose it from §9.18 AttendanceRow and the §9.20 offline queue. | WP-UI-09 |
 | UI-Q5 | Course routes | Add `/courses/$offeringId` (WP-UI-05) and `/teach/$offeringId` (WP-UI-09). `/courses` and `/teach` become lists linking to them. Announcements go in the Overview tab. | handoff §11.3, §11.9 |
 | UI-Q6 | Lecturer home | A Lecturer's `/` is Lecturer Today (§11.7). | WP-UI-04/09 |

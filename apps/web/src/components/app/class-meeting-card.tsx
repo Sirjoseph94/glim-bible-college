@@ -7,7 +7,7 @@ import { errorText } from "../../api/error-copy";
 import { Icon } from "../../design/icons";
 import { cn } from "../../design/cn";
 import { Badge, type BadgeStatus } from "../ui/badge";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { Time } from "../time";
 
 const BADGE: Record<ClassMeeting["state"], BadgeStatus> = {
@@ -18,6 +18,45 @@ const BADGE: Record<ClassMeeting["state"], BadgeStatus> = {
   CANCELLED: "cancelled",
   NO_SHOW: "no_show",
 };
+
+/** What the card says about the recording; NOT_PUBLISHED and FAILED reach only staff. */
+const RECORDING: Record<
+  NonNullable<ClassMeeting["recording"]>["status"],
+  { text: string; className: string }
+> = {
+  PROCESSING: { text: "Recording processing", className: "text-ink-muted" },
+  PUBLISHED: { text: "Recording ready", className: "text-success" },
+  NOT_PUBLISHED: { text: "Ready to publish", className: "text-ink-muted" },
+  FAILED: { text: "Recording failed", className: "text-danger" },
+};
+
+/**
+ * The meeting's recording: a word for where it is, and Watch recording once the viewer can play
+ * it. Before a recording exists, an ended class that was recorded expects one.
+ */
+function RecordingStatus({ meeting }: { meeting: ClassMeeting }) {
+  const { recording } = meeting;
+  if (recording === null)
+    return meeting.state === "ENDED" && meeting.recordingMode !== "OFF" ? (
+      <p className="text-body-sm text-ink-muted">Recording expected</p>
+    ) : null;
+  const word = RECORDING[recording.status];
+  return (
+    <div className="space-y-2">
+      <p className={cn("text-body-sm", word.className)}>{word.text}</p>
+      {recording.status === "PUBLISHED" ? (
+        <Link
+          to="/recordings/$videoId"
+          params={{ videoId: recording.videoId }}
+          className={buttonClass({ variant: "secondary", block: true })}
+        >
+          <Icon name="play" size={16} />
+          Watch recording
+        </Link>
+      ) : null}
+    </div>
+  );
+}
 
 /** "in 3 h 20 min" when a time is less than a day away (§10.6), else null. */
 function startsIn(iso: string, now: Date): string | null {
@@ -186,9 +225,7 @@ export function ClassMeetingCard({
           Starts in {soon}
         </p>
       ) : null}
-      {meeting.state === "ENDED" && meeting.recordingMode !== "OFF" ? (
-        <p className="text-body-sm text-ink-muted">Recording expected</p>
-      ) : null}
+      {cancelled ? null : <RecordingStatus meeting={meeting} />}
       {joinable ? <JoinAction meeting={meeting} /> : null}
       {actions && !cancelled ? <div className="pt-2">{actions}</div> : null}
     </article>
