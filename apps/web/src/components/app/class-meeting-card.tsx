@@ -1,14 +1,15 @@
 import type { ClassMeeting, meetings } from "@glim/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { api, ApiError } from "../../api/client";
-import { errorText } from "../../api/error-copy";
+import { describeError, errorText } from "../../api/error-copy";
 import { Icon } from "../../design/icons";
 import { cn } from "../../design/cn";
 import { Badge, type BadgeStatus } from "../ui/badge";
 import { Button, buttonClass } from "../ui/button";
 import { Time } from "../time";
+import { joinWaitUntil, secondsLeft } from "./join-wait";
 
 const BADGE: Record<ClassMeeting["state"], BadgeStatus> = {
   SCHEDULED: "scheduled",
@@ -77,7 +78,30 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [problem, setProblem] = useState<{ text: string; linkGoogle: boolean } | null>(null);
+  const [problem, setProblem] = useState<{
+    text: string;
+    title: string;
+    linkGoogle: boolean;
+  } | null>(null);
+  // While the Meet link is being prepared: Join waits for the server's Retry-After.
+  const [waitUntil, setWaitUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (waitUntil === null) return;
+    const timer = setInterval(() => {
+      const at = Date.now();
+      setNow(at);
+      if (at >= waitUntil) {
+        setWaitUntil(null);
+        setProblem((p) => (p === null ? p : { ...p, text: `${p.title}. You can try again now.` }));
+      }
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [waitUntil]);
+  const waiting = waitUntil === null ? null : secondsLeft(waitUntil, now);
+  const problemId = useId();
   const [phone, setPhone] = useState<
     { region: string; phone: string; pin: string }[] | "none" | null
   >(null);
@@ -89,8 +113,12 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
   const failed = (error: unknown) => {
     setProblem({
       text: errorText(error),
+      title: describeError(error).title,
       linkGoogle: error instanceof ApiError && error.code === "GOOGLE_ACCOUNT_REQUIRED",
     });
+    const at = Date.now();
+    setNow(at);
+    setWaitUntil(joinWaitUntil(error, at));
     // The class closed (or isn't open yet): fetch its real state for the card.
     if (error instanceof ApiError && error.code === "JOIN_WINDOW_CLOSED") {
       void queryClient.invalidateQueries({ queryKey: ["me", "schedule"] });
@@ -103,6 +131,8 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
         variant={live ? "live" : "primary"}
         block
         loading={busy}
+        disabled={waiting !== null}
+        {...(waiting === null ? {} : { "aria-describedby": problemId })}
         onClick={() => {
           setBusy(true);
           setProblem(null);
@@ -160,10 +190,12 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
       <div role="status" className="text-body-sm">
         {opening ? <p className="text-ink-muted">Opening Google Meet…</p> : null}
       </div>
-      <div role="alert" className="text-body-sm">
+      <div role="alert" id={problemId} className="text-body-sm">
         {problem ? (
           <p className="text-warning">
-            {problem.text}{" "}
+            {waiting === null
+              ? problem.text
+              : `${problem.title}. Try again in ${String(waiting)} s.`}{" "}
             {problem.linkGoogle ? (
               <Link to="/profile" className="font-semibold underline">
                 Link Google account
@@ -219,6 +251,9 @@ export function ClassMeetingCard({
         <Time value={meeting.scheduledEnd} withDate={false} />
         {where ? ` · ${where}` : null}
       </p>
+      {cancelled && meeting.cancelReason !== null ? (
+        <p className="text-body-sm text-ink-muted">{meeting.cancelReason}</p>
+      ) : null}
       {meeting.state === "SCHEDULED" && soon ? (
         <p className="flex items-center gap-1 text-label text-info">
           <Icon name="clock" size={16} />

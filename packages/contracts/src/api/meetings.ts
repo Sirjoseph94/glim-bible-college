@@ -51,6 +51,8 @@ export const classMeetingSchema = z.object({
   /** Why the space couldn't be created, for people who manage the meeting. */
   provisionError: z.string().nullable(),
   state: z.enum(ENUMS["class_meetings.state"]),
+  /** Why it was cancelled, for everyone who sees it; null unless CANCELLED. */
+  cancelReason: z.string().nullable(),
   recordingMode: z.enum(ENUMS["class_meetings.recording_mode"]),
   /**
    * The meeting's recording as this viewer may see it; null when there's none to show. Students

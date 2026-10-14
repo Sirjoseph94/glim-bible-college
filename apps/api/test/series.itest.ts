@@ -352,8 +352,16 @@ describe("cancelling", () => {
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json<{ meeting: ClassMeeting; cancelled: number }>()).toMatchObject({
       cancelled: 1,
-      meeting: { state: "CANCELLED" },
+      meeting: { state: "CANCELLED", cancelReason: "Lecturer at a conference" },
     });
+    // Students see the reason too, as the cancel form promises; other meetings have none.
+    const asStudent = await t.request({
+      url: `/api/v1/class-meetings/${target.id}`,
+      headers: p.sEnrolled.headers,
+    });
+    expect(asStudent.statusCode, asStudent.body).toBe(200);
+    expect(asStudent.json<ClassMeeting>().cancelReason).toBe("Lecturer at a conference");
+    expect((await meeting(meetings[8]?.id ?? "")).cancelReason).toBeNull();
     expect(
       await count("SELECT count(*) AS n FROM meeting_lecturer_slots WHERE class_meeting_id = $1", [
         target.id,

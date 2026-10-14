@@ -2,7 +2,7 @@
 
 **What to build:** A cancelled Class Meeting shows the reason it was cancelled (handoff §9.14). When joining fails with `PROVIDER_NOT_READY`, the card counts down from the server's `Retry-After` before letting the student try again.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Category:** enhancement
 

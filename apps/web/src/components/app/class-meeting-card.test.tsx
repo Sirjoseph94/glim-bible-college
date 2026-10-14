@@ -25,6 +25,7 @@ const base = {
   joinUrl: null,
   provisionError: null,
   recording: null,
+  cancelReason: null,
 } as unknown as ClassMeeting;
 
 /** Links need a router to build their href; this one has no pages. */
@@ -101,6 +102,12 @@ describe("ClassMeetingCard for a student (handoff §9.14)", () => {
       /<a[^>]*href="\/recordings\/v1"[^>]*>(?:<svg.*?<\/svg>)?Watch recording<\/a>/,
     );
     expect(html).not.toContain("Recording expected");
+  });
+
+  it("says why a class was cancelled", () => {
+    expect(render("CANCELLED", { cancelReason: "Lecturer at a conference" })).toContain(
+      "Lecturer at a conference",
+    );
   });
 
   it("strikes through a cancelled class and offers nothing", () => {

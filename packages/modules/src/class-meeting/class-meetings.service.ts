@@ -662,6 +662,7 @@ export class ClassMeetingsService {
         joinUrl: showLink ? meeting.joinUrl : null,
         provisionError: showLink ? meeting.provisionError : null,
         state: meeting.state as ClassMeeting["state"],
+        cancelReason: meeting.state === "CANCELLED" ? meeting.cancelReason : null,
         recordingMode: meeting.recordingMode as RecordingMode,
         recording: recordings.get(meeting.id) ?? null,
         version: meeting.version,
