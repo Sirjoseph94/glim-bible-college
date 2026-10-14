@@ -124,6 +124,12 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 | UI-Q15 | Spec references | The handoff's `SCHOOL_LMS_BUILD_SPEC.md` v2.1 references mean the equivalent sections of `docs/TRD.md` v3.0 (frontend is §18). | — |
 | UI-Q16 | Tailwind's default palette | WP-UI-01 adds the tokens alongside Tailwind's defaults, with the raw-value lint as a warning. WP-UI-12 removes the defaults and makes the lint an error (done). | handoff §15.1 |
 
+## 14 October 2026 — Google integration
+
+| ID | Topic | Decision | Where |
+|---|---|---|---|
+| GI-1 | When Google can't create a Class Meeting's Meet link | **Confirmed by the owner.** If the space isn't READY (still being made, or Google refused) and a Lecturer pasted a Meet link on the Class Meeting, students joining get the pasted link. Otherwise they're told the link is being prepared (`PROVIDER_NOT_READY`). The TRD (§11.6, §11.10) had no way in for students when provisioning failed. | `.scratch/google-integration/spec.md`, `lifecycle.service.ts` |
+
 ## Defaults applied — awaiting owner confirmation
 
 These came up while writing the spec; none was put to the owner yet. They're built as defaults that are easy to change.
