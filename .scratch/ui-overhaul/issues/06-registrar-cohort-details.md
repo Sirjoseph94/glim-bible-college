@@ -2,7 +2,7 @@
 
 **What to build:** The Registrar's semester results page (handoff §11.10) shows each cohort's level and "Courses finalized 8 of 8". A waiting cohort names the reopened course ("Waiting on GRK 301"). The transcript request list shows the issued transcript's verification code.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Category:** enhancement
 
