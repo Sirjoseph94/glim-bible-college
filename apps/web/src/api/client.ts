@@ -1,7 +1,6 @@
 import type { EndpointSpec, ErrorEnvelope, ResponseOf } from "@glim/contracts";
 import { reportNetworkFailure, reportNetworkSuccess } from "./network";
 
-/** A failed API call, carrying the error envelope (TRD §5.4). */
 /** `Retry-After` as whole seconds from now: a number of seconds or an HTTP date; null if neither. */
 export function retryAfterSeconds(header: string | null, now = new Date()): number | null {
   if (header === null) return null;
@@ -9,9 +8,15 @@ export function retryAfterSeconds(header: string | null, now = new Date()): numb
   if (/^\d+$/.test(value)) return Number(value);
   const at = Date.parse(value);
   if (!/[a-z]/i.test(value) || Number.isNaN(at)) return null;
-  return Math.max(0, Math.ceil((at - now.getTime()) / 1000));
+  return secondsUntil(at, now.getTime());
 }
 
+/** Whole seconds from `now` until `until` (both epoch ms), never below zero. */
+export function secondsUntil(until: number, now: number): number {
+  return Math.max(0, Math.ceil((until - now) / 1000));
+}
+
+/** A failed API call, carrying the error envelope (TRD §5.4). */
 export class ApiError extends Error {
   constructor(
     readonly status: number,

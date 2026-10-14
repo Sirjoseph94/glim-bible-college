@@ -36,3 +36,5 @@ Split from #02 (decision UI-Q9).
 
 **Out of scope:**
 - An audio-only mode or lecture notes on the player.
+
+**Built (2026-10-14), known limit:** a viewer who isn't a student of the course but has the Lecturer role is sent to the teaching page's Recordings tab. Playback doesn't say whether they teach this offering, so a Lecturer who can only play it as an admin lands on a page that says it isn't available. That's rare (staff admins who also lecture); fixing it needs a "manages" flag on playback.

@@ -37,3 +37,5 @@ Split from #02 (decision UI-Q9).
 
 **Out of scope:**
 - Changing how attendance is computed.
+
+**Built (2026-10-14), two changes from the brief after review:** `ranSeconds` is null when the policy's basis is SCHEDULED (the denominator is then the scheduled window, not how long the class ran) and when the class never ran online (roll call only, denominator 0), so the page never says "class ran 0 min" or a misleading length. `rule` carries no `lateGraceMinutes`, because nothing shows it yet.

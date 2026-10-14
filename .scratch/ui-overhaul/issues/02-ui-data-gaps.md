@@ -38,7 +38,7 @@ Rows marked "check" or "confirm" may already be possible. The WP that reaches th
 
 **Triage (2026-10-14):** split into separate tickets, each triaged on its own:
 
-- Already built, so they have no ticket: the late-submission warning (the "Submitting late" banner), the unmatched Meet participants (the roll-call participants review, from the Google integration), and dial-in (`/join` returns `dialIn` and the card has "Join by phone"; Google gives no numbers yet, see spike S-02).
+- Already built, so they have no ticket: the late-submission warning (the "Submitting late" banner on the assignment page, from WP-UI-07), the unmatched Meet participants (the roll-call participants review, from the Google integration), and dial-in (`/join` returns `dialIn` and the card has "Join by phone"; Google gives no numbers yet, see spike S-02).
 - 03 The recording page's course (ready-for-agent)
 - 04 Cancellation reason and retry countdown (ready-for-agent)
 - 05 Attendance explanation (ready-for-agent)

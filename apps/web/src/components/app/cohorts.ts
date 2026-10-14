@@ -43,12 +43,12 @@ export function cohortLabel(code: string, levels: number[]): string {
   return `${code} · Years ${contiguous ? `${String(first)}–${String(last)}` : levels.join(", ")}`;
 }
 
-/** "2 wait on GRK 301, PAS 210" (three courses at most, then "+N"). */
+/** "Waiting on GRK 301, PAS 210 · 2 students" (three courses at most, then "+N"). */
 function waits(s: CohortSummary): string | null {
   if (s.blocked === 0) return null;
   const shown = s.waitingOn.slice(0, 3).join(", ");
   const more = s.waitingOn.length > 3 ? ` +${String(s.waitingOn.length - 3)}` : "";
-  return `${String(s.blocked)} ${s.blocked === 1 ? "waits" : "wait"} on ${shown}${more}`;
+  return `Waiting on ${shown}${more} · ${String(s.blocked)} ${s.blocked === 1 ? "student" : "students"}`;
 }
 
 /**

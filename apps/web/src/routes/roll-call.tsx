@@ -531,8 +531,8 @@ function OverrideSheet({
 
 /**
  * A Class Meeting's attendance, for its Lecturers (TRD §12.5; handoff §11.8): the counts, then
- * every student, the ones to look at first. ("Participants we couldn't match" and the policy's
- * thresholds wait on the API: .scratch/ui-overhaul/issues/02.)
+ * every student, the ones to look at first, and what Present and Partial mean under the class's
+ * own policy (ui #05). Google Meet participants are reviewed below the list.
  */
 export function MeetingAttendancePage() {
   const { meetingId } = useParams({ from: "/teach/meetings/$meetingId/attendance" });

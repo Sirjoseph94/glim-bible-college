@@ -326,7 +326,6 @@ describe("reading attendance", () => {
       basis: "ACTUAL_CAPPED",
       presentThresholdBp: 7500,
       partialThresholdBp: 2500,
-      lateGraceMinutes: 15,
     });
     // Roll call only, never online: there's no class length to tell.
     expect(body.ranSeconds).toBeNull();

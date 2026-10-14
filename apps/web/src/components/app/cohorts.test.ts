@@ -38,7 +38,7 @@ describe("cohorts (handoff §11.10)", () => {
   it("offers approval while anyone can be approved, naming the course the others wait on", () => {
     const state = cohortState(summarize([row("DRAFT"), row("DRAFT", ["GRK 301", "PAS 210"])]));
     expect(state).toMatchObject({ word: "Ready to approve", next: "approve" });
-    expect(state.note).toBe("1 waits on GRK 301, PAS 210");
+    expect(state.note).toBe("Waiting on GRK 301, PAS 210 · 1 student");
   });
 
   it("names at most three courses", () => {
@@ -49,7 +49,7 @@ describe("cohorts (handoff §11.10)", () => {
         row("DRAFT", ["E 5"]),
       ]),
     );
-    expect(state.note).toBe("3 wait on A 1, B 2, C 3 +2");
+    expect(state.note).toBe("Waiting on A 1, B 2, C 3 +2 · 3 students");
   });
 
   it("offers publishing what is approved but not yet published", () => {
@@ -64,7 +64,7 @@ describe("cohorts (handoff §11.10)", () => {
     expect(cohortState(summarize([row("DRAFT", ["GRK 301"]), row("PUBLISHED")]))).toMatchObject({
       word: "Provisional",
       next: null,
-      note: "1 waits on GRK 301",
+      note: "Waiting on GRK 301 · 1 student",
     });
   });
 

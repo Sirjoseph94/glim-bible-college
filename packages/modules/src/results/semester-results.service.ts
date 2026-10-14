@@ -279,11 +279,20 @@ export class SemesterResultsService {
     return this.rows(this.db.read, scope);
   }
 
+  /** The Registrar's list: the rows, and each programme's Course Offerings and how many are finalized. */
+  async listing(
+    scope: SemesterScope,
+  ): Promise<{ items: SemesterResultRow[]; courses: CourseCounts[] }> {
+    const [items, courses] = await Promise.all([this.list(scope), this.courseCounts(scope)]);
+    return { items, courses };
+  }
+
   /**
    * Per programme in scope: the Course Offerings its students take this semester (enrolled or
-   * completed), and how many have a non-draft course result for every one of those students.
+   * completed), and how many have a non-draft course result for every one of those students. An
+   * offering not finalized yet has no result for some of them, so it doesn't count.
    */
-  async courseCounts(scope: SemesterScope): Promise<CourseCounts[]> {
+  private async courseCounts(scope: SemesterScope): Promise<CourseCounts[]> {
     const { rows } = await this.db.read.execute<{
       programme_id: string;
       programme_code: string;

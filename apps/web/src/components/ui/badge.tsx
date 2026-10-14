@@ -5,7 +5,7 @@ export type Tone = "neutral" | "brand" | "live" | "success" | "warning" | "dange
 
 /** Status words are fixed vocabulary (docs/ui-design-handoff.md §9.3, §12.2). */
 const STATUSES = {
-  // Class Meetings (`no_show` per decision UI-Q3; `processing`/`available` wait on the API change)
+  // Class Meetings (`no_show` per decision UI-Q3; the recording's state is a line on the card)
   scheduled: { tone: "info", word: "Scheduled" },
   open: { tone: "brand", word: "Open to join" },
   live: { tone: "live", word: "Live now" },

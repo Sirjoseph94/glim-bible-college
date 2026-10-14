@@ -187,9 +187,10 @@ export class AttendanceService {
       meeting.finalizedAt === null
         ? null
         : new Date(meeting.finalizedAt.getTime() + policy.lockAfterDays * DAY);
-    // The denominator the records used; 0 means the class never ran online (roll call only).
-    const longest = Math.max(0, ...rows.map(({ record }) => record.effectiveSeconds));
-    const ranSeconds = longest > 0 ? longest : null;
+    // Every record shares the meeting's denominator. It is the time the class ran unless the
+    // policy counts the scheduled length; 0 means it never ran online (roll call only).
+    const denominator = rows[0]?.record.effectiveSeconds ?? 0;
+    const ranSeconds = policy.basis !== "SCHEDULED" && denominator > 0 ? denominator : null;
     return {
       meetingId,
       attendanceState: meeting.attendanceState as MeetingAttendance["attendanceState"],
@@ -199,7 +200,6 @@ export class AttendanceService {
         basis: policy.basis,
         presentThresholdBp: policy.presentThresholdBp,
         partialThresholdBp: policy.partialThresholdBp,
-        lateGraceMinutes: policy.lateGraceMinutes,
       },
       ranSeconds,
       records: rows.map(({ record, status, givenName, familyName, matricNumber }) => ({

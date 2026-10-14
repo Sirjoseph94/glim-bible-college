@@ -56,11 +56,7 @@ export class CourseResultsController {
   async semesterResults(
     @Query(results.listSemesterResults) query: QueryOf<typeof results.listSemesterResults>,
   ): Promise<Reply<typeof results.listSemesterResults>> {
-    const [items, courses] = await Promise.all([
-      this.semesters.list(query),
-      this.semesters.courseCounts(query),
-    ]);
-    return { items, courses };
+    return this.semesters.listing(query);
   }
 
   @Endpoint(results.computeSemesterResults)

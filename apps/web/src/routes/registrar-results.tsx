@@ -367,8 +367,8 @@ function confirmText(s: CohortSummary, action: "approve" | "publish"): string {
 /**
  * The Registrar's semester results (TRD §14.5; handoff §11.10): each cohort's state with its next
  * step ("Approve and publish"), the students' results, and transcript requests alongside
- * (decision UI-Q8). Compute runs first, from finalized course results. (The handoff's "Courses
- * finalized 8 of 8" waits on the API: .scratch/ui-overhaul/issues/02.)
+ * (decision UI-Q8). Compute runs first, from finalized course results. Cohorts are programmes,
+ * with their levels and how many of their courses are finalized (ui #06).
  */
 export function SemesterResultsPage() {
   const queryClient = useQueryClient();

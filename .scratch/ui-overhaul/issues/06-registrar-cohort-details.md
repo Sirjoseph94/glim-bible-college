@@ -42,3 +42,5 @@ Split from #02 (decision UI-Q9).
 
 **Out of scope:**
 - Approving per level. The scope stays per programme.
+
+**Built (2026-10-14), notes:** `levelNo` is nullable, because imported past results have no semester enrollment (the label then shows the programme alone). `courses` entries also carry `programmeCode`, because the page groups cohorts by programme code before the programme list has loaded. An offering counts as finalized only when every enrolled student has a non-draft course result, so an offering not finalized yet (no results) doesn't count. The cohort note reads "Waiting on GRK 301, PAS 210 · 2 students".

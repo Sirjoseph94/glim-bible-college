@@ -74,7 +74,7 @@ function MyCourses({ schedule }: { schedule: ScheduledMeeting[] }) {
  * A student's Today (docs/ui-design-handoff.md §11.2): what to join now, the rest of today, then
  * their courses. Refreshed every 30 s while the tab is visible so a class shows when it opens.
  * "Continue watching" and "Due this week" wait on data the API doesn't return yet
- * (.scratch/ui-overhaul/issues/02).
+ * (.scratch/ui-overhaul/issues/07).
  */
 function StudentToday({ me }: { me: Me }) {
   const schedule = useQuery({ ...myScheduleQuery, refetchInterval: 30_000 });
@@ -147,8 +147,9 @@ function StudentToday({ me }: { me: Me }) {
 
 /**
  * A Lecturer's Today (docs/ui-design-handoff.md §11.7, decision UI-Q6): the class to start now,
- * the rest of today, then what's coming up, each with its actions. "Needs your attention" and
- * the Meet lobby count wait on data the API doesn't return yet (.scratch/ui-overhaul/issues/02).
+ * the rest of today, then what's coming up, each with its actions. "Needs your attention" waits
+ * on data the API doesn't return yet (.scratch/ui-overhaul/issues/08); the Meet lobby count
+ * won't be built (.out-of-scope/meet-lobby-count.md).
  */
 function LecturerToday({ me }: { me: Me }) {
   const schedule = useQuery({ ...myScheduleQuery, refetchInterval: 30_000 });

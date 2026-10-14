@@ -78,9 +78,11 @@ export const meetingAttendanceSchema = z.object({
     basis: z.enum(["SCHEDULED", "ACTUAL", "ACTUAL_CAPPED"]),
     presentThresholdBp: z.number().int(),
     partialThresholdBp: z.number().int(),
-    lateGraceMinutes: z.number().int(),
   }),
-  /** How long the class counted as running (the records' denominator); null if unknown. */
+  /**
+   * How long the class ran online (the records' denominator under an ACTUAL basis); null when
+   * the policy counts the scheduled length or the class never ran online.
+   */
   ranSeconds: z.number().int().nullable(),
   records: z.array(
     z.object({

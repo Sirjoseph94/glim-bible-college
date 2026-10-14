@@ -5,7 +5,6 @@ const rule = {
   basis: "ACTUAL_CAPPED" as const,
   presentThresholdBp: 7500,
   partialThresholdBp: 2500,
-  lateGraceMinutes: 15,
 };
 
 describe("percent", () => {

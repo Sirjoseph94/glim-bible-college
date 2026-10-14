@@ -190,12 +190,11 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
       <div role="status" className="text-body-sm">
         {opening ? <p className="text-ink-muted">Opening Google Meet…</p> : null}
       </div>
-      <div role="alert" id={problemId} className="text-body-sm">
+      {/* Announced once; the countdown below ticks outside the live region. */}
+      <div role="alert" className="text-body-sm">
         {problem ? (
           <p className="text-warning">
-            {waiting === null
-              ? problem.text
-              : `${problem.title}. Try again in ${String(waiting)} s.`}{" "}
+            {waiting === null ? problem.text : `${problem.title}.`}{" "}
             {problem.linkGoogle ? (
               <Link to="/profile" className="font-semibold underline">
                 Link Google account
@@ -204,6 +203,11 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
           </p>
         ) : null}
       </div>
+      {waiting === null ? null : (
+        <p id={problemId} className="text-body-sm text-ink-muted">
+          Try again in {String(waiting)} s.
+        </p>
+      )}
     </div>
   );
 }
