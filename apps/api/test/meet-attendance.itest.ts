@@ -223,6 +223,12 @@ describe("review mode (S-01 not yet passed)", () => {
     const record = await adaIn(m.id);
     // 56 of 60 minutes online.
     expect(record).toMatchObject({ status: "PRESENT", mode: "ONLINE", ratioBp: 9333 });
+    // The page says "class ran 60 min" (ui #05).
+    const whole = await t.request({
+      url: `/api/v1/class-meetings/${m.id}/attendance`,
+      headers: p.l1Primary.headers,
+    });
+    expect(whole.json<MeetingAttendance>().ranSeconds).toBe(3600);
     const audit = await q<{ c: number }>(
       "SELECT count(*)::int AS c FROM audit_logs WHERE action = 'attendance.participant.matched' AND resource_id = $1",
       [m.id],

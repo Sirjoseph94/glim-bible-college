@@ -14,6 +14,7 @@ import { describeError, type ErrorCopy } from "../api/error-copy";
 import { PageHeader } from "../components/app/page-header";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { useDetailBar } from "../components/app/shell-parts";
+import { attendanceExplanation, ranFor } from "../components/teaching/attendance-explanation";
 import { AttendanceRow } from "../components/teaching/attendance-row";
 import { MeetParticipants } from "../components/teaching/meet-participants";
 import { Time } from "../components/time";
@@ -65,12 +66,22 @@ function useBackToCourse(meeting: ClassMeeting | undefined) {
   );
 }
 
-/** "Kings of Judah, part 2 · Mon 12 Oct, 10:00" under a page's title. */
-function MeetingMeta({ meeting }: { meeting: ClassMeeting | undefined }) {
+/**
+ * "Kings of Judah, part 2 · Mon 12 Oct, 10:00" under a page's title, with "class ran 58 min"
+ * where the attendance page knows it (§11.8).
+ */
+function MeetingMeta({
+  meeting,
+  ran = null,
+}: {
+  meeting: ClassMeeting | undefined;
+  ran?: string | null;
+}) {
   if (meeting === undefined) return null;
   return (
     <>
       {meeting.title} · <Time value={meeting.scheduledStart} />
+      {ran === null ? null : ` · ${ran}`}
     </>
   );
 }
@@ -578,7 +589,10 @@ export function MeetingAttendancePage() {
   return (
     <div className="space-y-4">
       {online ? null : <OfflineBanner />}
-      <PageHeader title="Attendance" meta={<MeetingMeta meeting={meeting.data} />} />
+      <PageHeader
+        title="Attendance"
+        meta={<MeetingMeta meeting={meeting.data} ran={ranFor(view.ranSeconds)} />}
+      />
       <p className="text-body-sm text-ink">
         {view.attendanceState === "FINAL" ? (
           <>
@@ -636,9 +650,7 @@ export function MeetingAttendancePage() {
                   />
                 ))}
               </Card>
-              <p className="text-body-sm text-ink-muted">
-                Tap a student to change their status; a reason is required.
-              </p>
+              <p className="text-body-sm text-ink-muted">{attendanceExplanation(view.rule)}</p>
             </>
           )}
           {/* Google Meet classes: who was online, to confirm (integration slice). */}

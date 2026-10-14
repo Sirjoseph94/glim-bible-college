@@ -2,7 +2,7 @@
 
 **What to build:** The Lecturer's attendance review says "class ran 58 min" and explains Present with the policy's own threshold ("in class for at least 75% of the time it ran"), as in handoff §11.8, instead of a generic line.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Category:** enhancement
 

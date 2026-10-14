@@ -182,15 +182,26 @@ export class AttendanceService {
       .innerJoin(pe, eq(pe.id, schema.courseEnrollments.programmeEnrollmentId))
       .where(eq(r.classMeetingId, meetingId))
       .orderBy(asc(s.familyName), asc(s.givenName), asc(r.studentId));
+    const { policy } = snapshot(meeting);
     const lockedAt =
       meeting.finalizedAt === null
         ? null
-        : new Date(meeting.finalizedAt.getTime() + snapshot(meeting).policy.lockAfterDays * DAY);
+        : new Date(meeting.finalizedAt.getTime() + policy.lockAfterDays * DAY);
+    // The denominator the records used; 0 means the class never ran online (roll call only).
+    const longest = Math.max(0, ...rows.map(({ record }) => record.effectiveSeconds));
+    const ranSeconds = longest > 0 ? longest : null;
     return {
       meetingId,
       attendanceState: meeting.attendanceState as MeetingAttendance["attendanceState"],
       finalizedAt: meeting.finalizedAt?.toISOString() ?? null,
       lockedAt: lockedAt?.toISOString() ?? null,
+      rule: {
+        basis: policy.basis,
+        presentThresholdBp: policy.presentThresholdBp,
+        partialThresholdBp: policy.partialThresholdBp,
+        lateGraceMinutes: policy.lateGraceMinutes,
+      },
+      ranSeconds,
       records: rows.map(({ record, status, givenName, familyName, matricNumber }) => ({
         studentId: record.studentId,
         name: `${givenName} ${familyName}`,

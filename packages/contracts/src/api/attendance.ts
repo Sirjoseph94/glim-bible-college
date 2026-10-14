@@ -73,6 +73,15 @@ export const meetingAttendanceSchema = z.object({
   finalizedAt: z.iso.datetime().nullable(),
   /** After this, only overrides change the records. */
   lockedAt: z.iso.datetime().nullable(),
+  /** The ATTENDANCE policy rule the records were computed under (the meeting's snapshot). */
+  rule: z.object({
+    basis: z.enum(["SCHEDULED", "ACTUAL", "ACTUAL_CAPPED"]),
+    presentThresholdBp: z.number().int(),
+    partialThresholdBp: z.number().int(),
+    lateGraceMinutes: z.number().int(),
+  }),
+  /** How long the class counted as running (the records' denominator); null if unknown. */
+  ranSeconds: z.number().int().nullable(),
   records: z.array(
     z.object({
       studentId: z.uuid(),
