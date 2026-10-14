@@ -2,7 +2,7 @@
 
 **What to build:** The recording page's back link goes to the course's Recordings tab and shows the course code (handoff §11.4), instead of "My courses".
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Category:** enhancement
 

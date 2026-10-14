@@ -144,6 +144,9 @@ export const reorderVideos = endpoint({
 
 export const videoPlaybackSchema = z.object({
   videoId: z.uuid(),
+  /** The course it belongs to, for the page's way back. */
+  courseOfferingId: z.uuid(),
+  courseCode: z.string(),
   title: z.string(),
   youtubeVideoId: z.string(),
   /** youtube-nocookie.com, starting at the resume point. */
