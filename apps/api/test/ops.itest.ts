@@ -126,7 +126,7 @@ describe("failures", () => {
 
     expect(
       (await send("sysAdmin", "POST", "/admin/ops/replay/meeting-provision/x")).statusCode,
-    ).toBe(400);
+    ).toBe(404);
     expect(
       (await send("sysAdmin", "POST", "/admin/ops/replay/job/01900000-0000-7000-8000-000000000000"))
         .statusCode,
@@ -190,6 +190,14 @@ describe("YouTube status", () => {
   it("checks in the background: oEmbed reachable and each channel URL resolving", async () => {
     expect((await send("sysAdmin", "GET", "/admin/integrations/youtube/status")).json()).toEqual({
       status: null,
+      // The fake host can act as a channel; none is connected (integration slice).
+      channel: {
+        uploadsEnabled: true,
+        connected: false,
+        status: null,
+        channel: null,
+        lastError: null,
+      },
     });
     await q("UPDATE settings SET youtube_channel_urls = $1", [
       [FAKE_CHANNEL_URL, "https://www.youtube.com/@not-glim"],

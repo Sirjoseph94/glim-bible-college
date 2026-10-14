@@ -14,6 +14,14 @@ export const MEET_LINK_PATTERN = /^https:\/\/meet\.google\.com\/[A-Za-z0-9-]+(\?
 
 const onlineLink = z.string().trim().max(300).nullable();
 
+export const MEETING_RECORDING_STATUSES = [
+  "PROCESSING",
+  "PUBLISHED",
+  "NOT_PUBLISHED",
+  "FAILED",
+] as const;
+export type MeetingRecordingStatus = (typeof MEETING_RECORDING_STATUSES)[number];
+
 export const classMeetingSchema = z.object({
   id: z.uuid(),
   courseOfferingId: z.uuid(),
@@ -26,12 +34,32 @@ export const classMeetingSchema = z.object({
   scheduledEnd: z.iso.datetime({ offset: true }),
   timezone: z.string(),
   room: z.object({ id: z.uuid(), code: z.string(), name: z.string() }).nullable(),
-  /** Whether an online link is set. Students get the link itself from `/join`, near class time. */
+  /**
+   * Whether there is an online link (pasted or provisioned). Students get the link itself from
+   * `/join`, near class time.
+   */
   hasOnlineLink: z.boolean(),
-  /** The link, for people who manage the meeting; null for everyone else. */
+  /** The pasted link, for people who manage the meeting; null for everyone else. */
   onlineLink: z.string().nullable(),
+  /**
+   * Google Meet (integration slice): null when the meeting uses a pasted link. PENDING until the
+   * worker creates the space, READY once it has, ERROR if Google refused.
+   */
+  providerStatus: z.enum(ENUMS["class_meetings.provider_status"]).nullable(),
+  /** The provisioned Meet link, for people who manage the meeting; null for everyone else. */
+  joinUrl: z.string().nullable(),
+  /** Why the space couldn't be created, for people who manage the meeting. */
+  provisionError: z.string().nullable(),
   state: z.enum(ENUMS["class_meetings.state"]),
+  /** Why it was cancelled, for everyone who sees it; null unless CANCELLED. */
+  cancelReason: z.string().nullable(),
   recordingMode: z.enum(ENUMS["class_meetings.recording_mode"]),
+  /**
+   * The meeting's recording as this viewer may see it; null when there's none to show. Students
+   * get PUBLISHED only when they can play it now, PROCESSING, or null. People who manage the
+   * offering's videos also get NOT_PUBLISHED and FAILED (failed, or taken down by YouTube).
+   */
+  recording: z.object({ videoId: z.uuid(), status: z.enum(MEETING_RECORDING_STATUSES) }).nullable(),
   version: z.number().int(),
 });
 
@@ -221,11 +249,33 @@ export const joinClassMeeting = endpoint({
     meetingId: z.uuid(),
     state: z.enum(ENUMS["class_meetings.state"]),
     onlineLink: z.string(),
+    /** PROVIDER: the Meet the app created; PASTED: a link a Lecturer pasted. */
+    linkSource: z.enum(["PROVIDER", "PASTED"]),
     role: z.enum(["STUDENT", "STAFF"]),
     window: z.object({ opensAt: z.iso.datetime(), closesAt: z.iso.datetime() }),
     room: z.object({ code: z.string(), name: z.string() }).nullable(),
+    /** Phone numbers to join by voice on a weak connection, when available (TRD §11.5). */
+    dialIn: z
+      .object({
+        numbers: z.array(z.object({ region: z.string(), phone: z.string(), pin: z.string() })),
+      })
+      .nullable(),
   }),
   successStatus: 200,
+});
+
+/** Asks Google for the Meet space again after it failed (TRD §11.6). */
+export const reprovisionClassMeeting = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/reprovision",
+  summary: "Ask Google for the Meet link again",
+  tag: "Class Meetings",
+  auth: "session",
+  permission: "meeting:class-meeting:manage",
+  resource: { type: "class-meeting", param: "id" },
+  params: idParams,
+  response: classMeetingSchema,
+  successStatus: 202,
 });
 
 /** What the Lecturer sees when starting a class (TRD §11.5): what to do in the room. */

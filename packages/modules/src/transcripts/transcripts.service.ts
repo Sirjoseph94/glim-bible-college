@@ -614,6 +614,7 @@ export class TranscriptsService {
           status: t.status,
           issuedAt: t.issuedAt,
           asOf: t.asOf,
+          verificationCode: t.verificationCode,
         },
       })
       .from(tr)
@@ -646,6 +647,7 @@ export class TranscriptsService {
               status: x.transcript.status as Transcript["status"],
               issuedAt: x.transcript.issuedAt.toISOString(),
               asOf: x.transcript.asOf,
+              verificationCode: x.transcript.verificationCode,
             },
     }));
   }

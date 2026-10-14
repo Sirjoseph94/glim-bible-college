@@ -1,4 +1,4 @@
-import { createBoss, createPool, Db } from "@glim/db";
+import { bucketAcquire, createBoss, createPool, Db } from "@glim/db";
 import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
@@ -6,6 +6,7 @@ import { buildApp } from "./app";
 import { createMailer } from "@glim/integrations/mail/factory";
 import { createIdentityProvider } from "@glim/integrations/oidc/factory";
 import { createObjectStorage } from "@glim/integrations/storage/factory";
+import { createLiveProvider } from "@glim/integrations/live-provider/factory";
 import { createVideoHost } from "@glim/integrations/video-host/factory";
 import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
 
@@ -31,7 +32,8 @@ const app = await buildApp({
   mailer: createMailer(config),
   identityProvider: createIdentityProvider(config),
   objectStorage: createObjectStorage(config),
-  videoHost: createVideoHost(),
+  videoHost: createVideoHost(config),
+  liveProvider: createLiveProvider(config, { acquire: bucketAcquire(db.pool) }),
   transcriptRenderer: new ReactPdfTranscriptRenderer(),
 });
 await app.listen(config.port, "0.0.0.0");

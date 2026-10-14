@@ -473,7 +473,7 @@ Anatomy (top to bottom, gap `space-2`, padding `space-4`): row [Badge(state) · 
 | scheduled | card | No button. `clock` + "Opens 13:45 (in 3 h 20 min)" 14/20 semibold `info`. |
 | open | card | `primary` block "Join class" (teacher: "Start class"). |
 | live | `live-soft`, 1 px `live` border | `live` block "Join live class" (teacher: "Start class"). |
-| ended | card | None; meta adds "Recording expected" if recording on. |
+| ended | card | None; meta adds "Recording expected" if recording on, until `recording` says processing or ready (ui-overhaul #01). |
 | processing | card | None; "Recording processing · about 15 min". |
 | available | card | `secondary` block "Watch recording". |
 | cancelled | card | Title struck through `ink-muted`; reason line; no action. |

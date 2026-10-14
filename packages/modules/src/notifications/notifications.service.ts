@@ -50,6 +50,9 @@ function linkFor(kind: string, data: Record<string, unknown>): string | null {
   if (kind.startsWith("transcript.")) return "/transcripts";
   if (kind.startsWith("results.")) return "/results";
   if (kind === "assessment.grade-released" || kind === "content.announcement") return "/courses";
+  if (kind === "meeting.provision-failed") return "/admin/ops";
+  if (kind.startsWith("integration.")) return "/admin/integrations";
+  if (kind.startsWith("recording.")) return "/admin/videos";
   if (kind.startsWith("meeting.")) return "/";
   if (kind.startsWith("video.")) return "/admin/videos";
   if (kind.startsWith("admissions.")) return "/application";

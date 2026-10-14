@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { Icon } from "../design/icons";
+import { recordingBack } from "./recording-back";
 
 /** The parts of the YouTube IFrame API the player uses. */
 interface YouTubePlayer {
@@ -256,12 +257,7 @@ export function RecordingPage() {
     enabled: videoId !== undefined,
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
-  // Playback doesn't say which course it belongs to, so students go back to My courses.
-  useDetailBar(
-    me.data?.roles.isStudent
-      ? { back: { to: "/courses", label: "My courses" } }
-      : { back: { to: "/", label: "Home" } },
-  );
+  useDetailBar(recordingBack(playback.data, me.data?.roles));
   if (playback.isPending)
     return (
       <SkeletonGroup label="Loading the recording">

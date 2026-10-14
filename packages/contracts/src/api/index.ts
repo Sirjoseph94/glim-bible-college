@@ -73,6 +73,7 @@ export const ENDPOINTS = [
   meetings.joinClassMeeting,
   meetings.startClassMeeting,
   meetings.endClassMeeting,
+  meetings.reprovisionClassMeeting,
   attendance.getRollCall,
   attendance.putRollCall,
   attendance.getMeetingAttendance,
@@ -80,6 +81,8 @@ export const ENDPOINTS = [
   attendance.overrideAttendance,
   attendance.clearAttendanceOverride,
   attendance.getAttendanceReport,
+  attendance.getParticipants,
+  attendance.matchParticipant,
   assessment.listAssignments,
   assessment.createAssignment,
   assessment.getAssignment,
@@ -140,6 +143,7 @@ export const ENDPOINTS = [
   video.deleteVideo,
   video.restoreVideo,
   video.recheckVideo,
+  video.retryIngest,
   meetings.getMySchedule,
   auth.login,
   auth.logout,
@@ -270,6 +274,14 @@ export const ENDPOINTS = [
   ops.listQueues,
   ops.getYouTubeStatus,
   ops.testYouTube,
+  ops.connectYouTube,
+  ops.youTubeCallback,
+  ops.disconnectYouTube,
+  ops.getGoogleIntegration,
+  ops.saveGoogleIntegration,
+  ops.testGoogleIntegration,
+  ops.addHostAccount,
+  ops.updateHostAccount,
   privacy.getDataExport,
   privacy.eraseUser,
 ] as const;
@@ -288,6 +300,7 @@ export type {
   AttendanceReport,
   MeetingAttendance,
   MyAttendance,
+  Participant,
   RollCall,
   RollCallMark,
 } from "./attendance";
@@ -306,8 +319,10 @@ export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollm
 export type { Me } from "./me";
 export {
   MEET_LINK_PATTERN,
+  MEETING_RECORDING_STATUSES,
   type ClassMeeting,
   type ClassMeetingSeries,
+  type MeetingRecordingStatus,
   type ScheduleWarning,
 } from "./meetings";
 export type { AdmissionsReport, ReferralReport } from "./reports";
@@ -342,7 +357,7 @@ export type {
 } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
 export type { Notification, NotificationPreference } from "./notifications";
-export type { OpsFailure, QueueStat, YouTubeStatus } from "./ops";
+export type { GoogleIntegration, HostAccount, OpsFailure, QueueStat, YouTubeStatus } from "./ops";
 export type { DataExport } from "./privacy";
 export type {
   Transcript,

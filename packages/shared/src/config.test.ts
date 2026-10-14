@@ -73,4 +73,74 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ DB_CONNECTION_BUDGET: "27" })).not.toThrow();
     expect(() => loadConfig({ DB_CONNECTION_BUDGET: "26" })).toThrow(/DB_CONNECTION_BUDGET/);
   });
+
+  describe("the Google integration switches (off by default)", () => {
+    const key = Buffer.from(
+      JSON.stringify({
+        client_email: "glim-meet@glim-lms.iam.gserviceaccount.com",
+        client_id: "1234567890",
+        private_key: "-----BEGIN PRIVATE KEY-----\nSECRETKEYMATERIAL\n-----END PRIVATE KEY-----\n",
+      }),
+    ).toString("base64");
+
+    it("keeps v1's pasted links unless LIVE_PROVIDER is set", () => {
+      const config = loadConfig({});
+      expect(config.liveProvider).toBe("none");
+      expect(config.google.serviceAccount).toBeUndefined();
+    });
+
+    it("needs the service account and Pub/Sub names for Google Meet, qualifying short names", () => {
+      expect(() => loadConfig({ LIVE_PROVIDER: "google_meet" })).toThrow(
+        /GOOGLE_SA_KEY_JSON_B64[\s\S]*GOOGLE_PUBSUB_SUBSCRIPTION[\s\S]*GOOGLE_PUBSUB_TOPIC/,
+      );
+      const config = loadConfig({
+        LIVE_PROVIDER: "google_meet",
+        GOOGLE_PROJECT_ID: "glim-lms",
+        GOOGLE_SA_KEY_JSON_B64: key,
+        GOOGLE_PUBSUB_SUBSCRIPTION: "glim-meet-events-pull",
+        GOOGLE_PUBSUB_TOPIC: "projects/glim-lms/topics/glim-meet-events",
+      });
+      expect(config.google.serviceAccount).toMatchObject({
+        clientEmail: "glim-meet@glim-lms.iam.gserviceaccount.com",
+        clientId: "1234567890",
+      });
+      expect(config.google.pubsubSubscription).toBe(
+        "projects/glim-lms/subscriptions/glim-meet-events-pull",
+      );
+      expect(config.google.pubsubTopic).toBe("projects/glim-lms/topics/glim-meet-events");
+    });
+
+    it("rejects a malformed key without echoing it", () => {
+      try {
+        loadConfig({
+          GOOGLE_SA_KEY_JSON_B64: Buffer.from('{"private_key":"SECRETX"}').toString("base64"),
+        });
+      } catch (e) {
+        expect((e as Error).message).toContain("GOOGLE_SA_KEY_JSON_B64");
+        expect((e as Error).message).not.toContain("SECRETX");
+        return;
+      }
+      expect.unreachable("loadConfig should have thrown");
+    });
+
+    it("needs the channel OAuth client and a 32-byte token key for YouTube uploads", () => {
+      expect(() => loadConfig({ VIDEO_HOST: "youtube_api" })).toThrow(
+        /YOUTUBE_OAUTH_CLIENT_ID[\s\S]*TOKEN_ENCRYPTION_KEY/,
+      );
+      expect(() =>
+        loadConfig({ TOKEN_ENCRYPTION_KEY: Buffer.alloc(16).toString("base64") }),
+      ).toThrow(/TOKEN_ENCRYPTION_KEY: must be 32 bytes/);
+      const config = loadConfig({
+        VIDEO_HOST: "youtube_api",
+        YOUTUBE_OAUTH_CLIENT_ID: "yt.apps.googleusercontent.com",
+        YOUTUBE_OAUTH_CLIENT_SECRET: "yt-secret",
+        TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+      });
+      expect(config.tokenEncryptionKey?.length).toBe(32);
+    });
+
+    it("refuses the fakes in production", () => {
+      expect(() => loadConfig({ ...production, LIVE_PROVIDER: "fake" })).toThrow(/LIVE_PROVIDER/);
+    });
+  });
 });

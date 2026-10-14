@@ -3,6 +3,10 @@ import { createMailer } from "@glim/integrations/mail/factory";
 import { systemClock } from "@glim/shared";
 import { loadConfig } from "@glim/shared/config";
 import { createLogger } from "@glim/telemetry";
+import { LIVE_PROVIDER, type LiveProvider } from "@glim/integrations/live-provider/port";
+import { MeetEventsService } from "@glim/modules/class-meeting";
+import { InboxService } from "@glim/modules/ops";
+import { startEventPuller } from "./event-puller";
 import { createHandlers } from "./handlers";
 import { createSubscribers } from "./subscribers";
 import { runsScheduler, startWorker } from "./worker";
@@ -36,6 +40,20 @@ const worker = await startWorker({
   concurrency: config.queueConcurrency,
 });
 
+// Meet events arrive by Pub/Sub pull (§11.8) on the worker that runs the google role.
+const liveProvider = context.get<LiveProvider | null>(LIVE_PROVIDER);
+const puller =
+  liveProvider !== null &&
+  config.google.eventsMode === "pull" &&
+  (config.workerRole === "google" || config.workerRole === "all")
+    ? startEventPuller({
+        provider: liveProvider,
+        inbox: context.get(InboxService),
+        meetEvents: context.get(MeetEventsService),
+        logger,
+      })
+    : null;
+
 let stopping = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
@@ -44,6 +62,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
     logger.info({ signal }, "shutting down");
     void (async () => {
       try {
+        await puller?.stop();
         await worker.stop();
         await context.close();
         await db.pool.end();

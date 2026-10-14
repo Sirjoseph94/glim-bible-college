@@ -434,6 +434,24 @@ export function LecturerMeetingActions({ meeting }: { meeting: ClassMeeting }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
 
+  /** Asks Google for the Meet space again after it failed (integration slice). */
+  async function reprovision() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api<typeof meetings.reprovisionClassMeeting>(
+        "POST",
+        "/class-meetings/:id/reprovision",
+        { params: { id: meeting.id } },
+      );
+      await refreshMeetings(queryClient);
+    } catch (error) {
+      setProblem(problemOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function lifecycle(action: "start" | "end") {
     setBusy(true);
     setProblem(null);
@@ -471,7 +489,7 @@ export function LecturerMeetingActions({ meeting }: { meeting: ClassMeeting }) {
 
   // The Start screen (TRD §11.5): what to do in the room, the recording notice, the link.
   if (started !== null || meeting.state === "LIVE") {
-    const link = started?.onlineLink ?? meeting.onlineLink;
+    const link = started?.onlineLink ?? meeting.joinUrl ?? meeting.onlineLink;
     return (
       <div className="space-y-3">
         <ProblemBanner problem={problem} />
@@ -501,6 +519,25 @@ export function LecturerMeetingActions({ meeting }: { meeting: ClassMeeting }) {
   return (
     <div className="space-y-3">
       <ProblemBanner problem={problem} />
+      {/* Google Meet (integration slice): the link is made by the app, a day before class. */}
+      {canStart && meeting.providerStatus === "ERROR" ? (
+        <Banner tone="warning" title="Google couldn't create the Meet link">
+          <p>
+            {meeting.onlineLink
+              ? "Students will get the link you pasted instead."
+              : "Ask again, or paste a Meet link (Reschedule) so students can join."}
+          </p>
+          <Button size="sm" variant="secondary" loading={busy} onClick={() => void reprovision()}>
+            Ask Google again
+          </Button>
+        </Banner>
+      ) : null}
+      {canStart &&
+      (meeting.providerStatus === "PENDING" || meeting.providerStatus === "PROVISIONING") ? (
+        <p className="text-body-sm text-ink-muted">
+          The Google Meet link is made the day before class.
+        </p>
+      ) : null}
       {canStart ? (
         <Button variant="primary" block loading={busy} onClick={() => void lifecycle("start")}>
           Start class

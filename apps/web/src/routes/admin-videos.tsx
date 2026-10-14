@@ -139,10 +139,20 @@ export function AdminVideosPage() {
   );
 }
 
+/** Where a Meet recording's upload to YouTube is (integration slice). */
+const INGEST: Record<NonNullable<AdminVideo["ingest"]>["status"], string> = {
+  DISCOVERED: "Waiting to upload to YouTube.",
+  UPLOADING: "Uploading to YouTube…",
+  PROCESSING: "YouTube is processing it.",
+  READY: "On YouTube.",
+  FAILED: "The upload failed.",
+  SOURCE_MISSING: "The recording is gone from Google Drive; it can't be uploaded.",
+};
+
 function VideoRow({ video: v }: { video: AdminVideo }) {
   const queryClient = useQueryClient();
   const { busy, problem, fieldErrors, run } = useSubmit();
-  const [doing, setDoing] = useState<"recheck" | "restore" | "replace" | null>(null);
+  const [doing, setDoing] = useState<"recheck" | "restore" | "replace" | "retry" | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "videos"] });
@@ -156,6 +166,8 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
   const params = { id: v.id };
   const deleted = v.status === "DELETED";
   const unavailable = v.status === "UNAVAILABLE";
+  // A Meet recording still on its way to YouTube has nothing to watch or check yet.
+  const onYouTube = v.youtubeVideoId !== null && v.status !== "PROCESSING";
 
   return (
     <div role="listitem" aria-label={v.title} className="space-y-3 px-4 py-3.5">
@@ -177,6 +189,12 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
           </>
         )}
       </p>
+      {v.ingest !== null && v.status !== "PUBLISHED" && v.status !== "UNPUBLISHED" ? (
+        <p className="text-body-sm">
+          {INGEST[v.ingest.status]}
+          {v.ingest.error ? <span className="text-ink-muted">{` ${v.ingest.error}`}</span> : null}
+        </p>
+      ) : null}
       {deleted && v.deleteAfter !== null ? (
         v.youtubeDeleteRemindedAt === null ? (
           <p className="text-body-sm">
@@ -184,7 +202,8 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
           </p>
         ) : (
           <Banner tone="warning">
-            Delete it in YouTube Studio too: anyone with its link can still watch it there.
+            If it's still on YouTube, delete it in YouTube Studio: anyone with its link can watch it
+            there.
           </Banner>
         )
       ) : null}
@@ -204,7 +223,22 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
             YouTube Studio
           </a>
         )}
-        {deleted ? null : (
+        {v.status === "FAILED" && v.ingest !== null && v.ingest.status === "FAILED" ? (
+          <Button
+            variant="primary"
+            size="sm"
+            loading={busy && doing === "retry"}
+            disabled={busy && doing !== "retry"}
+            onClick={() =>
+              void act("retry", () =>
+                api<typeof video.retryIngest>("POST", "/videos/:id/retry-ingest", { params }),
+              )
+            }
+          >
+            Upload again
+          </Button>
+        ) : null}
+        {deleted || !onYouTube ? null : (
           <Link
             to="/recordings/$videoId"
             params={{ videoId: v.id }}
@@ -229,7 +263,7 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
               Restore
             </Button>
           ) : null
-        ) : (
+        ) : !onYouTube ? null : (
           <>
             <Button
               variant="secondary"

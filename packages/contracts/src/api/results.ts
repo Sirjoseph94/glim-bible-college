@@ -267,6 +267,10 @@ export const semesterResultRowSchema = z.object({
   computedAt: z.iso.datetime(),
   /** Course results in the semester still in draft (reopened): approving waits for them. */
   draftCourseResults: z.number().int(),
+  /** Their course codes, sorted ("Waiting on GRK 301"). */
+  draftCourseCodes: z.array(z.string()),
+  /** The student's level in this semester (Year 1, 2…); null for imported past results. */
+  levelNo: z.number().int().nullable(),
 });
 
 export type SemesterResultRow = z.infer<typeof semesterResultRowSchema>;
@@ -285,7 +289,21 @@ export const listSemesterResults = endpoint({
   auth: "session",
   permission: "results:record:read",
   query: semesterScope,
-  response: z.object({ items: z.array(semesterResultRowSchema) }),
+  response: z.object({
+    items: z.array(semesterResultRowSchema),
+    /**
+     * Per programme in the result: the Course Offerings its students take this semester, and how
+     * many have every student's course result finalized ("Courses finalized 8 of 8").
+     */
+    courses: z.array(
+      z.object({
+        programmeId: z.uuid(),
+        programmeCode: z.string(),
+        offerings: z.number().int(),
+        offeringsFinalized: z.number().int(),
+      }),
+    ),
+  }),
 });
 
 export const computeSemesterResults = endpoint({

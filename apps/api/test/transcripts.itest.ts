@@ -110,6 +110,14 @@ describe("unofficial transcripts", () => {
       await send("sEnrolled", "GET", `/transcripts/${first.transcript?.id ?? ""}`)
     ).json<Transcript>();
     expect(doc.verificationCode).toMatch(/^[A-Z2-7]{16}$/);
+    // The request shows the code printed on the transcript (ui #06), to the Registrar too.
+    expect(first.transcript?.verificationCode).toBe(doc.verificationCode);
+    const listed = (await send("registrar", "GET", "/transcript-requests?status=ISSUED")).json<{
+      items: TranscriptRequest[];
+    }>();
+    expect(listed.items.find((r) => r.id === first.id)?.transcript?.verificationCode).toBe(
+      doc.verificationCode,
+    );
     expect(doc.snapshotSha256).toBe(snapshotSha256(doc.snapshot));
     expect(doc.snapshot).toMatchObject({
       version: 1,

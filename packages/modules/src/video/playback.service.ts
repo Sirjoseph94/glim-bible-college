@@ -48,6 +48,8 @@ export class PlaybackService {
     const [row] = await this.db.read
       .select({
         id: v.id,
+        courseOfferingId: v.courseOfferingId,
+        courseCode: schema.courses.code,
         title: v.title,
         youtubeVideoId: v.youtubeVideoId,
         durationMs: v.durationMs,
@@ -56,6 +58,8 @@ export class PlaybackService {
         completed: p.completed,
       })
       .from(v)
+      .innerJoin(schema.courseOfferings, eq(schema.courseOfferings.id, v.courseOfferingId))
+      .innerJoin(schema.courses, eq(schema.courses.id, schema.courseOfferings.courseId))
       .leftJoin(p, and(eq(p.videoId, v.id), eq(p.userId, userId)))
       .where(and(eq(v.id, id), this.playable(manages)));
     if (row?.youtubeVideoId === undefined || row.youtubeVideoId === null) return notFound();
@@ -70,6 +74,8 @@ export class PlaybackService {
     });
     return ok({
       videoId: row.id,
+      courseOfferingId: row.courseOfferingId,
+      courseCode: row.courseCode,
       title: row.title,
       youtubeVideoId: row.youtubeVideoId,
       embedUrl,

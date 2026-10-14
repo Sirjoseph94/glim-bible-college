@@ -99,7 +99,8 @@ export const transcriptRequestSchema = z.object({
   status: z.enum(ENUMS["transcript_requests.status"]),
   decisionReason: z.string().nullable(),
   createdAt: z.iso.datetime(),
-  transcript: transcriptSummarySchema.nullable(),
+  /** The issued transcript; its verification code is printed on it, so the request shows it too. */
+  transcript: transcriptSummarySchema.extend({ verificationCode: z.string() }).nullable(),
 });
 
 export type TranscriptRequest = z.infer<typeof transcriptRequestSchema>;

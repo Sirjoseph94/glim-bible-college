@@ -47,6 +47,7 @@ import { CourseEnrollmentsController } from "./http/enrollment/course-enrollment
 import { RegistrationController } from "./http/enrollment/registration.controller";
 import { ImportsController } from "./http/imports/imports.controller";
 import { ClassMeetingsController } from "./http/meetings/class-meetings.controller";
+import { ParticipantsController } from "./http/attendance/participants.controller";
 import { RollCallController } from "./http/attendance/roll-call.controller";
 import { VideosController } from "./http/video/videos.controller";
 import { MaterialsController } from "./http/content/materials.controller";
@@ -131,6 +132,7 @@ export class AppModule {
         ImportsController,
         ClassMeetingsController,
         RollCallController,
+        ParticipantsController,
         VideosController,
         MaterialsController,
         AssignmentsController,

@@ -73,6 +73,17 @@ export const meetingAttendanceSchema = z.object({
   finalizedAt: z.iso.datetime().nullable(),
   /** After this, only overrides change the records. */
   lockedAt: z.iso.datetime().nullable(),
+  /** The ATTENDANCE policy rule the records were computed under (the meeting's snapshot). */
+  rule: z.object({
+    basis: z.enum(["SCHEDULED", "ACTUAL", "ACTUAL_CAPPED"]),
+    presentThresholdBp: z.number().int(),
+    partialThresholdBp: z.number().int(),
+  }),
+  /**
+   * How long the class ran online (the records' denominator under an ACTUAL basis); null when
+   * the policy counts the scheduled length or the class never ran online.
+   */
+  ranSeconds: z.number().int().nullable(),
   records: z.array(
     z.object({
       studentId: z.uuid(),
@@ -225,4 +236,78 @@ export const getAttendanceReport = endpoint({
     format: z.enum(["json", "csv"]).default("json"),
   }),
   response: attendanceReportSchema,
+});
+
+/**
+ * One Meet participant in a Class Meeting (TRD §12.4, §12.7; integration slice): their
+ * sessions (raw evidence) and who the app thinks they are. `status` SUGGESTED is a name match
+ * a person must confirm; CONFIRMED with no person means "not one of ours" (a guest).
+ */
+export const participantSchema = z.object({
+  participantId: z.string(),
+  kind: z.enum(ENUMS["provider_participant_sessions.participant_kind"]),
+  displayName: z.string().nullable(),
+  sessions: z.array(
+    z.object({
+      startedAt: z.iso.datetime(),
+      endedAt: z.iso.datetime().nullable(),
+    }),
+  ),
+  /** Time in the call, in whole seconds. */
+  seconds: z.number().int(),
+  match: z.object({
+    userId: z.uuid().nullable(),
+    name: z.string().nullable(),
+    /** STUDENT: counted for attendance; LECTURER: kept as evidence, not counted. */
+    role: z.enum(["STUDENT", "LECTURER"]).nullable(),
+    method: z.enum(ENUMS["provider_participant_sessions.match_method"]),
+    status: z.enum(ENUMS["provider_participant_sessions.match_status"]),
+  }),
+});
+
+export type Participant = z.infer<typeof participantSchema>;
+
+export const getParticipants = endpoint({
+  method: "GET",
+  path: "/class-meetings/:id/participants",
+  summary: "Who was in the Meet call, and who the app matched them to",
+  tag: "Attendance",
+  auth: "session",
+  permission: "attendance:participant:resolve",
+  resource: { type: "class-meeting", param: "id" },
+  params: z.object({ id: z.uuid() }),
+  response: z.object({
+    items: z.array(participantSchema),
+    /** The people a participant can be matched to: the course's students and Lecturers. */
+    candidates: z.array(
+      z.object({
+        userId: z.uuid(),
+        name: z.string(),
+        role: z.enum(["STUDENT", "LECTURER"]),
+        matricNumber: z.string().nullable(),
+      }),
+    ),
+  }),
+});
+
+export const matchParticipant = endpoint({
+  method: "POST",
+  path: "/class-meetings/:id/participants/:pid/match",
+  summary:
+    "Say who a Meet participant is (or that they aren't on the course); attendance is recomputed",
+  tag: "Attendance",
+  auth: "session",
+  permission: "attendance:participant:resolve",
+  resource: { type: "class-meeting", param: "id" },
+  params: z.object({ id: z.uuid(), pid: z.string().min(1).max(200) }),
+  body: z
+    .object({
+      /** A student or Lecturer of the course; null: not one of ours (e.g. a guest). */
+      userId: z.uuid().nullable(),
+      /** Match this Google account automatically in later Class Meetings. */
+      remember: z.boolean().default(false),
+    })
+    .strict(),
+  response: participantSchema,
+  successStatus: 200,
 });

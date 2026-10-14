@@ -1,4 +1,4 @@
-import type { ErrorCode, Video } from "@glim/contracts";
+import type { ErrorCode, Video, VideoStatus } from "@glim/contracts";
 import { Db, PG, pgError, schema, type Database } from "@glim/db";
 import {
   normaliseChannelUrl,
@@ -21,7 +21,12 @@ import {
   type DomainResult,
 } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, isNull, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  pickMeetingRecording,
+  type MeetingRecording,
+  type MeetingVideo,
+} from "./domain/meeting-recording";
 
 type VideoRow = typeof schema.videos.$inferSelect;
 type Actor = AuditActor & { userId: string };
@@ -215,7 +220,71 @@ export class VideosService {
     return visible === undefined ? null : toView(visible);
   }
 
-  /** App-side metadata (§13.6); the YouTube title isn't changed in v1. */
+  /**
+   * Each Class Meeting's recording as this viewer may see it (ui-overhaul #01), in one query.
+   * Students get the same rule as the video list and playback; people who manage an offering's
+   * videos, decided per offering, see the rest.
+   */
+  async recordingsFor(
+    meetings: readonly { id: string; courseOfferingId: string }[],
+    viewerUserId: string,
+  ): Promise<Map<string, MeetingRecording>> {
+    const found = new Map<string, MeetingRecording>();
+    if (meetings.length === 0) return found;
+    const v = schema.videos;
+    const rows = await this.db.read
+      .select({
+        id: v.id,
+        classMeetingId: v.classMeetingId,
+        status: v.status,
+        createdAt: v.createdAt,
+        forStudents: sql<boolean>`coalesce(${this.forStudents() ?? sql`false`}, false)`,
+      })
+      .from(v)
+      .where(
+        and(
+          inArray(
+            v.classMeetingId,
+            meetings.map((m) => m.id),
+          ),
+          ne(v.status, "DELETED"),
+        ),
+      );
+    if (rows.length === 0) return found;
+    const offeringOf = new Map(meetings.map((m) => [m.id, m.courseOfferingId]));
+    const videosOf = new Map<string, MeetingVideo[]>();
+    for (const row of rows) {
+      if (row.classMeetingId === null) continue;
+      const list = videosOf.get(row.classMeetingId) ?? [];
+      list.push({
+        id: row.id,
+        status: row.status as VideoStatus,
+        forStudents: row.forStudents,
+        createdAt: row.createdAt,
+      });
+      videosOf.set(row.classMeetingId, list);
+    }
+    const manages = new Map<string, boolean>();
+    for (const meetingId of videosOf.keys()) {
+      const offeringId = offeringOf.get(meetingId);
+      if (offeringId !== undefined && !manages.has(offeringId))
+        manages.set(offeringId, await this.manages(viewerUserId, offeringId));
+    }
+    for (const [meetingId, videos] of videosOf) {
+      const offeringId = offeringOf.get(meetingId);
+      const recording = pickMeetingRecording(
+        videos,
+        offeringId !== undefined && manages.get(offeringId) === true,
+      );
+      if (recording !== null) found.set(meetingId, recording);
+    }
+    return found;
+  }
+
+  /**
+   * App-side metadata (§13.6). With the YouTube channel connected, a new title or description
+   * is copied to YouTube by the `video.youtube-metadata` job.
+   */
   async update(
     id: string,
     expectedVersion: number,
@@ -375,6 +444,13 @@ export class VideosService {
           { videoId: id, offeringId: row.courseOfferingId },
           { occurredAt: now, actorUserId: actor.userId },
         );
+      // With the channel connected, YouTube's title follows the app's (integration slice).
+      if (
+        this.host.channelApi !== undefined &&
+        updated.youtubeVideoId !== null &&
+        ("title" in change || "description" in change)
+      )
+        await boss.send("video.youtube-metadata", { videoId: id });
       return ok(updated);
     });
     return result.ok ? ok(toView(result.value)) : result;
@@ -384,8 +460,13 @@ export class VideosService {
   private visible(manages: boolean): SQL | undefined {
     const v = schema.videos;
     if (manages) return ne(v.status, "DELETED");
+    return and(eq(v.status, "PUBLISHED"), this.forStudents());
+  }
+
+  /** Meant for enrolled students and released: the part of `visible` that isn't the status. */
+  private forStudents(): SQL | undefined {
+    const v = schema.videos;
     return and(
-      eq(v.status, "PUBLISHED"),
       eq(v.visibility, "ENROLLED"),
       or(isNull(v.publishAfter), lte(v.publishAfter, this.clock.now())),
     );

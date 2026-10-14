@@ -123,12 +123,14 @@ Results move through these stages, all under **Results**:
 | **Audit** | Who did what, and when. The audit log can't be edited. |
 | **Ops** | Failures with a **Replay** button, the YouTube check, and suppressed email addresses |
 | **Jobs** | Background job queues. You're emailed when a queue falls behind by more than 2 minutes. |
+| **Integrations** | Google Meet (host accounts, the Admin Console values, a background test) and GLIM's YouTube channel connection. Both are off until switched on: until then Lecturers paste Meet links and recordings are added by link. |
 | **Settings** | Institution details, YouTube channel URLs, and the privacy-notice, recording-notice and Statement of Faith URLs |
 
 The System Admin's runbooks, written in plain steps, are in [`docs/runbooks/`](docs/runbooks):
 - [deploying and rolling back](docs/runbooks/deploy.md);
 - [restoring the database](docs/runbooks/restore.md);
 - [a provider being down](docs/runbooks/provider-outage.md);
+- [switching on Google Meet and automatic recording upload](docs/runbooks/google.md);
 - [a data breach](docs/runbooks/breach.md).
 
 ---

@@ -33,7 +33,7 @@ import { ConfirmDialog } from "../components/ui/dialog";
 import { Select } from "../components/ui/field";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
-import { cohortState, summarize, type CohortSummary } from "../components/app/cohorts";
+import { cohortLabel, cohortState, summarize, type CohortSummary } from "../components/app/cohorts";
 import { cn } from "../design/cn";
 import { credits, hundredths } from "../design/format";
 
@@ -341,6 +341,8 @@ interface Cohort {
   /** Null until the programme list has loaded: no action can be scoped to it yet. */
   programmeId: string | null;
   code: string;
+  /** Its Course Offerings this semester and how many are finalized. */
+  courses: { offerings: number; offeringsFinalized: number } | undefined;
   rows: SemesterResultRow[];
   summary: CohortSummary;
 }
@@ -365,8 +367,8 @@ function confirmText(s: CohortSummary, action: "approve" | "publish"): string {
 /**
  * The Registrar's semester results (TRD §14.5; handoff §11.10): each cohort's state with its next
  * step ("Approve and publish"), the students' results, and transcript requests alongside
- * (decision UI-Q8). Compute runs first, from finalized course results. (The handoff's "Courses
- * finalized 8 of 8" waits on the API: .scratch/ui-overhaul/issues/02.)
+ * (decision UI-Q8). Compute runs first, from finalized course results. Cohorts are programmes,
+ * with their levels and how many of their courses are finalized (ui #06).
  */
 export function SemesterResultsPage() {
   const queryClient = useQueryClient();
@@ -413,7 +415,13 @@ export function SemesterResultsPage() {
     programmeId === "" ? all : all.filter((r) => programmeIdOf(r.programmeCode) === programmeId);
   const cohorts: Cohort[] = [...new Set(shown.map((r) => r.programmeCode))].sort().map((code) => {
     const rows = shown.filter((r) => r.programmeCode === code);
-    return { code, programmeId: programmeIdOf(code) ?? null, rows, summary: summarize(rows) };
+    return {
+      code,
+      programmeId: programmeIdOf(code) ?? null,
+      courses: list.data?.courses.find((x) => x.programmeCode === code),
+      rows,
+      summary: summarize(rows),
+    };
   });
   const ready = cohorts.filter((c) => cohortState(c.summary).next === "approve").length;
   const scope = { semesterId, ...(programmeId === "" ? {} : { programmeId }) };
@@ -528,6 +536,9 @@ export function SemesterResultsPage() {
                         <th scope="col" className={cn(headCell, numericCell)}>
                           Students
                         </th>
+                        <th scope="col" className={cn(headCell, numericCell)}>
+                          Courses finalized
+                        </th>
                         <th scope="col" className={headCell}>
                           Status
                         </th>
@@ -549,9 +560,14 @@ export function SemesterResultsPage() {
                                 "text-left font-mono font-semibold",
                               )}
                             >
-                              {c.code}
+                              {cohortLabel(c.code, c.summary.levels)}
                             </th>
                             <td className={cn(bodyCell, numericCell)}>{c.summary.total}</td>
+                            <td className={cn(bodyCell, numericCell)}>
+                              {c.courses === undefined
+                                ? "–"
+                                : `${String(c.courses.offeringsFinalized)} of ${String(c.courses.offerings)}`}
+                            </td>
                             <td className={bodyCell}>
                               <Badge tone={state.tone}>{state.word}</Badge>
                               {state.note ? (
@@ -790,7 +806,7 @@ function TranscriptRequests() {
               {r.transcript === null ? null : (
                 <p className="font-mono text-code text-ink-muted">
                   {r.status === "ISSUED" ? "Issued · " : ""}
-                  {r.transcript.serialNo}
+                  {r.transcript.serialNo} · verify {r.transcript.verificationCode}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">

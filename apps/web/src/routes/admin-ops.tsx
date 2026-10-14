@@ -16,7 +16,9 @@ import { useSubmit } from "../components/use-submit";
 const KIND_LABELS: Record<OpsFailure["kind"], string> = {
   "provider-event": "Provider event",
   video: "Video",
-  "meeting-provision": "Class Meeting set-up",
+  "meeting-provision": "Google Meet link",
+  recording: "Recording upload",
+  subscription: "Meet events subscription",
   email: "Email address",
   job: "Job",
 };
@@ -24,7 +26,9 @@ const KIND_LABELS: Record<OpsFailure["kind"], string> = {
 const REPLAY_LABELS: Record<OpsFailure["kind"], string> = {
   "provider-event": "Process again",
   video: "Recheck link",
-  "meeting-provision": "",
+  "meeting-provision": "Ask Google again",
+  recording: "Upload again",
+  subscription: "Renew",
   email: "Email again",
   job: "Run again",
 };

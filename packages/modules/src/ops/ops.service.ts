@@ -3,7 +3,7 @@ import { Db, schema } from "@glim/db";
 import { VIDEO_HOST, type VideoHost } from "@glim/integrations/video-host/port";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { NotificationsService } from "@glim/modules/notifications";
-import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
+import { CLOCK, domainError, err, isUuid, ok, type Clock, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
@@ -53,7 +53,8 @@ export class OpsService {
       status: r.status,
       detail: r.detail,
       occurredAt: new Date(r.occurred_at).toISOString(),
-      replayable: r.kind !== "meeting-provision",
+      // A recording gone from Drive can't be uploaded again.
+      replayable: !(r.kind === "recording" && r.status === "SOURCE_MISSING"),
     }));
   }
 
@@ -166,12 +167,31 @@ export class OpsService {
           if (row === undefined) return notFound();
           return ok("address no longer suppressed");
         }
-        return err(
-          domainError(
-            "VALIDATION_FAILED",
-            "Class Meeting provisioning comes with the Google integration; nothing to replay yet.",
-          ),
-        );
+        // The integration slice's own jobs pick up from where the failure left things.
+        if ((kind === "meeting-provision" || kind === "recording") && !isUuid(id))
+          return notFound();
+        if (kind === "meeting-provision") {
+          const m = schema.classMeetings;
+          const [row] = await db
+            .select({ id: m.id })
+            .from(m)
+            .where(and(eq(m.id, id), eq(m.providerStatus, "ERROR")));
+          if (row === undefined) return notFound();
+          await boss.send("class-meeting.provision", { meetingId: id }, { priority: 10 });
+          return ok("Meet space requested again");
+        }
+        if (kind === "recording") {
+          const r = schema.recordings;
+          const [row] = await db
+            .select({ id: r.id })
+            .from(r)
+            .where(and(eq(r.id, id), eq(r.status, "FAILED")));
+          if (row === undefined) return notFound();
+          await boss.send("recording.ingest", { recordingId: id });
+          return ok("recording upload queued again");
+        }
+        await boss.send("subscription.renew", {});
+        return ok("subscriptions checked again");
       },
     );
     if (!result.ok) return result;

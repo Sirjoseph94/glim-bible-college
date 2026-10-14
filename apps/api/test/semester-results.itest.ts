@@ -48,6 +48,17 @@ const list = async (semesterId = semester()) =>
   (await send("registrar", "GET", `/results/semesters?semesterId=${semesterId}`)).json<{
     items: SemesterResultRow[];
   }>().items;
+/** The whole list response, with the per-programme course counts. */
+const listing = async (semesterId = semester()) =>
+  (await send("registrar", "GET", `/results/semesters?semesterId=${semesterId}`)).json<{
+    items: SemesterResultRow[];
+    courses: {
+      programmeId: string;
+      programmeCode: string;
+      offerings: number;
+      offeringsFinalized: number;
+    }[];
+  }>();
 const rowOf = (items: SemesterResultRow[], matric: string) =>
   items.find((i) => i.matricNumber === matric);
 
@@ -206,7 +217,17 @@ describe("computing", () => {
       standing: "GOOD",
       status: "DRAFT",
       calcVersion: 1,
+      levelNo: 1,
+      draftCourseCodes: [],
     });
+    expect((await listing()).courses).toEqual([
+      {
+        programmeId: p.world.programmeId,
+        programmeCode: "PDIP",
+        offerings: 2,
+        offeringsFinalized: 1,
+      },
+    ]);
     const completed = rowOf(items, await matricOf("sCompleted"));
     expect(completed).toMatchObject({ gpaX100: 300, standing: "GOOD" });
     const graduated = rowOf(items, await matricOf("sGraduated"));
@@ -385,7 +406,13 @@ describe("approving and publishing", () => {
     );
     expect(reopened.statusCode, reopened.body).toBe(200);
     const completed = rowOf(await list(), await matricOf("sCompleted"));
-    expect(completed).toMatchObject({ status: "DRAFT", draftCourseResults: 1 });
+    expect(completed).toMatchObject({
+      status: "DRAFT",
+      draftCourseResults: 1,
+      draftCourseCodes: ["PBIB101"],
+    });
+    // O1 has a reopened result again, so it no longer counts as finalized.
+    expect((await listing()).courses[0]).toMatchObject({ offerings: 2, offeringsFinalized: 0 });
     const approved = await send(
       "registrar",
       "POST",

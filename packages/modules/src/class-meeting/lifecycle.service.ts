@@ -4,11 +4,13 @@ import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { AuthorizationService } from "@glim/modules/authorization";
 import { PolicyService } from "@glim/modules/identity";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
+import { CONFIG, type Config } from "@glim/shared/config";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { ClassMeetingsService } from "./class-meetings.service";
 import type { MeetingRow } from "./meeting-writer";
+import { ProvisioningService } from "./provisioning.service";
 import { tickEvent, transition, type MeetingEvent } from "./state-machine";
 
 /** Whether roll call has marks for a meeting; attendance registers the real check (ticket 26). */
@@ -18,12 +20,31 @@ export interface JoinView {
   meetingId: string;
   state: ClassMeetingState;
   onlineLink: string;
+  /** PROVIDER: the space the worker created; PASTED: a link a Lecturer pasted. */
+  linkSource: "PROVIDER" | "PASTED";
   role: "STUDENT" | "STAFF";
   window: { opensAt: string; closesAt: string };
   room: { code: string; name: string } | null;
+  /** Phone numbers for joining on a weak connection (when Google gives them, §11.5). */
+  dialIn: { numbers: { region: string; phone: string; pin: string }[] } | null;
 }
 
+type JoinDenial = {
+  code:
+    | "MEETING_STATE_INVALID"
+    | "JOIN_WINDOW_CLOSED"
+    | "ONLINE_LINK_NOT_SET"
+    | "GOOGLE_ACCOUNT_REQUIRED"
+    | "PROVIDER_NOT_READY";
+  message: string;
+  headers?: Record<string, string>;
+};
+
 const MINUTE = 60_000;
+/** A space still PENDING this close to the start is asked for at once (§11.6 step 5). */
+const PRIORITY_PROVISION_WITHIN_MS = 30 * MINUTE;
+/** What `PROVIDER_NOT_READY` tells clients to wait before asking again. */
+const RETRY_AFTER_SECONDS = 30;
 /** The tick looks at meetings starting within this far ahead (the widest join window). */
 const TICK_LOOKAHEAD_MINUTES = 24 * 60;
 
@@ -50,6 +71,8 @@ export class MeetingLifecycleService {
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
     @Inject(PolicyService) private readonly policies: PolicyService,
     @Inject(ClassMeetingsService) private readonly meetings: ClassMeetingsService,
+    @Inject(ProvisioningService) private readonly provisioning: ProvisioningService,
+    @Inject(CONFIG) private readonly config: Config,
   ) {}
 
   /**
@@ -81,9 +104,14 @@ export class MeetingLifecycleService {
   }
 
   /**
-   * Join (§11.6, v1 spec): authorized by the caller already; checks the state and the window,
-   * logs the attempt, and returns the stored link. Students: 15 minutes before to an hour after
+   * Join (§11.6) is database only: authorized by the caller already; checks the state and the
+   * window, logs the attempt, and returns the link. Students: 15 minutes before to an hour after
    * (or any time while live). Staff: an hour before to the end of the maximum overrun.
+   *
+   * A Google Meet meeting gives its provisioned link; students need a linked Google account to be
+   * let in without knocking (`GOOGLE_ACCOUNT_REQUIRED`). Until the space is READY, a link a
+   * Lecturer pasted is used instead, else `PROVIDER_NOT_READY` (and a space still PENDING close
+   * to the start is asked for at once). A meeting with no provider uses the pasted link (v1).
    */
   async join(id: string, userId: string): Promise<DomainResult<JoinView>> {
     const m = schema.classMeetings;
@@ -112,11 +140,11 @@ export class MeetingLifecycleService {
     );
     const now = this.clock.now();
     const inWindow = now >= opensAt && now <= closesAt;
+    const provided = meeting.provider !== null;
+    const ready = provided && meeting.providerStatus === "READY" && meeting.joinUrl !== null;
 
-    let denied: {
-      code: "MEETING_STATE_INVALID" | "JOIN_WINDOW_CLOSED" | "ONLINE_LINK_NOT_SET";
-      message: string;
-    } | null = null;
+    let denied: JoinDenial | null = null;
+    let priorityProvision = false;
     if (meeting.state === "CANCELLED" || meeting.state === "NO_SHOW")
       denied = {
         code: "MEETING_STATE_INVALID",
@@ -133,31 +161,66 @@ export class MeetingLifecycleService {
             ? `You can join from ${String(staff ? policy.staffOpensBeforeMinutes : policy.studentOpensBeforeMinutes)} minutes before the class starts.`
             : "This class has finished.",
       };
-    else if (meeting.onlineLink === null)
+    else if (provided && !staff && !(await this.hasGoogleAccount(userId)))
+      denied = {
+        code: "GOOGLE_ACCOUNT_REQUIRED",
+        message:
+          "Link your Google account first (Profile → Link Google). Google Meet lets you in with it.",
+      };
+    else if (provided && !ready && meeting.onlineLink === null) {
+      denied = {
+        code: "PROVIDER_NOT_READY",
+        message: "The Meet link is being prepared. Try again in a moment.",
+        headers: { "retry-after": String(RETRY_AFTER_SECONDS) },
+      };
+      priorityProvision =
+        meeting.providerStatus === "PENDING" &&
+        meeting.scheduledStart.getTime() - now.getTime() <= PRIORITY_PROVISION_WITHIN_MS;
+    } else if (!provided && meeting.onlineLink === null)
       denied = {
         code: "ONLINE_LINK_NOT_SET",
         message: "The Lecturer hasn't added the online link yet. Please check again shortly.",
       };
 
-    await this.db.withTx(({ db }) =>
-      db.insert(schema.meetingJoinLog).values({
+    await this.db.withTx(async ({ db, boss }) => {
+      await db.insert(schema.meetingJoinLog).values({
         classMeetingId: id,
         userId,
         outcome: denied === null ? "AUTHORIZED" : "DENIED",
         denyReason: denied?.code ?? null,
         authorizedAt: now,
         createdAt: now,
-      }),
-    );
-    if (denied !== null) return err(domainError(denied.code, denied.message));
+      });
+      if (priorityProvision) await this.provisioning.queueProvisionNow(boss, id);
+    });
+    if (denied !== null)
+      return err(
+        domainError(denied.code, denied.message, {
+          ...(denied.headers === undefined ? {} : { headers: denied.headers }),
+        }),
+      );
+    const dialIn =
+      ready && this.config.features.phoneDialIn ? (meeting.dialIn as JoinView["dialIn"]) : null;
     return ok({
       meetingId: id,
       state: meeting.state as ClassMeetingState,
-      onlineLink: meeting.onlineLink ?? "",
+      onlineLink: ready ? (meeting.joinUrl ?? "") : (meeting.onlineLink ?? ""),
+      linkSource: ready ? "PROVIDER" : "PASTED",
       role: staff ? "STAFF" : "STUDENT",
       window: { opensAt: opensAt.toISOString(), closesAt: closesAt.toISOString() },
       room,
+      dialIn,
     });
+  }
+
+  private async hasGoogleAccount(userId: string): Promise<boolean> {
+    const i = schema.identities;
+    const [row] = await this.db.read
+      .select({ id: i.id })
+      .from(i)
+      .where(and(eq(i.userId, userId), eq(i.provider, "google")))
+      .limit(1);
+    return row !== undefined;
   }
 
   /**
@@ -167,7 +230,7 @@ export class MeetingLifecycleService {
    */
   async start(
     id: string,
-    actor: AuditActor,
+    actor: AuditActor & { userId: string },
   ): Promise<
     DomainResult<{ meeting: ClassMeeting; onlineLink: string | null; recordingNotice: string }>
   > {
@@ -183,20 +246,26 @@ export class MeetingLifecycleService {
     });
     if (!changed.ok) return changed;
     const recording = await this.policies.current("RECORDING");
-    const [meeting] = await this.meetings.viewAll([id]);
+    const [meeting] = await this.meetings.viewAll([id], actor.userId);
     if (meeting === undefined) return err(domainError("NOT_FOUND", "Not found."));
+    // Latecomers to the course are let in without knocking too (§11.6: sync at start).
+    if (meeting.providerStatus === "READY")
+      await this.db.withTx(({ boss }) => this.provisioning.queueSync(boss, id));
     return ok({
       meeting,
-      onlineLink: meeting.onlineLink,
+      onlineLink: meeting.joinUrl ?? meeting.onlineLink,
       recordingNotice: recording.config.noticeText,
     });
   }
 
   /** End: a LIVE class (or one with roll call that never went online) becomes ENDED. */
-  async end(id: string, actor: AuditActor): Promise<DomainResult<ClassMeeting>> {
+  async end(
+    id: string,
+    actor: AuditActor & { userId: string },
+  ): Promise<DomainResult<ClassMeeting>> {
     const changed = await this.apply(id, "END", actor);
     if (!changed.ok) return changed;
-    const [meeting] = await this.meetings.viewAll([id]);
+    const [meeting] = await this.meetings.viewAll([id], actor.userId);
     return meeting === undefined ? err(domainError("NOT_FOUND", "Not found.")) : ok(meeting);
   }
 
@@ -238,6 +307,20 @@ export class MeetingLifecycleService {
   }
 
   /**
+   * A conference started or ended in the meeting's Meet space (§11.8 events, reconciliation).
+   * `at` is when Meet says it happened. A transition the state machine refuses (a call in a
+   * cancelled class, an end while not live) changes nothing.
+   */
+  async applyProviderEvent(
+    id: string,
+    event: "CONFERENCE_STARTED" | "CONFERENCE_ENDED",
+    at: Date,
+  ): Promise<ClassMeetingState | null> {
+    const result = await this.apply(id, event, { userId: null, type: "PROVIDER" }, undefined, at);
+    return result.ok ? result.value : null;
+  }
+
+  /**
    * Applies one event to a locked meeting through the state machine, with its side effects:
    * timestamps, the audit row and the domain event.
    */
@@ -246,12 +329,13 @@ export class MeetingLifecycleService {
     event: MeetingEvent,
     actor: AuditActor,
     precondition?: (row: MeetingRow, now: Date) => ReturnType<typeof domainError> | null,
+    at?: Date,
   ): Promise<DomainResult<ClassMeetingState>> {
     return this.db.withTxResult(async ({ db, boss }) => {
       const m = schema.classMeetings;
       const [row] = await db.select().from(m).where(eq(m.id, id)).for("update");
       if (row === undefined) return err(domainError("NOT_FOUND", "Not found."));
-      const now = this.clock.now();
+      const now = at ?? this.clock.now();
       const problem = precondition?.(row, now) ?? null;
       if (problem !== null) return err(problem);
       const policy = windowPolicy(row);
@@ -271,7 +355,7 @@ export class MeetingLifecycleService {
             ? { firstConferenceStartedAt: now }
             : {}),
           ...(result.to === "ENDED" ? { lastConferenceEndedAt: now } : {}),
-          updatedAt: now,
+          updatedAt: this.clock.now(),
           version: sql`${m.version} + 1`,
         })
         .where(eq(m.id, id));
@@ -281,6 +365,13 @@ export class MeetingLifecycleService {
         resourceId: id,
         metadata: { from: row.state, to: result.to, event },
       });
+      // Ending the class ends the call in Meet too, which stops the recording (§11.6).
+      if (
+        result.to === "ENDED" &&
+        (event === "END" || event === "OVERRUN") &&
+        row.providerStatus === "READY"
+      )
+        await boss.send("class-meeting.end", { meetingId: id });
       const name =
         result.to === "LIVE" ? "meeting.started" : result.to === "ENDED" ? "meeting.ended" : null;
       if (name !== null)

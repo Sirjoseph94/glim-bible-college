@@ -3,6 +3,7 @@ import { Db, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import { AuthorizationService } from "@glim/modules/authorization";
 import { addDays } from "@glim/modules/scheduling";
+import { VideosService } from "@glim/modules/video";
 import { definedFields, domainError, err, ok, type DomainResult } from "@glim/shared";
 import { toLocalDate, zonedToInstant } from "@glim/shared/time";
 import { Inject, Injectable } from "@nestjs/common";
@@ -48,6 +49,12 @@ export interface ClassMeetingChange {
 
 type Actor = AuditActor & { userId: string };
 
+/** Who's looking: links go to people who manage the meetings (all, or per offering). */
+interface Viewer {
+  userId: string;
+  managesMeetings: boolean | ((offeringId: string) => boolean);
+}
+
 /** `/me/schedule` defaults to the next two weeks. */
 const DEFAULT_WINDOW_DAYS = 14;
 const UPCOMING = ["SCHEDULED", "OPEN"];
@@ -79,6 +86,7 @@ export class ClassMeetingsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
     @Inject(MeetingWriter) private readonly writer: MeetingWriter,
+    @Inject(VideosService) private readonly videos: VideosService,
   ) {}
 
   /**
@@ -131,7 +139,7 @@ export class ClassMeetingsService {
       return err(raced);
     }
     const warnings = await this.clashes(offeringId, [{ start, end, meetingId: created.id }]);
-    const meeting = await this.view(created.id, true);
+    const meeting = await this.view(created.id, { userId: actor.userId, managesMeetings: true });
     if (meeting === null) throw new Error("created meeting vanished");
     return ok({ meeting, warnings });
   }
@@ -139,13 +147,19 @@ export class ClassMeetingsService {
   /** An offering's meetings, earliest first. The online link only for people who manage them. */
   async listForOffering(offeringId: string, viewerUserId: string): Promise<ClassMeeting[]> {
     const manages = await this.manages(viewerUserId, offeringId);
-    return this.query(eq(schema.classMeetings.courseOfferingId, offeringId), manages);
+    return this.query(eq(schema.classMeetings.courseOfferingId, offeringId), {
+      userId: viewerUserId,
+      managesMeetings: manages,
+    });
   }
 
   async get(id: string, viewerUserId: string): Promise<ClassMeeting | null> {
     const offeringId = await this.offeringOf(id);
     if (offeringId === null) return null;
-    return this.view(id, await this.manages(viewerUserId, offeringId));
+    return this.view(id, {
+      userId: viewerUserId,
+      managesMeetings: await this.manages(viewerUserId, offeringId),
+    });
   }
 
   /**
@@ -269,7 +283,7 @@ export class ClassMeetingsService {
               version: sql`${m.version} + 1`,
             })
             .where(eq(m.id, plan.row.id));
-          if (timesChange)
+          if (timesChange) {
             await this.writer.scheduling.moveSlots(
               db,
               plan.row.id,
@@ -277,6 +291,14 @@ export class ClassMeetingsService {
               plan.end,
               override.value,
             );
+            // The space is kept (§11.9); one not yet created is asked for by the new time.
+            if (plan.row.providerStatus === "PENDING")
+              await this.writer.provisioning.queueProvision(tx, {
+                ...plan.row,
+                scheduledStart: plan.start,
+                scheduledEnd: plan.end,
+              });
+          }
         }
         if (scope === "ALL_FUTURE" && current.seriesId !== null)
           await this.writer.scheduling.updateSeries(
@@ -350,7 +372,7 @@ export class ClassMeetingsService {
     }
     if (!result.ok) return result;
     const warnings = timesChange ? await this.clashes(current.courseOfferingId, slots) : [];
-    const meeting = await this.view(id, true);
+    const meeting = await this.view(id, { userId: actor.userId, managesMeetings: true });
     return meeting === null ? notFound() : ok({ meeting, warnings, changed: plans.value.length });
   }
 
@@ -441,7 +463,7 @@ export class ClassMeetingsService {
       return ok(targets.length);
     });
     if (!result.ok) return result;
-    const meeting = await this.view(id, true);
+    const meeting = await this.view(id, { userId: actor.userId, managesMeetings: true });
     return meeting === null ? notFound() : ok({ meeting, cancelled: result.value });
   }
 
@@ -484,7 +506,7 @@ export class ClassMeetingsService {
         lt(m.scheduledStart, to),
         gte(m.scheduledEnd, from),
       ),
-      (offeringId) => managed.has(offeringId),
+      { userId, managesMeetings: (offeringId) => managed.has(offeringId) },
     );
     return meetings.map((meeting) => ({
       ...meeting,
@@ -498,10 +520,16 @@ export class ClassMeetingsService {
     return row?.courseOfferingId ?? null;
   }
 
-  /** Meetings in their full form (with links), for callers that manage them. */
-  viewAll(ids: string[]): Promise<ClassMeeting[]> {
+  /**
+   * Meetings in their full form (with links), for callers that manage them. The recording is
+   * shown as `viewerUserId` may see it.
+   */
+  viewAll(ids: string[], viewerUserId: string): Promise<ClassMeeting[]> {
     if (ids.length === 0) return Promise.resolve([]);
-    return this.query(inArray(schema.classMeetings.id, ids), true);
+    return this.query(inArray(schema.classMeetings.id, ids), {
+      userId: viewerUserId,
+      managesMeetings: true,
+    });
   }
 
   // ---- helpers ----
@@ -587,15 +615,12 @@ export class ClassMeetingsService {
     return decision === "ALLOW";
   }
 
-  private async view(id: string, manages: boolean): Promise<ClassMeeting | null> {
-    const [meeting] = await this.query(eq(schema.classMeetings.id, id), manages);
+  private async view(id: string, viewer: Viewer): Promise<ClassMeeting | null> {
+    const [meeting] = await this.query(eq(schema.classMeetings.id, id), viewer);
     return meeting ?? null;
   }
 
-  private async query(
-    where: SQL | undefined,
-    manages: boolean | ((offeringId: string) => boolean),
-  ): Promise<ClassMeeting[]> {
+  private async query(where: SQL | undefined, viewer: Viewer): Promise<ClassMeeting[]> {
     const m = schema.classMeetings;
     const c = schema.courses;
     const r = schema.rooms;
@@ -612,6 +637,11 @@ export class ClassMeetingsService {
       .leftJoin(r, eq(r.id, m.roomId))
       .where(where)
       .orderBy(asc(m.scheduledStart));
+    const recordings = await this.videos.recordingsFor(
+      rows.map((r) => r.meeting),
+      viewer.userId,
+    );
+    const { managesMeetings: manages } = viewer;
     return rows.map(({ meeting, courseCode, courseTitle, room }) => {
       const showLink = typeof manages === "function" ? manages(meeting.courseOfferingId) : manages;
       return {
@@ -626,10 +656,15 @@ export class ClassMeetingsService {
         scheduledEnd: meeting.scheduledEnd.toISOString(),
         timezone: meeting.timezone,
         room,
-        hasOnlineLink: meeting.onlineLink !== null,
+        hasOnlineLink: meeting.onlineLink !== null || meeting.joinUrl !== null,
         onlineLink: showLink ? meeting.onlineLink : null,
+        providerStatus: meeting.providerStatus as ClassMeeting["providerStatus"],
+        joinUrl: showLink ? meeting.joinUrl : null,
+        provisionError: showLink ? meeting.provisionError : null,
         state: meeting.state as ClassMeeting["state"],
+        cancelReason: meeting.state === "CANCELLED" ? meeting.cancelReason : null,
         recordingMode: meeting.recordingMode as RecordingMode,
+        recording: recordings.get(meeting.id) ?? null,
         version: meeting.version,
       };
     });

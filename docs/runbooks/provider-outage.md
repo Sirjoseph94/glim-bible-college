@@ -1,4 +1,4 @@
-# Runbook: a provider is down (YouTube, SendGrid, the database)
+# Runbook: a provider is down (YouTube, Google Meet, SendGrid, the database)
 
 **For:** the System Admin.
 **When:** the ops page (`/admin/ops`, `/admin/jobs`) shows failures, you're emailed that a job queue is falling behind, or people report that something isn't working.
@@ -17,6 +17,17 @@ GLIM is built so that an outside service being down delays background work but n
 1. On **Ops → YouTube**, choose **Check now**. If it says oEmbed is unreachable, look at Google's status page.
 2. Nothing else is needed. When YouTube is back, the retried check finishes on its own. Lecturers can add links again.
 3. If the check is still failing after a day, open **Jobs** and look at `video.availability-check`. Replay it from **Ops** once YouTube answers.
+
+## Google Meet is down (when the Google integration is on)
+
+**What still works:** joining classes whose Meet link is already made. Joining reads only GLIM's database. Classes in progress aren't affected.
+
+**What waits:** Meet links for new classes (made the day before, retried with backoff), member lists, online attendance and recording uploads. Nothing is lost; each catches up when Google answers. Reconciliation re-reads Meet every few minutes.
+
+**What to do:**
+1. On **Ops → Integrations**, choose **Test Google**, and check Google's status page.
+2. If a class is about to start without a link, a Lecturer can paste a Meet link on it; students get that instead.
+3. When Google is back, **Replay** any *Google Meet link* or *Recording upload* failures on **Ops**. [`google.md`](google.md) has the full table of what each message means.
 
 ## SendGrid is down, or email is bouncing
 

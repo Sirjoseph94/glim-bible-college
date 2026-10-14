@@ -111,7 +111,40 @@ export const gradingDefaultsPolicy = z
   })
   .strict();
 
-/** The policies v1 edits. GOOGLE_MEET and RETENTION belong to later slices. */
+/**
+ * Google Meet spaces and Meet attendance (TRD §11.5, §12.4; integration slice). Matching by
+ * Google id or email stays off until spike S-01 shows it is reliable (Q-02): until then online
+ * attendance runs in review mode, where name matches are only suggestions.
+ */
+export const googleMeetPolicy = z
+  .object({
+    accessType: z.enum(["RESTRICTED", "TRUSTED", "OPEN"]).default("RESTRICTED"),
+    moderation: z.boolean().default(true),
+    presentRestriction: z.enum(["HOSTS_ONLY", "ANYONE"]).default("HOSTS_ONLY"),
+    /** Spaces are created this long before the class starts. */
+    provisionLeadHours: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 14)
+      .default(24),
+    /** Member lists are kept in sync for meetings starting within this many days. */
+    syncAccessWithinDays: z.number().int().min(1).max(60).default(14),
+    matching: z
+      .object({
+        /** S-01: the Meet user id equals the sign-in `sub` for Gmail accounts. */
+        googleId: z.boolean().default(false),
+        /** S-01: Meet exposes a participant's email. */
+        memberEmail: z.boolean().default(false),
+        /** Suggest a student whose Google name matches exactly; a person confirms. */
+        nameAssisted: z.boolean().default(true),
+      })
+      .strict()
+      .default({ googleId: false, memberEmail: false, nameAssisted: true }),
+  })
+  .strict();
+
+/** The policies the app edits. RETENTION belongs to a later slice. */
 export const POLICY_SCHEMAS = {
   ATTENDANCE: attendancePolicy,
   JOIN_WINDOW: joinWindowPolicy,
@@ -119,6 +152,7 @@ export const POLICY_SCHEMAS = {
   NOTIFICATION: notificationPolicy,
   ADMISSIONS: admissionsPolicy,
   GRADING_DEFAULTS: gradingDefaultsPolicy,
+  GOOGLE_MEET: googleMeetPolicy,
 } as const;
 
 export type EditablePolicyType = keyof typeof POLICY_SCHEMAS;

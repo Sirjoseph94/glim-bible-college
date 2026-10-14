@@ -1,7 +1,7 @@
 /**
- * Queue catalogue (TRD §17.1) and cron schedules (§17.2).
- * `ensureQueues()` creates every queue whose `slice` is "v1"; integration-slice queues are
- * registered here so their names are reserved, but they're created by the Google integration slice.
+ * Queue catalogue (TRD §17.1) and cron schedules (§17.2). `ensureQueues()` creates every queue;
+ * a worker only works the queues it has handlers for, so the Google queues stay idle while
+ * `LIVE_PROVIDER=none`.
  */
 export const WORKER_ROLES = ["general", "google", "media", "scheduler", "all"] as const;
 export type WorkerRole = (typeof WORKER_ROLES)[number];
@@ -10,7 +10,6 @@ export interface QueueSpec {
   role: Exclude<WorkerRole, "all">;
   retryLimit: number;
   expireInSeconds: number;
-  slice: "v1" | "integration";
 }
 
 const MIN = 60;
@@ -21,139 +20,129 @@ export const QUEUES = {
     role: "google",
     retryLimit: 6,
     expireInSeconds: 5 * MIN,
-    slice: "integration",
   },
   "class-meeting.sync-access": {
     role: "google",
     retryLimit: 6,
     expireInSeconds: 10 * MIN,
-    slice: "integration",
   },
   "class-meeting.end": {
     role: "google",
     retryLimit: 3,
     expireInSeconds: 2 * MIN,
-    slice: "integration",
   },
   "class-meeting.finalize": {
     role: "general",
     retryLimit: 5,
     expireInSeconds: 10 * MIN,
-    slice: "v1",
   },
   "conference.sync": {
     role: "google",
     retryLimit: 6,
     expireInSeconds: 15 * MIN,
-    slice: "integration",
   },
   "provider-event.process": {
     role: "general",
     retryLimit: 5,
     expireInSeconds: 2 * MIN,
-    slice: "v1",
   },
-  "attendance.recompute": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN, slice: "v1" },
+  "attendance.recompute": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN },
   "recording.discover": {
     role: "general",
     retryLimit: 6,
     expireInSeconds: 5 * MIN,
-    slice: "integration",
   },
   "recording.ingest": {
     role: "media",
     retryLimit: 5,
     expireInSeconds: 2 * HOUR,
-    slice: "integration",
   },
   "video.youtube-processing-sync": {
     role: "general",
     retryLimit: 20,
     expireInSeconds: 2 * MIN,
-    slice: "integration",
   },
   "video.availability-check": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 30 * MIN,
-    slice: "v1",
   },
+  /** Every 10 minutes: Meet recordings the events missed, and stuck uploads (§11.8). */
+  "recording.reconcile": { role: "google", retryLimit: 1, expireInSeconds: 10 * MIN },
+  /** A video's title changed in the app: change it on YouTube too (integration slice). */
+  "video.youtube-metadata": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN },
   "drive.cleanup": {
     role: "google",
     retryLimit: 5,
     expireInSeconds: 5 * MIN,
-    slice: "integration",
   },
-  "video.purge-deleted": { role: "general", retryLimit: 3, expireInSeconds: 30 * MIN, slice: "v1" },
-  "quiz.expire": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN, slice: "v1" },
-  "import.run": { role: "general", retryLimit: 2, expireInSeconds: HOUR, slice: "v1" },
+  "video.purge-deleted": { role: "general", retryLimit: 3, expireInSeconds: 30 * MIN },
+  "quiz.expire": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN },
+  "import.run": { role: "general", retryLimit: 2, expireInSeconds: HOUR },
   /** One invite email; imports spread these out with `startAfter` (rate cap). */
-  "identity.invite": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN, slice: "v1" },
+  "identity.invite": { role: "general", retryLimit: 3, expireInSeconds: 2 * MIN },
   /** Daily: generates each active series' Class Meetings up to the 8-week horizon (§11.9). */
   "class-meeting.series-extend": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 10 * MIN,
-    slice: "v1",
   },
   "semester.open-registration": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 30 * MIN,
-    slice: "v1",
   },
   "academic.progression": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 30 * MIN,
-    slice: "v1",
   },
   "results.compute-semester": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 30 * MIN,
-    slice: "v1",
   },
-  "transcript.generate": { role: "general", retryLimit: 3, expireInSeconds: 10 * MIN, slice: "v1" },
-  "transcript.send": { role: "general", retryLimit: 3, expireInSeconds: 10 * MIN, slice: "v1" },
+  "transcript.generate": { role: "general", retryLimit: 3, expireInSeconds: 10 * MIN },
+  "transcript.send": { role: "general", retryLimit: 3, expireInSeconds: 10 * MIN },
   "admissions.offer-sweep": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 10 * MIN,
-    slice: "v1",
   },
   "admissions.intake-status": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 5 * MIN,
-    slice: "v1",
   },
-  "admissions.purge": { role: "general", retryLimit: 2, expireInSeconds: 30 * MIN, slice: "v1" },
-  "notify.send": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN, slice: "v1" },
-  "notify.digest": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN, slice: "v1" },
-  "domain-event": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN, slice: "v1" },
+  "admissions.purge": { role: "general", retryLimit: 2, expireInSeconds: 30 * MIN },
+  "notify.send": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN },
+  "notify.digest": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN },
+  "domain-event": { role: "general", retryLimit: 5, expireInSeconds: 2 * MIN },
   "subscription.renew": {
     role: "google",
     retryLimit: 6,
     expireInSeconds: 5 * MIN,
-    slice: "integration",
   },
-  "db.logical-backup": { role: "scheduler", retryLimit: 2, expireInSeconds: HOUR, slice: "v1" },
-  "ops.queue-health": { role: "general", retryLimit: 0, expireInSeconds: MIN, slice: "v1" },
-  "ops.youtube-check": { role: "general", retryLimit: 2, expireInSeconds: 2 * MIN, slice: "v1" },
+  "db.logical-backup": { role: "scheduler", retryLimit: 2, expireInSeconds: HOUR },
+  "ops.queue-health": { role: "general", retryLimit: 0, expireInSeconds: MIN },
+  "ops.youtube-check": { role: "general", retryLimit: 2, expireInSeconds: 2 * MIN },
+  /** The admin's "Test Google": tokens, delegated scopes, Drive storage, subscriptions (§15.3). */
+  "ops.google-check": { role: "google", retryLimit: 1, expireInSeconds: 5 * MIN },
+  /** Hourly: the host accounts' Drive storage, alerting at 70 % and 85 % (§11.2). */
+  "drive.storage-monitor": { role: "google", retryLimit: 1, expireInSeconds: 5 * MIN },
   "idempotency.cleanup": {
     role: "scheduler",
     retryLimit: 2,
     expireInSeconds: 10 * MIN,
-    slice: "v1",
   },
   "auth.session-cleanup": {
     role: "scheduler",
     retryLimit: 2,
     expireInSeconds: 10 * MIN,
-    slice: "v1",
   },
-  "meeting.tick": { role: "general", retryLimit: 2, expireInSeconds: MIN, slice: "v1" },
+  "meeting.tick": { role: "general", retryLimit: 2, expireInSeconds: MIN },
+  /** Every 3 minutes: Meet conferences the events missed (§11.8, INV-6). */
+  "meeting.reconcile": { role: "google", retryLimit: 1, expireInSeconds: 3 * MIN },
 } as const satisfies Record<string, QueueSpec>;
 
 export type QueueName = keyof typeof QUEUES;
@@ -165,9 +154,7 @@ export function deadLetterQueue(queue: QueueName): string {
 
 /** Which queues a worker with the given role processes. `all` processes every role. */
 export function queuesForRole(role: WorkerRole): QueueName[] {
-  return QUEUE_NAMES.filter(
-    (q) => QUEUES[q].slice === "v1" && (role === "all" || QUEUES[q].role === role),
-  );
+  return QUEUE_NAMES.filter((q) => role === "all" || QUEUES[q].role === role);
 }
 
 export interface CronSpec {
@@ -198,6 +185,10 @@ export const CRON_SCHEDULES = {
   "auth.session-cleanup": { queue: "auth.session-cleanup", cron: "45 * * * *", tz: "UTC" },
   "db.logical-backup": { queue: "db.logical-backup", cron: "0 1 * * 0", tz: "UTC" },
   "ops.queue-health": { queue: "ops.queue-health", cron: "* * * * *", tz: "UTC" },
+  "meeting-reconciliation": { queue: "meeting.reconcile", cron: "*/3 * * * *", tz: "UTC" },
+  "subscription-renewal": { queue: "subscription.renew", cron: "*/15 * * * *", tz: "UTC" },
+  "recording-reconciliation": { queue: "recording.reconcile", cron: "*/10 * * * *", tz: "UTC" },
+  "drive-storage-monitor": { queue: "drive.storage-monitor", cron: "20 * * * *", tz: "UTC" },
 } as const satisfies Record<string, CronSpec>;
 
 export type CronName = keyof typeof CRON_SCHEDULES;

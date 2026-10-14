@@ -7,3 +7,4 @@ export {
   type AttendanceResult,
 } from "./domain/compute";
 export { RollCallService } from "./roll-call.service";
+export { ParticipantsService } from "./participants.service";

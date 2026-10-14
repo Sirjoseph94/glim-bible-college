@@ -14,7 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
  * A course (§9.15): the whole card links to the course page, the student's or, with `teaching`,
  * the Lecturer's. The band carries the course code and, when there is one, the state of its next
  * Class Meeting. ("Recordings watched" waits on data the API doesn't return yet:
- * .scratch/ui-overhaul/issues/02.)
+ * .scratch/ui-overhaul/issues/07.)
  */
 export function CourseCard({
   offering,
