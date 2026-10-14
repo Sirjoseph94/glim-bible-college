@@ -18,7 +18,7 @@ module.exports = {
     collect: {
       url: (signedIn
         ? ["/", "/courses", "/schedule"]
-        : ["/login", "/apply", "/verify/NOTACODE"]
+        : ["/", "/login", "/apply", "/verify/NOTACODE"]
       ).map((path) => `http://localhost:4173${path}`),
       numberOfRuns: 3,
       settings: {
