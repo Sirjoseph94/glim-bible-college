@@ -597,7 +597,8 @@ export class GoogleMeetProvider implements LiveProvider {
       method: "GET",
       url: `${this.endpoints.drive}/about?fields=storageQuota`,
       subject: hostEmail,
-      scopes: [SCOPES.driveMeet],
+      // about.get doesn't accept drive.meet.readonly; `drive` is already delegated (A.2 step 4).
+      scopes: [SCOPES.drive],
     });
     const quota = about.storageQuota ?? {};
     return {

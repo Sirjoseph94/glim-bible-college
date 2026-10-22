@@ -119,7 +119,7 @@ export class FakeGoogleServer {
       if (failure !== null) return error(FAILURE_STATUS[failure], `Scripted ${failure}.`);
     }
     const body = raw === "" ? {} : (JSON.parse(raw) as Record<string, unknown>);
-    return route.run({ url, body, sub: auth.sub, send, error, req, res });
+    return route.run({ url, body, sub: auth.sub, scopes: auth.scopes, send, error, req, res });
   }
 
   private route(
@@ -424,6 +424,8 @@ export class FakeGoogleServer {
         take: true,
         run: (ctx) => {
           if (ctx.sub === null) return ctx.error(403, "Needs a user.");
+          if (!ctx.scopes.some((x) => ABOUT_SCOPES.has(x)))
+            return ctx.error(403, "Request had insufficient authentication scopes.");
           const host = w.host(ctx.sub);
           return ctx.send(200, {
             storageQuota: {
@@ -526,11 +528,27 @@ interface Ctx {
   url: URL;
   body: Record<string, unknown>;
   sub: string | null;
+  /** The access token's granted scopes. */
+  scopes: string[];
   req: IncomingMessage;
   res: ServerResponse;
   send: (status: number, body?: unknown, headers?: Record<string, string>) => true;
   error: (status: number, message: string) => true;
 }
+
+/** Scopes Drive's `about.get` accepts (drive.meet.readonly is not one of them). */
+const ABOUT_SCOPES = new Set(
+  [
+    "drive",
+    "drive.readonly",
+    "drive.file",
+    "drive.appdata",
+    "drive.metadata",
+    "drive.metadata.readonly",
+    "drive.photos.readonly",
+    "drive.apps.readonly",
+  ].map((x) => `https://www.googleapis.com/auth/${x}`),
+);
 
 const FAILURE_STATUS: Record<WorldFailure, number> = {
   unavailable: 503,
