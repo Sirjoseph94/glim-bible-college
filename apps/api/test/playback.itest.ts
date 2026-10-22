@@ -69,6 +69,8 @@ describe("GET /videos/:id/play", () => {
     const body = res.json<VideoPlayback>();
     expect(body).toMatchObject({
       videoId: video.id,
+      courseOfferingId: p.world.offerings.O1,
+      courseCode: "PBIB101",
       youtubeVideoId: "play0000001",
       thumbnailUrl: "https://i.ytimg.com/vi/play0000001/mqdefault.jpg",
       durationMs: null,
@@ -94,6 +96,7 @@ describe("GET /videos/:id/play", () => {
   it("hides unpublished videos from students but lets the course's Lecturers preview them", async () => {
     expect((await play("sEnrolled", hidden.id)).statusCode).toBe(404);
     const preview = await play("l1Primary", hidden.id);
+    expect(preview.json<VideoPlayback>().courseOfferingId).toBe(p.world.offerings.O1);
     expect(preview.statusCode).toBe(200);
     expect(preview.json<VideoPlayback>().tracksProgress).toBe(false);
     expect((await play("acadAdmin", hidden.id)).statusCode).toBe(200);

@@ -175,3 +175,40 @@ export function computeAttendance(input: AttendanceInput): AttendanceOutcome {
     });
   return { results, shortConference };
 }
+
+export interface ParticipantEvidence {
+  participantId: string;
+  /** Confirmed as someone (or as nobody on the course): needs no review. */
+  resolved: boolean;
+  intervals: Interval[];
+}
+
+/**
+ * Unresolved participants and their time inside the conference and window (§12.4: an overlap
+ * longer than `unmatchedReviewMinutes` needs review). Merged per participant, like attendance.
+ */
+export function unresolvedParticipants(input: {
+  scheduledStart: Date;
+  scheduledEnd: Date;
+  conferences: Interval[];
+  capAt: Date;
+  windowPaddingMinutes: { before: number; after: number };
+  participants: ParticipantEvidence[];
+}): { participantId: string; seconds: number }[] {
+  const minute = 60_000;
+  const window: Span = [
+    input.scheduledStart.getTime() - input.windowPaddingMinutes.before * minute,
+    input.scheduledEnd.getTime() + input.windowPaddingMinutes.after * minute,
+  ];
+  const cap = input.capAt.getTime();
+  const toSpan = (i: Interval): Span => [i.start.getTime(), i.end?.getTime() ?? cap];
+  const conference = union(input.conferences.flatMap((c) => clip(toSpan(c), [window])));
+  return input.participants
+    .filter((p) => !p.resolved)
+    .map((p) => ({
+      participantId: p.participantId,
+      seconds: seconds(union(p.intervals.flatMap((i) => clip(toSpan(i), conference)))),
+    }))
+    .filter((p) => p.seconds > 0)
+    .sort((a, b) => a.participantId.localeCompare(b.participantId));
+}

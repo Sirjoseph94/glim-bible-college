@@ -3,6 +3,7 @@ import type { AuditActor } from "@glim/modules/audit";
 import {
   ClassMeetingsService,
   MeetingLifecycleService,
+  ProvisioningService,
   SeriesService,
 } from "@glim/modules/class-meeting";
 import type { ActiveSession } from "@glim/modules/identity";
@@ -19,6 +20,7 @@ export class ClassMeetingsController {
     @Inject(ClassMeetingsService) private readonly meetings: ClassMeetingsService,
     @Inject(SeriesService) private readonly series: SeriesService,
     @Inject(MeetingLifecycleService) private readonly lifecycle: MeetingLifecycleService,
+    @Inject(ProvisioningService) private readonly provisioning: ProvisioningService,
   ) {}
 
   @Endpoint(meetings.createClassMeeting)
@@ -103,6 +105,19 @@ export class ClassMeetingsController {
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof meetings.startClassMeeting>> {
     return unwrap(await this.lifecycle.start(params.id, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(meetings.reprovisionClassMeeting)
+  async reprovision(
+    @Params(meetings.reprovisionClassMeeting)
+    params: ParamsOf<typeof meetings.reprovisionClassMeeting>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof meetings.reprovisionClassMeeting>> {
+    unwrap(await this.provisioning.reprovision(params.id, { ...actor, userId: session.userId }));
+    const [meeting] = await this.meetings.viewAll([params.id], session.userId);
+    if (meeting === undefined) throw new AppError("NOT_FOUND", "Not found.");
+    return meeting;
   }
 
   @Endpoint(meetings.endClassMeeting)

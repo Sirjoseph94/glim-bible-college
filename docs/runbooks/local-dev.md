@@ -42,3 +42,7 @@ Creates the user with the System Admin role and emails a 7-day invite link (loca
 ## Google sign-in
 
 Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (a Google Cloud OAuth web client, TRD Appendix A.2) to enable "Continue with Google". The authorised redirect URI is `<APP_ORIGIN>/api/v1/auth/google/callback`. Without them, the button is hidden and `/auth/google/start` sends users back to the sign-in page. Tests and the e2e stack use `FakeOidcIssuer` (`packages/integrations/src/oidc/fake-issuer.ts`) instead of Google.
+
+## Google Meet and automatic upload, without Google
+
+Set `LIVE_PROVIDER=fake` to have Class Meetings get a Meet space from an in-memory stand-in (`packages/integrations/src/live-provider/fake.ts`): provisioning, member sync, join and the Lecturer's screens work, with no Google account. Meet events, participants and recordings only happen when a test scripts them (`MeetWorld`). `VIDEO_HOST=fake` does the same for YouTube, including connecting a channel. Neither is allowed in production. The real setup is in [`google.md`](google.md).

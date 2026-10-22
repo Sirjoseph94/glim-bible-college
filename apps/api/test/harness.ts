@@ -4,6 +4,7 @@ import { createBoss, createPool, Db } from "@glim/db";
 import { createTestDatabase, type TestDatabase } from "@glim/db/testing";
 import { MemoryMailer } from "@glim/integrations/mail/memory";
 import { DisabledIdentityProvider } from "@glim/integrations/oidc/openid";
+import type { LiveProvider } from "@glim/integrations/live-provider/port";
 import type { IdentityProvider } from "@glim/integrations/oidc/port";
 import { S3ObjectStorage } from "@glim/integrations/storage/s3";
 import { FakeVideoHost } from "@glim/integrations/video-host/fake";
@@ -53,6 +54,12 @@ export async function createTestApp(
     captureLogs?: boolean;
     /** SendGrid's Event Webhook public key (base64 DER), for the webhook tests. */
     sendgridWebhookPublicKey?: string;
+    /** Google Meet on (integration slice); off, meetings use pasted links as in v1. */
+    liveProvider?: LiveProvider;
+    phoneDialIn?: boolean;
+    /** Lets the app hold a YouTube channel grant (integration slice). */
+    tokenEncryptionKey?: Buffer;
+    driveCleanupMode?: "NONE" | "TRASH_AFTER_INGEST";
   } = {},
 ): Promise<TestApp> {
   const database: TestDatabase = await createTestDatabase(inject("glim").postgresAdminUrl);
@@ -63,6 +70,10 @@ export async function createTestApp(
     ...base,
     storage: { ...base.storage, endpoint: s3.endpoint },
     mail: { ...base.mail, sendgridWebhookPublicKey: options.sendgridWebhookPublicKey },
+    features: { ...base.features, phoneDialIn: options.phoneDialIn ?? false },
+    tokenEncryptionKey: options.tokenEncryptionKey,
+    liveProvider: options.liveProvider === undefined ? base.liveProvider : ("fake" as const),
+    driveCleanupMode: options.driveCleanupMode ?? base.driveCleanupMode,
   };
   const storage = new S3ObjectStorage({
     endpoint: s3.endpoint,
@@ -93,6 +104,7 @@ export async function createTestApp(
     objectStorage: storage,
     videoHost,
     transcriptRenderer: new ReactPdfTranscriptRenderer(),
+    liveProvider: options.liveProvider ?? null,
     logger,
     ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
   });

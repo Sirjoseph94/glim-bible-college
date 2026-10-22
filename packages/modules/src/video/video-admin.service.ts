@@ -3,6 +3,8 @@ import { Db, PG, pgError, schema, type Database, type TxQueue } from "@glim/db";
 import { AuditService, SYSTEM_ACTOR, type AuditActor } from "@glim/modules/audit";
 import { RoleService } from "@glim/modules/authorization";
 import { NotificationsService } from "@glim/modules/notifications";
+import { IntegrationsService } from "@glim/modules/ops";
+import { VIDEO_HOST, type VideoHost } from "@glim/integrations/video-host/port";
 import {
   CLOCK,
   decodeCursor,
@@ -56,6 +58,8 @@ export class VideoAdminService {
     @Inject(RoleService) private readonly roles: RoleService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(VideosService) private readonly videos: VideosService,
+    @Inject(VIDEO_HOST) private readonly host: VideoHost,
+    @Inject(IntegrationsService) private readonly integrations: IntegrationsService,
   ) {}
 
   async list(filter: AdminVideoFilter): Promise<Page<AdminVideo>> {
@@ -243,7 +247,25 @@ export class VideoAdminService {
       )
       .limit(500);
     let done = 0;
+    // With the channel connected, the video is deleted on YouTube too (integration slice);
+    // otherwise, or if that fails, the System Admin is reminded to delete it in Studio (v1).
+    const connection =
+      this.host.channelApi === undefined ? null : await this.integrations.youtube();
     for (const { id } of due) {
+      let deletedOnYoutube = false;
+      const [video] = await this.db.read.select().from(v).where(eq(v.id, id));
+      if (
+        connection !== null &&
+        video !== undefined &&
+        video.youtubeVideoId !== null &&
+        video.youtubeChannelUrl === connection.channel.url
+      )
+        try {
+          await this.host.channelApi?.deleteVideo(connection.credentials, video.youtubeVideoId);
+          deletedOnYoutube = true;
+        } catch {
+          deletedOnYoutube = false;
+        }
       const finished = await this.db.withTx(async (tx) => {
         const [row] = await tx.db.select().from(v).where(eq(v.id, id)).for("update");
         const now = this.clock.now();
@@ -259,12 +281,12 @@ export class VideoAdminService {
           .update(v)
           .set({ youtubeDeleteRemindedAt: now, updatedAt: now })
           .where(eq(v.id, id));
-        await this.remindToDelete(tx, row);
+        if (!deletedOnYoutube) await this.remindToDelete(tx, row);
         await this.audit.record(tx.db, SYSTEM_ACTOR, {
           action: "video.asset.purged",
           resourceType: "video",
           resourceId: id,
-          metadata: { youtubeVideoId: row.youtubeVideoId },
+          metadata: { youtubeVideoId: row.youtubeVideoId, deletedOnYoutube },
         });
         return true;
       });
@@ -317,15 +339,22 @@ export class VideoAdminService {
         courseTitle: sql<string>`coalesce(${o.titleOverride}, ${c.title})`,
         semesterName: s.name,
         sessionCode: a.code,
+        ingest: {
+          status: schema.recordings.status,
+          errorCode: schema.recordings.lastErrorCode,
+          error: schema.recordings.lastError,
+          attempts: schema.recordings.attemptCount,
+        },
       })
       .from(v)
+      .leftJoin(schema.recordings, eq(schema.recordings.id, v.recordingId))
       .innerJoin(o, eq(o.id, v.courseOfferingId))
       .innerJoin(c, eq(c.id, o.courseId))
       .innerJoin(s, eq(s.id, o.semesterId))
       .innerJoin(a, eq(a.id, s.academicSessionId));
   }
 
-  private async adminView(id: string): Promise<AdminVideo> {
+  async adminView(id: string): Promise<AdminVideo> {
     const [row] = await this.withOffering().where(eq(schema.videos.id, id));
     if (row === undefined) throw new Error(`video ${id} vanished`);
     return toAdminView(row);
@@ -344,8 +373,15 @@ function toAdminView(row: {
   courseTitle: string;
   semesterName: string;
   sessionCode: string;
+  ingest: {
+    status: string | null;
+    errorCode: string | null;
+    error: string | null;
+    attempts: number | null;
+  } | null;
 }): AdminVideo {
   const v = row.video;
+  const ingest = row.ingest?.status == null ? null : row.ingest;
   return {
     ...toView(v),
     origin: v.origin as AdminVideo["origin"],
@@ -359,5 +395,14 @@ function toAdminView(row: {
     deletedAt: v.deletedAt?.toISOString() ?? null,
     deleteAfter: v.deleteAfter?.toISOString() ?? null,
     youtubeDeleteRemindedAt: v.youtubeDeleteRemindedAt?.toISOString() ?? null,
+    ingest:
+      ingest === null
+        ? null
+        : {
+            status: ingest.status as NonNullable<AdminVideo["ingest"]>["status"],
+            errorCode: ingest.errorCode,
+            error: ingest.error,
+            attempts: ingest.attempts ?? 0,
+          },
   };
 }

@@ -43,6 +43,10 @@ test("the Registrar computes, approves and publishes semester results", async ({
   await expect(bola).toContainText("Provisional");
   // §11.10: the cohort is ready; approving publishes too, after a Dialog saying what it does.
   await expect(page.getByText("1 cohort is ready to approve")).toBeVisible();
+  // Each cohort names its level and how many of its courses are finalized (ui #06).
+  const cohort = page.getByRole("table", { name: "Cohorts" }).getByRole("row").nth(1);
+  await expect(cohort).toContainText(/· Years? \d/);
+  await expect(cohort).toContainText(/(\d+) of \1/);
   await page.getByRole("button", { name: "Approve and publish" }).click();
   const approve = page.getByRole("dialog", { name: /^Approve / });
   await expect(approve).toContainText("2 students' GPA and CGPA become official");

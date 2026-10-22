@@ -144,6 +144,9 @@ export const reorderVideos = endpoint({
 
 export const videoPlaybackSchema = z.object({
   videoId: z.uuid(),
+  /** The course it belongs to, for the page's way back. */
+  courseOfferingId: z.uuid(),
+  courseCode: z.string(),
   title: z.string(),
   youtubeVideoId: z.string(),
   /** youtube-nocookie.com, starting at the resume point. */
@@ -217,6 +220,15 @@ export const adminVideoSchema = videoSchema.extend({
   deleteAfter: z.iso.datetime().nullable(),
   /** Set once the System Admin was reminded to delete it in YouTube Studio. */
   youtubeDeleteRemindedAt: z.iso.datetime().nullable(),
+  /** A Meet recording's upload to YouTube (origin RECORDING, integration slice); else null. */
+  ingest: z
+    .object({
+      status: z.enum(ENUMS["recordings.status"]),
+      errorCode: z.string().nullable(),
+      error: z.string().nullable(),
+      attempts: z.number().int(),
+    })
+    .nullable(),
 });
 
 export type AdminVideo = z.infer<typeof adminVideoSchema>;
@@ -273,6 +285,20 @@ export const restoreVideo = endpoint({
   params: idParams,
   response: adminVideoSchema,
   successStatus: 200,
+});
+
+/** Uploads a failed Meet recording to YouTube again (TRD §13.3; integration slice). */
+export const retryIngest = endpoint({
+  method: "POST",
+  path: "/videos/:id/retry-ingest",
+  summary: "Upload a failed recording to YouTube again",
+  tag: "Video admin",
+  auth: "session",
+  permission: "video:asset:admin",
+  resource: { type: "video", param: "id" },
+  params: idParams,
+  response: adminVideoSchema,
+  successStatus: 202,
 });
 
 export const recheckVideo = endpoint({

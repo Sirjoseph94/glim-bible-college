@@ -9,6 +9,8 @@ const EVENTS: MeetingEvent[] = [
   "OVERRUN",
   "WINDOW_CLOSED",
   "CANCEL",
+  "CONFERENCE_STARTED",
+  "CONFERENCE_ENDED",
 ];
 const base: MeetingContext = {
   everStarted: false,
@@ -26,6 +28,8 @@ const TABLE: Record<ClassMeetingState, Record<MeetingEvent, ClassMeetingState | 
     OVERRUN: null,
     WINDOW_CLOSED: "NO_SHOW",
     CANCEL: "CANCELLED",
+    CONFERENCE_STARTED: "LIVE",
+    CONFERENCE_ENDED: null,
   },
   OPEN: {
     WINDOW_OPENED: null,
@@ -34,6 +38,8 @@ const TABLE: Record<ClassMeetingState, Record<MeetingEvent, ClassMeetingState | 
     OVERRUN: null,
     WINDOW_CLOSED: "NO_SHOW",
     CANCEL: "CANCELLED",
+    CONFERENCE_STARTED: "LIVE",
+    CONFERENCE_ENDED: null,
   },
   LIVE: {
     WINDOW_OPENED: null,
@@ -42,6 +48,8 @@ const TABLE: Record<ClassMeetingState, Record<MeetingEvent, ClassMeetingState | 
     OVERRUN: "ENDED",
     WINDOW_CLOSED: null,
     CANCEL: null,
+    CONFERENCE_STARTED: null,
+    CONFERENCE_ENDED: "ENDED",
   },
   ENDED: {
     WINDOW_OPENED: null,
@@ -50,6 +58,8 @@ const TABLE: Record<ClassMeetingState, Record<MeetingEvent, ClassMeetingState | 
     OVERRUN: null,
     WINDOW_CLOSED: null,
     CANCEL: null,
+    CONFERENCE_STARTED: "LIVE",
+    CONFERENCE_ENDED: null,
   },
   CANCELLED: {
     WINDOW_OPENED: null,
@@ -58,6 +68,8 @@ const TABLE: Record<ClassMeetingState, Record<MeetingEvent, ClassMeetingState | 
     OVERRUN: null,
     WINDOW_CLOSED: null,
     CANCEL: null,
+    CONFERENCE_STARTED: null,
+    CONFERENCE_ENDED: null,
   },
   NO_SHOW: {
     WINDOW_OPENED: null,
@@ -66,6 +78,8 @@ const TABLE: Record<ClassMeetingState, Record<MeetingEvent, ClassMeetingState | 
     OVERRUN: null,
     WINDOW_CLOSED: null,
     CANCEL: null,
+    CONFERENCE_STARTED: null,
+    CONFERENCE_ENDED: null,
   },
 };
 
@@ -97,6 +111,13 @@ describe("transition: context", () => {
   it("allows a restart only within the overrun and before finalization", () => {
     expect(transition("ENDED", "START", { ...base, withinOverrun: false }).ok).toBe(false);
     expect(transition("ENDED", "START", { ...base, finalized: true }).ok).toBe(false);
+  });
+
+  it("goes live again when a new call starts within the overrun, before finalization", () => {
+    expect(transition("ENDED", "CONFERENCE_STARTED", { ...base, withinOverrun: false }).ok).toBe(
+      false,
+    );
+    expect(transition("ENDED", "CONFERENCE_STARTED", { ...base, finalized: true }).ok).toBe(false);
   });
 
   it("refuses to cancel a live class with MEETING_IN_PROGRESS", () => {

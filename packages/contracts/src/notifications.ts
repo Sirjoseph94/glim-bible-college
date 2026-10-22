@@ -22,6 +22,27 @@ export const NOTIFICATION_KINDS = [
     critical: true,
   },
   { kind: "ops.queue-backlog", label: "Job queue falling behind (staff)", critical: true },
+  {
+    kind: "meeting.provision-failed",
+    label: "Google Meet link not created (staff)",
+    critical: true,
+  },
+  {
+    kind: "integration.google-degraded",
+    label: "Google integration problem (staff)",
+    critical: true,
+  },
+  {
+    kind: "integration.drive-storage",
+    label: "Recording storage filling up (staff)",
+    critical: true,
+  },
+  { kind: "recording.failed", label: "Recording upload failed (staff)", critical: true },
+  {
+    kind: "attendance.review-required",
+    label: "Online attendance to check (Lecturers)",
+    critical: false,
+  },
   { kind: "content.announcement", label: "Course announcements", critical: false },
   { kind: "assessment.grade-released", label: "Grades released", critical: false },
   { kind: "results.course-finalized", label: "Course result out", critical: false },

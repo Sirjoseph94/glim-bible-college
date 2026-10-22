@@ -8,3 +8,4 @@ export {
   VideoAdminService,
   type AdminVideoFilter,
 } from "./video-admin.service";
+export { durationsMatch, RecordingsService } from "./recordings.service";

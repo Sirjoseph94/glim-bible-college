@@ -1,3 +1,5 @@
+import type { Readable } from "node:stream";
+
 /**
  * Where course videos are hosted (TRD §13.1, ADR-0003): unlisted videos on GLIM's YouTube
  * channel. Domain-neutral types only; modules import this file, never an adapter (INV-3).
@@ -18,8 +20,61 @@ export interface ServiceCheck {
   channels: { url: string; resolves: boolean; detail: string | null }[];
 }
 
+/** The channel's OAuth grant, decrypted by the caller for the length of one call. */
+export interface ChannelCredentials {
+  refreshToken: string;
+}
+
+export interface ChannelInfo {
+  id: string;
+  title: string;
+  /** `https://www.youtube.com/channel/<id>`. */
+  url: string;
+}
+
+export interface UploadInput {
+  title: string;
+  description: string;
+  /** Streamed straight through: video bytes never touch the API or a temp file. */
+  body: Readable;
+  sizeBytes: number;
+  mime: string;
+}
+
+export interface ProcessingStatus {
+  state: "PROCESSING" | "SUCCEEDED" | "FAILED";
+  durationMs: number | null;
+  thumbnailUrl: string | null;
+}
+
+/**
+ * Acting as GLIM's channel through the YouTube Data API (integration slice, TRD §13.1, §13.3).
+ * Uploads are unlisted and not made for kids.
+ */
+export interface ChannelApi {
+  /** Where the System Admin consents to the app managing the channel. */
+  authorizationUrl(input: { redirectUri: string; state: string }): string;
+  /** The consent's code → a refresh token, and which channel it is for. */
+  exchangeCode(input: {
+    code: string;
+    redirectUri: string;
+  }): Promise<{ refreshToken: string; channel: ChannelInfo }>;
+  channel(credentials: ChannelCredentials): Promise<ChannelInfo>;
+  upload(credentials: ChannelCredentials, input: UploadInput): Promise<{ videoId: string }>;
+  getProcessing(credentials: ChannelCredentials, videoId: string): Promise<ProcessingStatus>;
+  updateMetadata(
+    credentials: ChannelCredentials,
+    videoId: string,
+    input: { title: string; description?: string | undefined },
+  ): Promise<void>;
+  /** Deleting a video that is already gone succeeds. */
+  deleteVideo(credentials: ChannelCredentials, videoId: string): Promise<void>;
+}
+
 export interface VideoHost {
   readonly name: "youtube_link" | "youtube_api" | "fake";
+  /** Present when the app can act as the channel (VIDEO_HOST=youtube_api, or the fake). */
+  readonly channelApi?: ChannelApi;
   /** The video id in a watch, short-link, live or embed URL; null for anything else. */
   parseUrl(url: string): { videoId: string } | null;
   /** Whether the host serves the video. Throws `VideoHostUnavailableError` if it can't tell. */
@@ -38,9 +93,28 @@ export interface VideoHost {
 
 /** The host couldn't be asked (network failure, 5xx, rate limit): try again later. */
 export class VideoHostUnavailableError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  constructor(message: string, options?: { cause?: unknown; retryAfterMs?: number }) {
     super(message, options);
     this.name = "VideoHostUnavailableError";
+    this.retryAfterMs = options?.retryAfterMs ?? null;
+  }
+
+  readonly retryAfterMs: number | null;
+}
+
+/** The channel grant was revoked or never given: the System Admin must connect it again. */
+export class ChannelAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChannelAuthError";
+  }
+}
+
+/** The project's daily YouTube quota is spent; it resets at midnight Pacific time. */
+export class ChannelQuotaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChannelQuotaError";
   }
 }
 

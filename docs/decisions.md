@@ -109,13 +109,13 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 |---|---|---|---|
 | UI-Q1 | Vocabulary | **`GLOSSARY.md` wins.** UI copy and code say Lecturer, Class Meeting and Matric Number, never "teacher", unqualified "session" or "student number". The handoff's SessionCard is built as `ClassMeetingCard`, and its "Teacher" role and copy are read as Lecturer. | handoff §6.3, §9.14, §12 |
 | UI-Q2 | Player | **Keep the YouTube embed for now** (ADR-0003). WP-UI-06 restyles the facade, stage, resume banner and data-saver tip. No QualityMenu, no Audio only, and no 180-day purge state (recordings are kept indefinitely). | handoff §9.16, §11.4 |
-| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. Until it lands, the card shows only the six real states, with `NO_SHOW` as "Didn't take place". | handoff §9.14 |
+| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. **Done (14 Oct 2026):** the card shows Recording expected, processing, ready (with Watch recording), and for staff Ready to publish or Recording failed. | handoff §9.14 |
 | UI-Q4 | Roll call | Compose it from §9.18 AttendanceRow and the §9.20 offline queue. | WP-UI-09 |
 | UI-Q5 | Course routes | Add `/courses/$offeringId` (WP-UI-05) and `/teach/$offeringId` (WP-UI-09). `/courses` and `/teach` become lists linking to them. Announcements go in the Overview tab. | handoff §11.3, §11.9 |
 | UI-Q6 | Lecturer home | A Lecturer's `/` is Lecturer Today (§11.7). | WP-UI-04/09 |
 | UI-Q7 | Admissions and registration screens | Compose them from §9/§10 in WP-UI-11 ("composed, not specified"). INV-15 is unchanged. | WP-UI-11 |
 | UI-Q8 | Transcripts | **Merge** the transcripts pages into the results pages: the student's into `/results` (§11.6), the Registrar's requests into the semester results page (§11.10). The old paths redirect. | WP-UI-08, WP-UI-10 |
-| UI-Q9 | Data the API doesn't return | **Skip for now.** No UI is built for it; it is documented for future work in `.scratch/ui-overhaul/issues/02-ui-data-gaps.md`. | — |
+| UI-Q9 | Data the API doesn't return | **Skip for now.** No UI is built for it; it is documented for future work in `.scratch/ui-overhaul/issues/02-ui-data-gaps.md`. **14 Oct 2026:** split into tickets 03–12; 03–06 are built. | — |
 | UI-Q10 | Radix UI | **Install it** for Dialog/Sheet, DropdownMenu, Tabs, RadioGroup, Checkbox, Switch and Tooltip. In practice Dialog, DropdownMenu, Tabs and Switch are used; Checkbox and Radio stay native (§9.5) and Tooltip has no use yet, so those three were removed until one does. | handoff §3.1 |
 | UI-Q11 | Google sign-in button | **A design exception is approved for the four-colour "G" mark.** Checked against Google's *Sign in with Google* branding guidelines: the standard G must sit on white and cannot be recoloured, and the button may only use Google's light, dark or neutral themes, not a brand fill. So the brand-green `primary` button in §11.1 is **not** acceptable. "Continue with Google" stays the first, full-width button, but uses Google's light theme (white fill, `#747775` 1 px stroke, `#1F1F1F` text) in light mode and its dark theme (`#131314` fill, `#8E918F` stroke, `#E3E3E3` text) in dark mode, with the G on white. Those values are design exceptions too. | handoff §11.1 |
 | UI-Q12 | Collapsible section | Add a "Disclosure" component to §9 (restyled native `<details>`). | WP-UI-03 |
@@ -123,6 +123,12 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 | UI-Q14 | Budget tooling | WP-UI-01 extends `budget-check.mjs` to report brotli and gzip and adds a Playwright check that the first screen downloads no fonts and no images except the crest. Signed-in Lighthouse runs come in WP-UI-12 (done: Home, Courses and Schedule as the online student, `apps/web/scripts/lighthouse.mjs`). | handoff §14 |
 | UI-Q15 | Spec references | The handoff's `SCHOOL_LMS_BUILD_SPEC.md` v2.1 references mean the equivalent sections of `docs/TRD.md` v3.0 (frontend is §18). | — |
 | UI-Q16 | Tailwind's default palette | WP-UI-01 adds the tokens alongside Tailwind's defaults, with the raw-value lint as a warning. WP-UI-12 removes the defaults and makes the lint an error (done). | handoff §15.1 |
+
+## 14 October 2026 — Google integration
+
+| ID | Topic | Decision | Where |
+|---|---|---|---|
+| GI-1 | When Google can't create a Class Meeting's Meet link | **Confirmed by the owner.** If the space isn't READY (still being made, or Google refused) and a Lecturer pasted a Meet link on the Class Meeting, students joining get the pasted link. Otherwise they're told the link is being prepared (`PROVIDER_NOT_READY`). The TRD (§11.6, §11.10) had no way in for students when provisioning failed. | `.scratch/google-integration/spec.md`, `lifecycle.service.ts` |
 
 ## Defaults applied — awaiting owner confirmation
 

@@ -89,9 +89,11 @@ describe("joining", () => {
       meetingId: m.id,
       state: "SCHEDULED",
       onlineLink: MEET,
+      linkSource: "PASTED",
       role: "STUDENT",
       window: { opensAt: "2026-11-03T08:45:00.000Z", closesAt: "2026-11-03T12:00:00.000Z" },
       room: null,
+      dialIn: null,
     });
     const log = await q<{ outcome: string; deny_reason: string | null }>(
       "SELECT outcome, deny_reason FROM meeting_join_log WHERE class_meeting_id = $1 ORDER BY created_at",

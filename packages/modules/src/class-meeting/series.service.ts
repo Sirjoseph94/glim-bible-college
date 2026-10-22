@@ -194,7 +194,7 @@ export class SeriesService {
     );
     return ok({
       series: seriesView(created.series),
-      meetings: await this.meetings.viewAll(created.meetingIds),
+      meetings: await this.meetings.viewAll(created.meetingIds, actor.userId),
       warnings,
     });
   }

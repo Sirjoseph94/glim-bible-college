@@ -10,7 +10,14 @@ export type JobHandler = (job: Job) => Promise<unknown>;
 export async function drainQueues(
   boss: PgBoss,
   handlers: Partial<Record<QueueName, JobHandler>>,
-  options: { maxRounds?: number } = {},
+  options: {
+    maxRounds?: number;
+    /**
+     * Also run jobs scheduled for later (and retries waiting out their backoff), for tests whose
+     * clock runs ahead of the database's.
+     */
+    ignoreStartAfter?: boolean;
+  } = {},
 ): Promise<{ completed: number; failed: number }> {
   const maxRounds = options.maxRounds ?? 50;
   let completed = 0;
@@ -18,7 +25,10 @@ export async function drainQueues(
   for (let round = 0; round < maxRounds; round++) {
     let ranAny = false;
     for (const [queue, handler] of Object.entries(handlers) as [QueueName, JobHandler][]) {
-      const jobs = await boss.fetch<object>(queue, { batchSize: 20 });
+      const jobs = await boss.fetch<object>(queue, {
+        batchSize: 20,
+        ...(options.ignoreStartAfter === true ? { ignoreStartAfter: true } : {}),
+      });
       for (const job of jobs) {
         ranAny = true;
         try {
