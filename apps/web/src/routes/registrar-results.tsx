@@ -16,6 +16,7 @@ import { describeError, type ErrorCopy } from "../api/error-copy";
 import { meQuery } from "../api/session";
 import { PageHeader } from "../components/app/page-header";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { SetupHint } from "../components/app/setup-hint";
 import { useDetailBar } from "../components/app/shell-parts";
 import { useSubmit } from "../components/use-submit";
 import { Badge, type Tone } from "../components/ui/badge";
@@ -467,6 +468,11 @@ export function SemesterResultsPage() {
             setSemesterId(e.target.value);
             setMessage(null);
           }}
+          hint={
+            semesters.isSuccess && options.length === 0 ? (
+              <SetupHint missing="No semesters yet." fix="add one" place="calendar" />
+            ) : undefined
+          }
         >
           <option value="">Choose…</option>
           {options.map((s) => (

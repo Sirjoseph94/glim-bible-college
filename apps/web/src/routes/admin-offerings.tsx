@@ -12,6 +12,7 @@ import { useId, useState } from "react";
 import { api } from "../api/client";
 import { PageHeader } from "../components/app/page-header";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
+import { SetupHint } from "../components/app/setup-hint";
 import { useDetailBar } from "../components/app/shell-parts";
 import { formText } from "../components/form";
 import { OfferingStatusBadge } from "../components/app/offering-status";
@@ -217,6 +218,7 @@ function NewOffering({
 }) {
   const courses = useQuery({ ...coursesQuery, enabled: open });
   const lecturers = useQuery({ ...lecturersQuery, enabled: open });
+  const active = lecturers.data?.items.filter((l) => l.status === "ACTIVE") ?? [];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const formId = useId();
@@ -276,7 +278,17 @@ function NewOffering({
             }}
           />
         ) : null}
-        <Select name="courseId" label="Course" required error={fieldErrors.courseId}>
+        <Select
+          name="courseId"
+          label="Course"
+          required
+          error={fieldErrors.courseId}
+          hint={
+            courses.isSuccess && courses.data.items.length === 0 ? (
+              <SetupHint missing="No courses yet." fix="add one" place="academic" />
+            ) : undefined
+          }
+        >
           {courses.data?.items.map((c) => (
             <option key={c.id} value={c.id}>
               {c.code} {c.title}
@@ -289,15 +301,21 @@ function NewOffering({
           defaultValue="01"
           error={fieldErrors.sectionCode}
         />
-        <Select name="primary" label="Primary Lecturer">
+        <Select
+          name="primary"
+          label="Primary Lecturer"
+          hint={
+            lecturers.isSuccess && active.length === 0 ? (
+              <SetupHint missing="No active Lecturers yet." fix="add one" place="lecturers" />
+            ) : undefined
+          }
+        >
           <option value="">Choose later</option>
-          {lecturers.data?.items
-            .filter((l) => l.status === "ACTIVE")
-            .map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.displayName}
-              </option>
-            ))}
+          {active.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.displayName}
+            </option>
+          ))}
         </Select>
       </form>
     </Sheet>
@@ -330,6 +348,7 @@ export function AdminOfferingPage() {
 
 function OfferingDetail({ offering: o }: { offering: Offering }) {
   const lecturers = useQuery(lecturersQuery);
+  const active = lecturers.data?.items.filter((l) => l.status === "ACTIVE") ?? [];
   const queryClient = useQueryClient();
   const { busy, problem, run } = useSubmit();
   const [pending, setPending] = useState<"publish" | "assign" | null>(null);
@@ -452,14 +471,24 @@ function OfferingDetail({ offering: o }: { offering: Offering }) {
             }}
           >
             <div className="md:flex-1">
-              <Select name="lecturerId" label="Lecturer">
-                {lecturers.data?.items
-                  .filter((l) => l.status === "ACTIVE")
-                  .map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.displayName}
-                    </option>
-                  ))}
+              <Select
+                name="lecturerId"
+                label="Lecturer"
+                hint={
+                  lecturers.isSuccess && active.length === 0 ? (
+                    <SetupHint
+                      missing="No active Lecturers yet."
+                      fix="add one"
+                      place="lecturers"
+                    />
+                  ) : undefined
+                }
+              >
+                {active.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.displayName}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="md:flex-1">

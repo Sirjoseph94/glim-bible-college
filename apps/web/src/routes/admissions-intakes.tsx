@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { api } from "../api/client";
 import { PageHeader } from "../components/app/page-header";
 import { LoadFailed } from "../components/app/page-states";
+import { SetupHint } from "../components/app/setup-hint";
 import { formText } from "../components/form";
 import { CalendarDate } from "../components/time";
 import { Badge, type Tone } from "../components/ui/badge";
@@ -185,6 +186,7 @@ function PlanIntake({
   onPlanned: () => Promise<void>;
 }) {
   const sessions = useQuery({ ...sessionsQuery, enabled: open });
+  const planned = sessions.data?.items.filter((s) => s.status === "PLANNED") ?? [];
   const formId = useId();
   const { busy, problem, fieldErrors, run } = useSubmit();
   return (
@@ -239,14 +241,21 @@ function PlanIntake({
           label="Academic Session students start in"
           required
           error={fieldErrors.academicSessionId}
+          hint={
+            sessions.isSuccess && planned.length === 0 ? (
+              <SetupHint
+                missing="No upcoming Academic Session yet."
+                fix="create one"
+                place="calendar"
+              />
+            ) : undefined
+          }
         >
-          {sessions.data?.items
-            .filter((s) => s.status === "PLANNED")
-            .map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
+          {planned.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
         </Select>
         <TextField
           name="opensOn"

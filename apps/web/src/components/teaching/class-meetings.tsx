@@ -7,6 +7,7 @@ import { api, ApiError } from "../../api/client";
 import { describeError } from "../../api/error-copy";
 import { meQuery } from "../../api/session";
 import { Icon } from "../../design/icons";
+import { SetupHint } from "../app/setup-hint";
 import { formText } from "../form";
 import { myScheduleQuery } from "../meetings";
 import { Time } from "../time";
@@ -108,6 +109,7 @@ export function ScheduleMeetingSheet({
 }) {
   const queryClient = useQueryClient();
   const rooms = useQuery({ ...roomsQuery, enabled: open });
+  const activeRooms = rooms.data?.items.filter((r) => r.status === "ACTIVE") ?? [];
   const zone = useInstitutionZone();
   const formId = useId();
   const [busy, setBusy] = useState(false);
@@ -243,15 +245,26 @@ export function ScheduleMeetingSheet({
               error={problem?.fieldErrors.scheduledEnd}
             />
           </div>
-          <Select name="roomId" label="Room" defaultValue="">
+          <Select
+            name="roomId"
+            label="Room"
+            defaultValue=""
+            hint={
+              rooms.isSuccess && activeRooms.length === 0 ? (
+                <SetupHint
+                  missing="No Rooms yet, so Class Meetings are online only."
+                  fix="add Rooms"
+                  place="calendar"
+                />
+              ) : undefined
+            }
+          >
             <option value="">Online only</option>
-            {rooms.data?.items
-              .filter((r) => r.status === "ACTIVE")
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.code})
-                </option>
-              ))}
+            {activeRooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} ({r.code})
+              </option>
+            ))}
           </Select>
           <TextField
             name="onlineLink"
