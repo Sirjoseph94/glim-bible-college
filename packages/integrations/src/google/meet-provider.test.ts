@@ -88,6 +88,38 @@ describe("GoogleMeetProvider: Google specifics (TRD §11.3, §11.7)", () => {
     expect(sleeps).toEqual([7000, 2000]);
   });
 
+  it("turns attendance reports off where the edition has them", async () => {
+    s.server.spaceConfigs = [];
+    await s.provider.provisionSpace({ hostEmail: HOST, settings: SETTINGS });
+    expect(s.server.spaceConfigs).toHaveLength(1);
+    expect(s.server.spaceConfigs[0]).toMatchObject({
+      attendanceReportGenerationType: "DO_NOT_GENERATE",
+    });
+  });
+
+  it("creates the space without the attendance-report setting where the edition refuses it", async () => {
+    s.server.spaceConfigs = [];
+    s.server.attendanceReportsUnavailable = true;
+    try {
+      const space = await s.provider.provisionSpace({ hostEmail: HOST, settings: SETTINGS });
+      expect(space.joinUrl).toMatch(/^https:/);
+      expect(s.server.spaceConfigs).toHaveLength(2);
+      expect(s.server.spaceConfigs[1]).not.toHaveProperty("attendanceReportGenerationType");
+      expect(s.server.spaceConfigs[1]).toMatchObject({ accessType: "RESTRICTED" });
+    } finally {
+      s.server.attendanceReportsUnavailable = false;
+    }
+  });
+
+  it("doesn't retry other refusals to create a space", async () => {
+    s.server.spaceConfigs = [];
+    s.server.respond("provisionSpace", { status: 403 });
+    await expect(
+      s.provider.provisionSpace({ hostEmail: HOST, settings: SETTINGS }),
+    ).rejects.toBeInstanceOf(ProviderPermanentError);
+    expect(s.server.spaceConfigs).toHaveLength(0);
+  });
+
   it("treats a token refused by Google (DWD scopes not granted) as permanent", async () => {
     s.server.revokeTokens();
     s.world.failNext("token", "permanent");

@@ -1512,7 +1512,7 @@ At provisioning, the space is created from `policies[GOOGLE_MEET]`:
 - `entryPointAccess: ALL`
 - `moderation: ON`
 - `presentRestriction: HOSTS_ONLY`
-- `attendanceReportGenerationType: DO_NOT_GENERATE`
+- `attendanceReportGenerationType: DO_NOT_GENERATE`. Editions without Meet attendance tracking (e.g. Business Standard) refuse this field even to turn reports off ("…is not available to the user"). They make no reports, so the space is then created again without it.
 - auto-recording `ON` if `recording_mode=AUTO`
 - transcription `OFF`
 - smart notes `OFF`

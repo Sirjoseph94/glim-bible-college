@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import {
   ProviderNotFoundError,
+  ProviderPermanentError,
   ProviderUnavailableError,
   type ArtifactMetadata,
   type ArtifactStream,
@@ -36,6 +37,9 @@ import type { BreakerState } from "./breaker";
 import { GoogleClient } from "./client";
 import { MEET_EVENT_TYPES, parseMeetEnvelope } from "./events";
 import type { GoogleRateLimiter } from "./limiter";
+
+/** Google's refusal of `attendanceReportGenerationType` on an edition without attendance reports. */
+const NO_ATTENDANCE_REPORTS = /AttendanceReportGenerationType is not available/i;
 
 export interface GoogleEndpoints {
   token: string;
@@ -203,27 +207,38 @@ export class GoogleMeetProvider implements LiveProvider {
 
   async provisionSpace(input: ProvisionInput): Promise<ProvisionedSpace> {
     const { settings } = input;
-    const space = await this.client.json<MeetSpace>({
-      method: "POST",
-      url: this.meet("spaces"),
-      subject: input.hostEmail,
-      scopes: MEET_WRITE,
-      quota: "create",
-      json: {
-        config: {
-          accessType: settings.accessType,
-          entryPointAccess: "ALL",
-          moderation: settings.moderation ? "ON" : "OFF",
-          moderationRestrictions: { presentRestriction: settings.presentRestriction },
-          attendanceReportGenerationType: "DO_NOT_GENERATE",
-          artifactConfig: {
-            recordingConfig: { autoRecordingGeneration: settings.autoRecording ? "ON" : "OFF" },
-            transcriptionConfig: { autoTranscriptionGeneration: "OFF" },
-            smartNotesConfig: { autoSmartNotesGeneration: "OFF" },
-          },
-        },
+    const config = {
+      accessType: settings.accessType,
+      entryPointAccess: "ALL",
+      moderation: settings.moderation ? "ON" : "OFF",
+      moderationRestrictions: { presentRestriction: settings.presentRestriction },
+      attendanceReportGenerationType: "DO_NOT_GENERATE",
+      artifactConfig: {
+        recordingConfig: { autoRecordingGeneration: settings.autoRecording ? "ON" : "OFF" },
+        transcriptionConfig: { autoTranscriptionGeneration: "OFF" },
+        smartNotesConfig: { autoSmartNotesGeneration: "OFF" },
       },
-    });
+    };
+    const create = (body: object) =>
+      this.client.json<MeetSpace>({
+        method: "POST",
+        url: this.meet("spaces"),
+        subject: input.hostEmail,
+        scopes: MEET_WRITE,
+        quota: "create",
+        json: { config: body },
+      });
+    let space: MeetSpace;
+    try {
+      space = await create(config);
+    } catch (error) {
+      // Editions without Meet attendance tracking (e.g. Business Standard) refuse the setting even
+      // to turn reports off; they make no reports, so the space is created without it (§11.5).
+      if (!(error instanceof ProviderPermanentError && NO_ATTENDANCE_REPORTS.test(error.message)))
+        throw error;
+      const { attendanceReportGenerationType: _, ...rest } = config;
+      space = await create(rest);
+    }
     if (space.meetingUri === undefined || space.meetingCode === undefined)
       throw new ProviderUnavailableError("Google created a space without a meeting link.");
     // Meet's REST API doesn't report dial-in numbers (S-02); /join then offers none.

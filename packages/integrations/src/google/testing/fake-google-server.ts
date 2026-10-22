@@ -74,6 +74,15 @@ export class FakeGoogleServer {
   /** Who a request authenticated as (for DWD assertions in tests). */
   lastSubjects: (string | null)[] = [];
 
+  /** The `config` of each space-create request, in order. */
+  spaceConfigs: Record<string, unknown>[] = [];
+
+  /**
+   * Like an edition without Meet attendance tracking (e.g. Business Standard): Google refuses
+   * `attendanceReportGenerationType` on create, even to turn reports off.
+   */
+  attendanceReportsUnavailable = false;
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<unknown> {
     const url = new URL(req.url ?? "/", this.base);
     const method = req.method ?? "GET";
@@ -160,6 +169,15 @@ export class FakeGoogleServer {
         take: true,
         run: (ctx) => {
           if (ctx.sub === null) return ctx.error(403, "Needs a user.");
+          this.spaceConfigs.push(ctx.body.config as Record<string, unknown>);
+          if (
+            this.attendanceReportsUnavailable &&
+            "attendanceReportGenerationType" in (ctx.body.config as object)
+          )
+            return ctx.error(
+              403,
+              "updateAttendanceReportGenerationType is not available to the user.",
+            );
           const config = ctx.body.config as {
             accessType: "RESTRICTED";
             moderation: string;
