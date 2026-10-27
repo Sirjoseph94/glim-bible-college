@@ -476,11 +476,7 @@ function OfferingDetail({ offering: o }: { offering: Offering }) {
                 label="Lecturer"
                 hint={
                   lecturers.isSuccess && active.length === 0 ? (
-                    <SetupHint
-                      missing="No active Lecturers yet."
-                      fix="add one"
-                      place="lecturers"
-                    />
+                    <SetupHint missing="No active Lecturers yet." fix="add one" place="lecturers" />
                   ) : undefined
                 }
               >

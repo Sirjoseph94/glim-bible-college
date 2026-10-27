@@ -1,4 +1,4 @@
-# Runbook: a provider is down (YouTube, Google Meet, SendGrid, the database)
+# Runbook: a provider is down (YouTube, Google Meet, SendGrid, the database, the server)
 
 **For:** the System Admin.
 **When:** the ops page (`/admin/ops`, `/admin/jobs`) shows failures, you're emailed that a job queue is falling behind, or people report that something isn't working.
@@ -42,14 +42,24 @@ GLIM is built so that an outside service being down delays background work but n
 
 ## The database restarts or fails over
 
-DigitalOcean restarts the database for maintenance, and fails over if a node dies.
+Neon restarts the database's compute for maintenance and minor upgrades, and moves it if a host fails. Storage is separate, so no data is lost.
 
 **What people see:** for a few seconds requests fail, and `/readyz` reports not ready. The app and the worker reconnect on their own; they don't need a restart.
 
 **What to do:**
 1. Wait 2 minutes, then check `/readyz` and sign in.
-2. On **Jobs**, the queues should drain. A queue that is still behind after 10 minutes means the worker isn't running: restart the worker component in **Apps → glim**.
+2. On **Jobs**, the queues should drain. A queue that is still behind after 10 minutes means the worker isn't running: on the VPS, run `cd /opt/glim && docker compose restart worker`.
 3. If the database doesn't come back, follow `restore.md`.
+
+## The VPS is down
+
+**What people see:** the site doesn't load at all. The data is safe: it's in Neon and R2, not on the VPS.
+
+**What to do:**
+1. In Hostinger's panel, check the VPS is running. Restart it if not. The containers start again on their own.
+2. If it's running but the site is down, SSH in and run `cd /opt/glim && docker compose ps`. Restart whatever isn't `healthy` or `running` (`docker compose up -d`).
+3. Check the disk (`df -h /`). A full disk stops everything; `docker system prune` frees old images.
+4. If the VPS is lost, build a new one from [`server.md`](server.md) and redeploy. Aim for under 2 hours.
 
 ## A worker stops mid-job
 

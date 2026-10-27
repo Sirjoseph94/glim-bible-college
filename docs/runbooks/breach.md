@@ -18,7 +18,7 @@ Do whatever applies:
 - **Sessions may be compromised** (for example a database copy leaked): sessions are random tokens stored only as hashes, so rotating secrets doesn't end them. Sign everyone out from a database console with `UPDATE auth_sessions SET revoked_at = now() WHERE revoked_at IS NULL;` (it takes effect within 5 seconds), then ask staff to change their passwords.
 - **A file shared wrongly:** download links expire after 5 minutes. A transcript sent to the wrong recipient can be revoked (Transcript → Revoke, with the reason), and the verify page then shows it as not valid.
 - **A recording published wrongly:** unpublish or delete it in Admin → Videos, and set it to private in YouTube Studio.
-- **A provider breach** (DigitalOcean, Google, SendGrid): follow their notice, rotate the keys we hold for them, and record what of ours they hold (see `docs/compliance/ropa.md`).
+- **A provider breach** (Hostinger, Neon, Cloudflare, Google, SendGrid): follow their notice, rotate the keys we hold for them, and record what of ours they hold (see `docs/compliance/ropa.md`).
 
 ## 3. Assess (within 24 hours)
 

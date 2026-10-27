@@ -14,8 +14,8 @@ The record of what GLIM's owner has decided, and the defaults still awaiting con
 | Tenancy | **GLIM only.** Multi-tenancy is removed. | ADR-0001 |
 | Delivery | **Hybrid.** The same class runs in a room and on Google Meet at once. | §11, §12 |
 | Scale | About **100–200 students and 10–25 staff**. Classes of 15–30, with 3–5 running at the same time. | §21.4, §22.2 |
-| Operations | One **System Admin** operates everything. **DigitalOcean App Platform** for the server, Managed PostgreSQL for the database, **SendGrid** for email. | ADR-0002, §22 |
-| Video | A managed service rather than self-hosting. The provider is now **YouTube, unlisted** (C-43, 7 Oct 2026; replaced Cloudflare Stream). Files go in DigitalOcean Spaces. Cloudflare R2 and the Worker are dropped. | ADR-0002, ADR-0003, §13 |
+| Operations | One **System Admin** operates everything. The app runs on a **Hostinger VPS** (Germany) with Docker Compose and Caddy. The database is **Neon** PostgreSQL in Frankfurt. Files and backups are in **Cloudflare R2**. **SendGrid** for email. (27 Oct 2026; replaced App Platform, DO Managed PostgreSQL and Spaces.) Availability: the database is managed, but the app is one server, so 99.5% is a target, not a guarantee. | ADR-0004, §22 |
+| Video | A managed service rather than self-hosting. The provider is now **YouTube, unlisted** (C-43, 7 Oct 2026; replaced Cloudflare Stream). Files go in R2 (ADR-0004). | ADR-0002, ADR-0003, §13 |
 
 ### Vocabulary (see `GLOSSARY.md`)
 
@@ -88,7 +88,7 @@ There's also the derived **Applicant**. Auditor, Platform Admin, departments and
 | Q-15 | No students under 18. |
 | Q-18 | Official transcripts wait for Registrar approval. Unofficial transcripts show finalized results marked *Provisional*. |
 | Recording consent | Notice only. |
-| DPAs | Data processing agreements or terms reviews for DigitalOcean, Google (Workspace and YouTube) and SendGrid are a launch requirement. |
+| DPAs | Data processing agreements or terms reviews for Hostinger, Neon, Cloudflare, Google (Workspace and YouTube) and SendGrid are a launch requirement. |
 
 ### Kept from v2.1 (still in force)
 

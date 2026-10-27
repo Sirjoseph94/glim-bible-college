@@ -1,0 +1,89 @@
+# GLIM on one VPS (ADR-0004, TRD §22.2): two API containers and the worker behind Caddy. The
+# database is Neon and files are in R2, so nothing here holds college data.
+#
+# Lives in /opt/glim on the VPS with Caddyfile and deploy.sh; deploy.sh runs it. Two files sit
+# beside it and are never committed:
+#   .env     IMAGE and APP_DOMAIN, written by deploy.sh (Compose reads it for ${...} below)
+#   app.env  the app's settings and secrets (mode 600), written by the Deploy workflow from the
+#            GitHub environment via scripts/render-env.sh
+name: glim
+
+x-app: &app
+  image: ${IMAGE:?IMAGE is written to .env by deploy.sh}
+  env_file: app.env
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  logging: &logging
+    driver: json-file
+    options: { max-size: 10m, max-file: "5" }
+
+# Settings that are the same everywhere; app.env has the rest.
+x-env: &env
+  NODE_ENV: production
+  PORT: "8080"
+  INSTITUTION_DEFAULT_TZ: Africa/Lagos
+  LOG_LEVEL: info
+  MAIL_PROVIDER: sendgrid
+  # Caddy overwrites this header with the real client IP; the API never trusts X-Forwarded-For.
+  CLIENT_IP_HEADER: x-real-ip
+  API_INSTANCE_COUNT: "2"
+  WORKER_INSTANCE_COUNT: "1"
+
+x-api: &api
+  <<: *app
+  command: [pnpm, --filter, "@glim/api", start]
+  environment:
+    <<: *env
+    DB_POOL_API: "8"
+  # No ports: only Caddy reaches the API, so nobody can forge X-Real-IP.
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:8080/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+    interval: 10s
+    timeout: 5s
+    start_period: 30s
+    retries: 3
+  stop_grace_period: 30s
+
+services:
+  api1: *api
+  api2: *api
+
+  worker:
+    <<: *app
+    command: [pnpm, --filter, "@glim/worker", start]
+    environment:
+      <<: *env
+      WORKER_ROLE: all
+      DB_POOL_WORKER: "6"
+      DB_POOL_BOSS: "4"
+    # Time to stop polling and finish in-flight jobs on SIGTERM (§22.4); pg-boss retries the rest.
+    stop_grace_period: 120s
+
+  # Drizzle + pg-boss migrations as glim_migrator, before new code runs (§22.6). Run by deploy.sh.
+  migrate:
+    <<: *app
+    command: [pnpm, --filter, "@glim/db", migrate]
+    environment: *env
+    restart: "no"
+    profiles: [migrate]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is written to .env by deploy.sh}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+
+volumes:
+  # Caddy's certificates; losing them only means Caddy asks Let's Encrypt again.
+  caddy-data:
+  caddy-config:

@@ -1,16 +1,18 @@
-# Spike S-17: App Platform behaviours
+# Spike S-17: the VPS deploy (Hostinger, Neon, R2)
 
-**Status:** to run. It needs the staging app, so it can't be done from CI.
+**Status:** to run on staging. It can't be done from CI.
 **Owner:** the System Admin, with a developer.
-**Why:** the deployment assumes some App Platform behaviours (TRD §5.6, §22.2, §22.4) that change between platform versions. Record what you observe here, with the date.
+**Why:** this spike first checked App Platform's behaviours. ADR-0004 replaced App Platform, so it now checks the things the VPS deploy (`deploy/`) assumes and documentation couldn't confirm. The file name is kept so earlier links still work. Record what you observe here, with the date.
 
 | # | Check | How | Expected | Observed |
 |---|---|---|---|---|
-| 1 | SIGTERM grace period for the worker on deploy | Watch the worker logs during a deploy: "shutting down", then "worker stopped" | At least 25 s between SIGTERM and kill; the worker's graceful stop waits 25 s | |
-| 2 | Rolling replace of 2 `api` instances | `while true; do curl -s -o /dev/null -w "%{http_code}\n" https://<staging>/readyz; sleep 0.5; done` during a deploy | No 5xx | |
-| 3 | PRE_DEPLOY failure stops the deploy | Deploy an image whose migration fails (a scratch branch) | Deployment fails; the previous version keeps serving | |
-| 4 | Bindable variables | Check the rendered env in **Settings → Components** | `${db.glim-tx.DATABASE_URL}` resolves to the pool on port 25061, and `${db.DATABASE_URL}` to the direct port 25060 | |
-| 5 | `DO-Connecting-IP` header | Log `req.clientIp` for a request from a known IP | It equals your public IP (so `CLIENT_IP_HEADER=do-connecting-ip` is right) | |
-| 6 | Instance sizes and prices | Compare `.do/app.yaml` slugs with the current list | Slugs exist; costs recorded in `docs/decisions.md` | |
-| 7 | `pg_dump` 18 in the image against Managed PG 18 | Trigger `db.logical-backup` on staging (enqueue it from the ops page, or wait for Sunday) | An object appears in the staging backups bucket and decrypts with the staging key | |
-| 8 | Region | Check that LON hosts the app, the database and Spaces (S-13) | All three in LON | |
+| 1 | The worker's graceful stop | `docker compose logs -f worker` on the VPS during a deploy: "shutting down", then "worker stopped" | Stopped well within the 120 s `stop_grace_period` | |
+| 2 | Rolling replace of `api1` and `api2` | `while true; do curl -s -o /dev/null -w "%{http_code}\n" https://<staging>/readyz; sleep 0.5; done` during a deploy | No 5xx | |
+| 3 | A failed migration stops the deploy | Deploy an image whose migration fails (a scratch branch) | `deploy.sh` exits with "migrations failed"; the previous version keeps serving | |
+| 4 | Client IP | Log `req.clientIp` for a request from a known IP, and send a forged `X-Real-IP` header | It equals your public IP, not the forged one | |
+| 5 | Latency to Neon | The round-trip check in `docs/runbooks/server.md` | A few milliseconds per `select 1` | |
+| 6 | `pg_dump` 18 against Neon with `sslmode=verify-full` | Trigger `db.logical-backup` on staging (enqueue it from the ops page, or wait for Sunday) | An object appears in the staging backups bucket and decrypts with the staging key. This proves `PGSSLROOTCERT=system` works. | |
+| 7 | First migration on a new Neon database | The first deploy to staging | `migrate` creates `citext` and `btree_gist` as `glim_migrator` with no permission errors | |
+| 8 | Browser uploads to R2 | Upload a passport photo and a course material on staging | Both upload and download. If the browser reports a CORS or signature error, the SDK's checksum headers may need allowing in the CORS rule. | |
+| 9 | Worker memory for a 1.5 GB streamed upload (integration slice) | `docker stats` during a large recording upload | Stays well under the VPS's memory | |
+| 10 | Costs | Hostinger's invoice and Neon's first monthly bill | Recorded in `docs/decisions.md` | |

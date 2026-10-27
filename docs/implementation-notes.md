@@ -25,7 +25,7 @@ Where the build departs from `docs/TRD.md` on purpose, the reason is recorded he
 | Invite/reset tokens (§8.1) | Single-use, stored as SHA-256; no table defined | `auth_tokens` (owner: identity) | The DDL names no home for them. |
 | Lockout (§8.1, Appendix D) | Lockout plus uniform errors | A locked account answers exactly like a wrong password; `ACCOUNT_LOCKED` is unused | Distinct lockout replies would reveal which emails have accounts. |
 | Applicant sessions (§8.3) | Idle 24 h for applicants | Idle 24 h, absolute 12 h for everyone | As written; the absolute limit still applies. |
-| Client IP (§5.4) | Rate limits per IP | `CLIENT_IP_HEADER` (App Platform: `do-connecting-ip`); `X-Forwarded-For` is never trusted | A client can forge `X-Forwarded-For`. |
+| Client IP (§5.4) | Rate limits per IP | `CLIENT_IP_HEADER` (`x-real-ip`, which Caddy overwrites with the client's address; ADR-0004); `X-Forwarded-For` is never trusted | A client can forge `X-Forwarded-For`. |
 | Same-origin writes (§19.1) | Check `Origin`/`Sec-Fetch-Site` | A write must carry one of them, and it must match | Public writes (login, reset, invite) have no CSRF token. |
 | Job retention (§17.1) | Archive after 7 days, delete after 30 | `deleteAfterSeconds` 30 days | pg-boss 12 has no archive table. |
 | `meeting-tick` (§17.2) | A cron with no queue in §17.1 | Queue `meeting.tick` | pg-boss schedules jobs onto a queue. Cron is registered only for queues that have a handler. |

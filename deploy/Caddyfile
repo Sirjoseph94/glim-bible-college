@@ -1,0 +1,20 @@
+# HTTPS for GLIM (ADR-0004). Caddy gets and renews the Let's Encrypt certificate for APP_DOMAIN
+# itself; ports 80 and 443 must reach the VPS and the domain's DNS must point at it.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	header Strict-Transport-Security "max-age=31536000"
+
+	reverse_proxy api1:8080 api2:8080 {
+		# The API takes the client IP from this header only (CLIENT_IP_HEADER). Caddy replaces
+		# whatever the client sent, so it can't be forged.
+		header_up X-Real-IP {remote_host}
+
+		# During a deploy one API container restarts at a time; requests go to the other.
+		lb_policy round_robin
+		lb_try_duration 10s
+		health_uri /readyz
+		health_interval 5s
+	}
+}

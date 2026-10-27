@@ -14,7 +14,7 @@ Protection Officer to review. This is the engineering record of what the system 
 | 6 | Results, awards and transcripts | Students and graduates | Course and semester results, GPA, CGPA, standing, award class, certificate numbers, issued transcripts (snapshot with legal name and Matric Number) | Academic records; verification for third parties | Legal obligation (academic records); contract | PostgreSQL; Spaces (PDFs) | Permanent. Public verification shows only initials, programme, status and dates |
 | 7 | Notifications and email | All users | Email address, notification content, delivery status, bounces | Tell people what they need to know | Contract; legitimate interest | PostgreSQL; **SendGrid** (email delivery, signed bounce webhook) | Notifications deleted on erasure |
 | 8 | Audit log | Staff and users acting in the system | Who did what and when, with IP and request id | Accountability and security | Legal obligation; legitimate interest | PostgreSQL (append-only) | Kept; personal details in it are ids, not names |
-| 9 | Backups | Everyone above | A copy of the database | Disaster recovery | Legitimate interest | Spaces backup bucket, age-encrypted | Rotated per the backup runbook |
+| 9 | Backups | Everyone above | A copy of the database | Disaster recovery | Legitimate interest | R2 backup bucket, age-encrypted | Rotated per the backup runbook |
 
 ## Data subject rights
 
@@ -24,4 +24,4 @@ Protection Officer to review. This is the engineering record of what the system 
 
 ## Transfers outside Nigeria
 
-DigitalOcean (London), Google (sign-in, YouTube) and SendGrid process data outside Nigeria. Their DPAs or terms review is a launch gate (C-41); YouTube runs under Google's consumer terms, so the DPIA covers publishing recordings there (ADR-0003).
+Hostinger (VPS in Germany), Neon (database, Frankfurt), Cloudflare (R2 files and backups, EU jurisdiction), Google (sign-in, YouTube) and SendGrid process data outside Nigeria (ADR-0004). Their DPAs or terms review is a launch gate (C-41); YouTube runs under Google's consumer terms, so the DPIA covers publishing recordings there (ADR-0003).

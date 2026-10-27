@@ -1,0 +1,91 @@
+name: Deploy to a VPS
+
+# One environment's deploy (ADR-0004, docs/runbooks/deploy.md): copy deploy/ to /opt/glim on the
+# environment's VPS, write app.env from the environment's variables and secrets, then run
+# deploy.sh with the image. Required reviewers on the "production" environment are the approval
+# gate. The registry login on the VPS uses this job's short-lived token and is removed after.
+on:
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true }
+      image: { type: string, required: true }
+      ref: { type: string, required: true }
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      TARGET: ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ vars.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Copy the deploy files
+        run: scp deploy/compose.yaml deploy/Caddyfile deploy/deploy.sh deploy/disk-alert.sh "$TARGET:/opt/glim/"
+
+      - name: Write app.env
+        env:
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          DB_CONNECTION_BUDGET: ${{ vars.DB_CONNECTION_BUDGET }}
+          STORAGE_ENDPOINT: ${{ vars.STORAGE_ENDPOINT }}
+          STORAGE_REGION: ${{ vars.STORAGE_REGION }}
+          STORAGE_BUCKET: ${{ vars.STORAGE_BUCKET }}
+          STORAGE_BACKUP_BUCKET: ${{ vars.STORAGE_BACKUP_BUCKET }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          SENDGRID_WEBHOOK_PUBLIC_KEY: ${{ vars.SENDGRID_WEBHOOK_PUBLIC_KEY }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          LIVE_PROVIDER: ${{ vars.LIVE_PROVIDER }}
+          GOOGLE_PROJECT_ID: ${{ vars.GOOGLE_PROJECT_ID }}
+          GOOGLE_PUBSUB_TOPIC: ${{ vars.GOOGLE_PUBSUB_TOPIC }}
+          GOOGLE_PUBSUB_SUBSCRIPTION: ${{ vars.GOOGLE_PUBSUB_SUBSCRIPTION }}
+          GOOGLE_EVENTS_MODE: ${{ vars.GOOGLE_EVENTS_MODE }}
+          VIDEO_HOST: ${{ vars.VIDEO_HOST }}
+          YOUTUBE_OAUTH_CLIENT_ID: ${{ vars.YOUTUBE_OAUTH_CLIENT_ID }}
+          DRIVE_CLEANUP_MODE: ${{ vars.DRIVE_CLEANUP_MODE }}
+          FEATURE_DIRECT_UPLOAD: ${{ vars.FEATURE_DIRECT_UPLOAD }}
+          FEATURE_PHONE_DIAL_IN: ${{ vars.FEATURE_PHONE_DIAL_IN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
+          DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
+          STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
+          STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          CSRF_SECRET: ${{ secrets.CSRF_SECRET }}
+          GOOGLE_SA_KEY_JSON_B64: ${{ secrets.GOOGLE_SA_KEY_JSON_B64 }}
+          YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+        run: scripts/render-env.sh | ssh "$TARGET" 'umask 077 && cat > /opt/glim/app.env'
+
+      - name: Deploy
+        env:
+          IMAGE: ${{ inputs.image }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" | ssh "$TARGET" "docker login ghcr.io -u '$REGISTRY_USER' --password-stdin"
+          status=0
+          ssh "$TARGET" "/opt/glim/deploy.sh '$IMAGE'" || status=$?
+          ssh "$TARGET" 'docker logout ghcr.io' || true
+          exit "$status"
+
+      - name: Smoke check
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 6 "${{ vars.APP_ORIGIN }}/readyz"

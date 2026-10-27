@@ -1,6 +1,6 @@
 import type { Readable } from "node:stream";
 
-/** S3-compatible object storage: DigitalOcean Spaces in production, MinIO locally (TRD §4.2). */
+/** S3-compatible object storage: Cloudflare R2 in production, MinIO locally (TRD §4.2). */
 export interface ObjectStorage {
   /** Streams a body to `bucket/key`, multipart where needed. */
   upload(input: {

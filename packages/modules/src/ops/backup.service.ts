@@ -16,6 +16,29 @@ const SCHEMAS = ["public", "pgboss", "drizzle"];
 const EXTENSIONS = ["citext", "btree_gist"];
 
 /**
+ * pg_dump's environment for a connection string. The password travels in the environment, never
+ * on the command line. A verifying `sslmode` without `sslrootcert` checks the server against the
+ * system's CA store (`system`, libpq 16+), as node-postgres does with Node's; libpq would
+ * otherwise look for ~/.postgresql/root.crt and fail (Neon's certificate is public, ADR-0004).
+ */
+export function pgDumpEnv(connectionString: string): Record<string, string> {
+  const db = new URL(connectionString);
+  const sslmode = db.searchParams.get("sslmode") ?? "prefer";
+  const rootCert =
+    db.searchParams.get("sslrootcert") ?? (sslmode.startsWith("verify-") ? "system" : null);
+  return {
+    PATH: "/usr/local/bin:/usr/bin:/bin",
+    PGHOST: db.hostname,
+    PGPORT: db.port || "5432",
+    PGUSER: decodeURIComponent(db.username),
+    PGPASSWORD: decodeURIComponent(db.password),
+    PGDATABASE: db.pathname.replace(/^\//, ""),
+    PGSSLMODE: sslmode,
+    ...(rootCert === null ? {} : { PGSSLROOTCERT: rootCert }),
+  };
+}
+
+/**
  * The weekly logical backup (`db.logical-backup`, TRD §22.7): `pg_dump -Fc` over the direct
  * connection, encrypted with age to BACKUP_AGE_RECIPIENT, streamed to the backups bucket. The
  * age private key is held offline; the bucket's lifecycle rule expires dumps after 12 weeks.
@@ -39,8 +62,6 @@ export class BackupService {
     const key = `postgres/glim-${stamp}.dump.age`;
     const bucket = this.config.storage.backupBucket;
 
-    const db = new URL(this.config.db.directUrl);
-    // The password travels in the environment, never on the command line.
     const dump = spawn(
       this.config.backup.pgDumpPath,
       // Privileges are kept: the public grants (and the audit log's revoked UPDATE/DELETE) are
@@ -52,15 +73,7 @@ export class BackupService {
         ...EXTENSIONS.map((e) => `--extension=${e}`),
       ],
       {
-        env: {
-          PATH: "/usr/local/bin:/usr/bin:/bin",
-          PGHOST: db.hostname,
-          PGPORT: db.port || "5432",
-          PGUSER: decodeURIComponent(db.username),
-          PGPASSWORD: decodeURIComponent(db.password),
-          PGDATABASE: db.pathname.replace(/^\//, ""),
-          PGSSLMODE: db.searchParams.get("sslmode") ?? "prefer",
-        },
+        env: pgDumpEnv(this.config.db.directUrl),
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

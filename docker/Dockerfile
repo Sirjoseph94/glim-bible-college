@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
-# One image for every App Platform component (TRD §22.4): the api service, the worker and the
-# PRE_DEPLOY migrate job differ only by run command. It includes pg_dump 18 for the weekly
+# One image for every container in deploy/compose.yaml (TRD §22.4): the API, the worker and the
+# migrate step differ only by command. It includes pg_dump 18 for the weekly
 # logical backup.
 
 ARG NODE_VERSION=24

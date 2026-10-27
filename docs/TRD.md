@@ -11,7 +11,7 @@
 - **Recordings:** held indefinitely in a **managed video service** and played back in a low-bandwidth player.
 - **Assessment and results:** materials, assignments, quizzes, exams and the gradebook, rolling up into NUC 5-point GPA/CGPA, award classes and verifiable transcripts.
 
-It runs on **DigitalOcean App Platform** with Managed PostgreSQL.
+It runs on a **Hostinger VPS** with **Neon** PostgreSQL and **Cloudflare R2** (ADR-0004).
 
 > **This file is the single source of truth.** Owner answers are recorded in `docs/decisions.md` and the domain language in `GLOSSARY.md`. Architecture decisions are in `docs/adr/` and §2.2. If something here is ambiguous or contradicts itself, **stop and raise it** (§0.4). Vendor facts that could not be verified are listed as **spikes** (Appendix B): build against the ports and fakes, and don't hard-wire them.
 
@@ -43,10 +43,10 @@ It runs on **DigitalOcean App Platform** with Managed PostgreSQL.
 19. Security, privacy, compliance (Nigeria)
 20. Observability and SLOs
 21. Testing
-22. DevOps on DigitalOcean App Platform
+22. DevOps on a Hostinger VPS with Neon and R2
 23. Delivery plan — work packages
 
-- Appendix A — Provider setup runbook (Google, DigitalOcean, video provider, SendGrid)
+- Appendix A — Provider setup runbook (Google, hosting, video provider, SendGrid)
 - Appendix B — Verification spikes
 - Appendix C — Golden vectors (attendance, final percentage, GPA)
 - Appendix D — Error codes
@@ -129,6 +129,7 @@ v2.1 was a multi-school LMS sized for 25,000 users. v3.0 is for GLIM alone, size
 | Δ3-11 | **Vocabulary.** Renamed tables and permissions to match `GLOSSARY.md`: `live_sessions` → `class_meetings`, `teachers` → `lecturers`, `teaching_assignments` → `lecturer_assignments`, `student_number` → `matric_number`, `degree_awards` → `awards`. | everywhere |
 | Δ3-12 | **Fixed v2.1 contradictions.** Personal Gmail (not "institutional Google") for students. One permission name per action. Drive cleanup on by default. Attendance match methods aligned with the strategies. `unmatchedReviewMinutes` added to policy. Missing `dial_in` and `users.email_status` columns added. The virtual `status` column is never written. Sizing matches the real scale. | §6, §7, §12 |
 | Δ3-13 | **Removed for scale/ops burden:** Tier H topology, load tests at 5,000 users, partitioning, monthly audit partitions, ClamAV (now COULD), speech transcripts (now COULD), the provider-capacity enrollment cap (warning only). | — |
+| Δ3-14 | **VPS hosting** (27 Oct 2026). App Platform, DO Managed PostgreSQL and Spaces were replaced by a Hostinger VPS (Docker Compose + Caddy), Neon PostgreSQL (Frankfurt) and Cloudflare R2, to cut cost while keeping the database managed. | ADR-0004, §5.2, §19, §20, §22, Appendix A.3 |
 
 ---
 
@@ -140,7 +141,7 @@ IDs C-01…C-17 come from v2.1; C-18 onward were added in the October 2026 vetti
 
 | ID   | Choice | Consequence for the build |
 | ---- | ------ | ------------------------- |
-| C-01 | **PostgreSQL 18+** (DO Managed) | Native `uuidv7()`, virtual generated columns and exclusion constraints. DO provides PgBouncer pools; **the pool mode can't be changed after creation**. Connection budget in §5.2. |
+| C-01 | **PostgreSQL 18+** (Neon, ADR-0004) | Native `uuidv7()`, virtual generated columns and exclusion constraints. Neon provides a PgBouncer pooler in transaction mode (the `-pooler` host). Connection budget in §5.2. |
 | C-02 | **Drizzle ORM** | Schema in TypeScript. Exclusion constraints, triggers, views, virtual columns and SQL functions go in custom SQL migrations. |
 | C-03 | **pg-boss, minimal external dependencies** | No Redis and no outbox table: transactional enqueue (§5.5). |
 | C-04 | **Google Workspace Business Standard** | 150 participants per meeting (never approached at GLIM's scale). Students are external Gmail accounts. Attendance comes from our own engine. S-08 confirms REST participant data on Standard. |
@@ -149,15 +150,15 @@ IDs C-01…C-17 come from v2.1; C-18 onward were added in the October 2026 vetti
 | C-10 | **Students use personal Gmail** | `RESTRICTED` Meet spaces with student member sync. A Google account is required to apply, and therefore before the first live join. |
 | C-11 | **NUC 5-point; repeat policy BEST; results visible on Lecturer finalization** | Semester GPA/CGPA shown as *Provisional* until the Registrar approves. Official transcripts require approved semesters. |
 | C-12 | **Transcripts: serial + QR + hash** | No PAdES/e-signatures. |
-| C-15 | **Cross-border legal review done** (for DigitalOcean hosting) | New processors (SendGrid; YouTube under Google's terms) need DPAs or terms review before launch (C-41). |
+| C-15 | **Cross-border legal review done** (for DigitalOcean hosting, before ADR-0004) | Hostinger, Neon and Cloudflare are new processors and, like SendGrid and YouTube under Google's terms, need DPAs or terms review before launch (C-41). |
 | C-16 | **Drive cleanup: yes** (decided before YouTube hosting) | **Under review (D-07):** with YouTube hosting, the recommendation is to keep Drive originals. `DRIVE_CLEANUP_MODE` defaults to `NONE` until the owner reconfirms. Integration slice only. |
 | C-17 | **Google admin = the System Admin** | Appendix A is written for them. |
 | C-18 | **GLIM only** | ADR-0001. |
 | C-19 | **Admissions in scope; fees and payments out** | §10. No application-fee handling. |
 | C-20 | **Hybrid delivery**: the same class runs in a room and on Meet at once | Roll call plus Meet attendance, Rooms (§11, §12). |
-| C-21 | **Scale: ~100–200 students, 10–25 staff; 15–30 students per class; 3–5 simultaneous classes** | A single App Platform app; load targets in §21.4. |
-| C-22 | **DigitalOcean App Platform for the server; Managed PostgreSQL; SendGrid for email; one System Admin operates it** | ADR-0002, §22. |
-| C-23 | **Managed video, not self-hosted**; DO Spaces for files; Cloudflare R2/Worker dropped. Provider: see C-43. | §13. |
+| C-21 | **Scale: ~100–200 students, 10–25 staff; 15–30 students per class; 3–5 simultaneous classes** | One VPS for the app; load targets in §21.4. |
+| C-22 | **A Hostinger VPS for the app (Docker Compose + Caddy); Neon PostgreSQL; Cloudflare R2 for files; SendGrid for email; one System Admin operates it** | ADR-0004 (replaced App Platform, ADR-0002), §22. |
+| C-23 | **Managed video, not self-hosted**; Cloudflare R2 for files (ADR-0004); the media-edge Worker stays dropped. Provider: see C-43. | §13. |
 | C-24 | **Recordings persist** (no time-based purge). The System Admin can upload, edit metadata, replace, download and delete videos. Trimming is out. | §13.6. |
 | C-25 | **Student recording access lasts until their programme enrollment ends** (graduated or withdrawn). Staff keep access. | §13.5. |
 | C-26 | **In-room roll call + Rooms**, with no double-booking. The room laptop joins Meet as the Lecturer so recording starts. | §11.5, §12.3. |
@@ -175,7 +176,7 @@ IDs C-01…C-17 come from v2.1; C-18 onward were added in the October 2026 vetti
 | C-38 | **Q-04:** recordings are not purged (see C-24) | — |
 | C-39 | **Q-11:** students with no linked Google account must knock, and a host admits them (rare, since applying requires Google). **Q-12:** English only. **Q-15:** no students under 18. **Q-18:** official transcripts require registrar-approved semesters; unofficial transcripts show finalized results marked *Provisional*. | — |
 | C-40 | **Recording notice:** notice only. Students are told classes are recorded and Meet announces recording; there's no separate consent step. | §19.5. |
-| C-41 | **DPAs / terms review** for DigitalOcean, Google (Workspace and YouTube) and SendGrid are a launch gate | §19.4. |
+| C-41 | **DPAs / terms review** for Hostinger, Neon, Cloudflare, Google (Workspace and YouTube) and SendGrid are a launch gate | §19.4. |
 | C-42 | ~~The video host is Cloudflare Stream~~. **Superseded by C-43** (cost). | ADR-0003 |
 | C-43 | **Recordings are hosted on GLIM's YouTube channel as unlisted videos** (owner choice, 7 Oct 2026). Cost $0. Accepted: anyone with a link can watch; ads may appear; YouTube may take videos down; no audio-only in v1. v1 = staff upload in YouTube Studio and paste the link; automatic upload comes with the Google integration. | ADR-0003, §13 |
 
@@ -188,12 +189,13 @@ The ADR files in `docs/adr/` take precedence. The rows below are the v2.1 ADR ta
 | ADR | Decision | Choice | Status |
 | --- | -------- | ------ | ------ |
 | 0001 | Tenancy | **Single institution**: no tenant key, no RLS | **New** (supersedes v2.1 ADR-19) |
-| 0002 | Hosting | **App Platform + Managed PG; Spaces; SendGrid**; managed (not self-hosted) video | **New** (supersedes v2.1 ADR-04, 05, 06, 07, 13, 15, 21) |
+| 0002 | Hosting | **App Platform + Managed PG; Spaces; SendGrid**; managed (not self-hosted) video | Hosting **superseded by 0004**; SendGrid and managed video stand |
 | 0003 | Video delivery | **YouTube, unlisted, on GLIM's channel** (cost $0; link exposure accepted) | **New** (supersedes C-42 Cloudflare Stream) |
+| 0004 | Hosting | **Hostinger VPS (Compose + Caddy); Neon PostgreSQL (Frankfurt); Cloudflare R2** | **New** (supersedes the hosting parts of 0002) |
 | v2-01 | Job queue | **pg-boss**: transactional send, cron, throttle/debounce, retries, DLQ | Kept |
 | v2-02 | Replace Redis uses | Zero Redis: in-process rate limits, Postgres token bucket for Google quotas, in-process LRU for session lookup, client polling | Kept |
 | v2-03 | ORM / migrations | **Drizzle + drizzle-kit** (custom SQL where needed) | Kept |
-| v2-08 | Region | **LON** by default; decide with S-13 (RTT from Nigerian ISPs); App Platform, Managed PG and Spaces in the same region | Kept (now App Platform) |
+| v2-08 | Region | **Frankfurt** (ADR-0004): Neon has no region in France, and the VPS must be in the same city as the database. S-13 preferred London. | Changed |
 | v2-09 | Space model | **One Meet space per Class Meeting** | Kept |
 | v2-10 | Meet access mode | **`RESTRICTED` + student member sync**; host admits strays | Kept |
 | v2-11 | Identity | **In-house: Google OIDC + local password (staff fallback)**; SAML out | Kept |
@@ -220,7 +222,7 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 | D-06 | Draft applications never submitted | **DEFAULT — confirm:** deleted 12 months after last edit (same as rejected) | WP-ADM-3 |
 | D-07 | Keep Drive originals (integration slice) | **DEFAULT — confirm (reverses C-16):** YouTube can take videos down, and YouTube Studio download isn't a guaranteed original, so keep the Meet originals in Workspace Drive (`DRIVE_CLEANUP_MODE=NONE`). Pooled Business Standard storage should cover ~0.5–1.5 TB a year; monitor it. | WP-VIDEO-2 |
 | D-08 | Recording notice wording | **DEFAULT — confirm:** the notice (C-40) states that recordings are published on GLIM's YouTube channel as **unlisted** videos, which anyone with the link can view. Lecturers keep the camera on themselves and the slides where possible. | WP-MEET-UI, WP-HARD-2 |
-| D-09 | Audio-only | **DEFAULT — confirm:** none in v1 (YouTube's embed has no audio-only mode; the 144p tip is the low-data option). The integration slice may add an optional ~18 MB/hour audio file in Spaces, extracted from the Drive original. | WP-VIDEO-2 |
+| D-09 | Audio-only | **DEFAULT — confirm:** none in v1 (YouTube's embed has no audio-only mode; the 144p tip is the low-data option). The integration slice may add an optional ~18 MB/hour audio file in R2, extracted from the Drive original. | WP-VIDEO-2 |
 | Q-17 | Total Class Meetings per day | Default ≤ 10 meetings/day of ≤ 90 min (sizing only) | §13.7 |
 
 ---
@@ -282,28 +284,29 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
    │ HTTPS (same origin: SPA + /api)                   │ HTTPS (embedded player, unlisted video)
    ▼                                                    ▼
 ┌──────────────────────────────────────────┐   ┌──────────────────────────────┐
-│ DigitalOcean App Platform app "glim"     │   │ YouTube (GLIM channel,       │
-│  service  api   (NestJS+Fastify; also    │   │ unlisted videos; C-43)       │
-│                  serves the SPA files)   │   │ oEmbed checks (v1) ·         │
-│  worker   worker (pg-boss handlers,      │──►│ Data API upload (integration)│
-│                  Pub/Sub pull, ingest)   │   └──────────────────────────────┘
-│  job      migrate (PRE_DEPLOY)           │   ┌──────────────────────────────┐
-└───────┬──────────────────────┬───────────┘──►│ DO Spaces (private bucket):  │
+│ Hostinger VPS (Docker Compose)           │   │ YouTube (GLIM channel,       │
+│  caddy    HTTPS, load balancing          │   │ unlisted videos; C-43)       │
+│  api1/2   NestJS+Fastify; also serve     │   │ oEmbed checks (v1) ·         │
+│           the SPA files                  │──►│ Data API upload (integration)│
+│  worker   pg-boss handlers, Pub/Sub      │   └──────────────────────────────┘
+│           pull, ingest; migrate (1-off)  │   ┌──────────────────────────────┐
+└───────┬──────────────────────┬───────────┘──►│ Cloudflare R2 (private):     │
         ▼                      │               │ files, photos,               │
 ┌──────────────────────────┐   │               │ transcript PDFs, backups     │
-│ DO Managed PostgreSQL 18 │   │               └──────────────────────────────┘
+│ Neon PostgreSQL 18       │   │               └──────────────────────────────┘
 │ app schema · pgboss      │   ├──► Google: Meet REST, Drive, Workspace Events (integration slice)
 └──────────────────────────┘   └──► SendGrid (email; signed event webhook → api)
 ```
 
-- **One App Platform app** with three components:
-  - `api`: a service. It hosts the REST API at `/api/v1` and also serves the built SPA as static files at `/`, so everything is same-origin with no CORS, and security headers are under our control.
-  - `worker`: a worker component, with `WORKER_ROLE=all` at launch.
-  - `migrate`: a `PRE_DEPLOY` job that runs Drizzle and pg-boss migrations.
+- **One VPS** running Docker Compose (ADR-0004, §22.2):
+  - `caddy`: HTTPS, and load balancing across the two API containers.
+  - `api1`, `api2`: the API. It hosts the REST API at `/api/v1` and also serves the built SPA as static files at `/`, so everything is same-origin with no CORS, and security headers are under our control.
+  - `worker`: with `WORKER_ROLE=all` at launch.
+  - `migrate`: a one-off container, run by the deploy before new code starts, that runs Drizzle and pg-boss migrations.
 - `WORKER_ROLE` ∈ `general | google | media | scheduler | all`. Splitting the roles into separate worker components is a scaling option, not a launch requirement. Only processes with the `scheduler` role (included in `all`) register cron and run pg-boss maintenance.
 - **Stateless API**; auth sessions are stored in Postgres.
 - **Video** is hosted on YouTube (unlisted). In v1, staff upload in YouTube Studio and paste the link, and the app checks it via oEmbed. In the integration slice, the worker streams Meet recordings from Drive to YouTube through the Data API. Students watch through the embedded YouTube player (§13).
-- **Files** (materials, submissions, passport photos, transcript PDFs) go into a private Spaces bucket through presigned URLs.
+- **Files** (materials, submissions, passport photos, transcript PDFs) go into a private R2 bucket through presigned URLs.
 
 ### 4.2 Repository layout (pnpm workspace + Turborepo)
 
@@ -325,7 +328,7 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 │      live-provider/  LiveProvider port + FakeLiveProvider
 │      google/         DWD auth, meet, drive, workspace-events, quota limiter, FakeGoogleServer (test)
 │      video-host/     VideoHost port + FakeVideoHost + youtube-link/ (oEmbed, v1) + youtube-api/ (Data API, integration slice)
-│      storage/        ObjectStorage port + S3 adapter (DO Spaces / MinIO)
+│      storage/        ObjectStorage port + S3 adapter (Cloudflare R2 / MinIO)
 │      mail/           Mailer port + SendGrid adapter + SMTP adapter (Mailpit in dev)
 │      pdf/            react-pdf transcript renderer
 ├─ .do/app.yaml · docker/ (local compose + Dockerfiles) · .github/workflows/ · docs/{decisions.md,stack-versions.md,runbooks/,adr/,spikes/} · CLAUDE.md · GLOSSARY.md
@@ -348,15 +351,15 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 | ----- | ------ |
 | Runtime | Node.js current LTS, strict TypeScript (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) |
 | API | NestJS + Fastify; Zod validation → OpenAPI; `@fastify/static` for the SPA (precompressed Brotli/gzip) |
-| DB | **PostgreSQL 18** (DO Managed); **Drizzle ORM** (`drizzle-orm/node-postgres`) + `drizzle-kit`; `pg`; extensions `citext`, `btree_gist` |
+| DB | **PostgreSQL 18** (Neon); **Drizzle ORM** (`drizzle-orm/node-postgres`) + `drizzle-kit`; `pg`; extensions `citext`, `btree_gist` |
 | Queue | **pg-boss** (schema `pgboss`); dashboard `@pg-boss/dashboard` behind System Admin auth |
 | Google | `google-auth-library` (JWT/DWD), `@googleapis/meet`, `@googleapis/drive`, `@googleapis/workspaceevents`, `@google-cloud/pubsub`. If a client lacks a method, call REST through the shared authenticated `GoogleHttpClient`. |
 | Video | YouTube: public **oEmbed** endpoint for link checks (v1); **YouTube Data API v3** resumable upload (integration slice); **YouTube IFrame Player API** in the browser (lazy, click-to-load) |
-| Storage | `@aws-sdk/client-s3`, `@aws-sdk/lib-storage`, `@aws-sdk/s3-request-presigner` → DO Spaces; MinIO in dev/CI |
+| Storage | `@aws-sdk/client-s3`, `@aws-sdk/lib-storage`, `@aws-sdk/s3-request-presigner` → Cloudflare R2; MinIO in dev/CI |
 | PDF | `@react-pdf/renderer` + `qrcode` |
 | Passwords | `argon2` (argon2id) |
 | Mail | SendGrid API (`@sendgrid/mail`) behind `Mailer`; Mailpit via SMTP in dev |
-| Logging | `pino` (JSON to stdout → App Platform runtime logs) |
+| Logging | `pino` (JSON to stdout → Docker logs on the VPS) |
 | Time | `luxon`, `rrule` |
 | Testing | Vitest, Supertest, Testcontainers (Postgres 18, MinIO), Playwright |
 | Frontend | React, Vite, TanStack Router + Query, Tailwind, shadcn/ui (Radix), react-hook-form, Zod, `hls.js` (lazy), `vite-plugin-pwa` |
@@ -383,11 +386,12 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 ### 5.2 Database access and connections
 
 1. `Db.withTx(ctx, fn)` acquires a `pg` client, runs `BEGIN`, builds `drizzle(client, { schema })` and a **pg-boss adapter bound to the same client**, passes `{ db, boss }` to `fn`, then commits or rolls back. Every write path uses it so that the business change, the audit row and the enqueued jobs commit atomically (INV-5, INV-11).
-2. **Connections (DO Managed PG):**
-   - `DATABASE_URL` is the **transaction-mode pool** `glim-tx`, used by the API and job handlers.
-   - `DATABASE_URL_DIRECT` (no pooler) is used by pg-boss polling/maintenance and the migrate job.
+2. **Connections (Neon, ADR-0004):**
+   - `DATABASE_URL` is Neon's **pooled host** (`-pooler`, PgBouncer in **transaction mode**), used by the API and job handlers.
+   - `DATABASE_URL_DIRECT` (no pooler) is used by pg-boss polling/maintenance, the weekly `pg_dump`, and the migrate job.
+   - Every URL has `sslmode=verify-full`. Neon's certificate is from a public CA.
 
-   The budget is 25 connections per GiB RAM, so a 2 GiB cluster has 50. Default allocation: API 2 × 8 (pool) + worker 1 × 6 (pool) + pg-boss 1 × 4 (direct) + migrate 1 = 27. A startup check fails if pools exceed `DB_CONNECTION_BUDGET`.
+   `DB_CONNECTION_BUDGET` stays at 50. That's well under Neon's limit even at the 0.25 CU floor (97 usable direct connections; the pooler accepts up to 10,000 clients). Default allocation: API 2 × 8 (pool) + worker 1 × 6 (pool) + pg-boss 1 × 4 (direct) + migrate 1 = 27. A startup check fails if pools exceed `DB_CONNECTION_BUDGET`.
 3. **Roles:**
    - `glim_migrator`: owner. Runs DDL and the drizzle + pg-boss migrations, used only by the `migrate` job.
    - `glim_app`: DML only, used by `api` and `worker`.
@@ -463,7 +467,7 @@ Each table in §6 names an owner, and only the owner's repositories write to it.
   - `sendDebounced`/`sendThrottled` with a key for `conference.sync` and `class-meeting.sync-access`
 - **Concurrency:** use the installed pg-boss version's worker options (**read the types**) plus `QUEUE_CONCURRENCY_<NAME>`. `recording.ingest` (integration slice) concurrency is 1 per worker instance, since it streams up to ~1.5 GB to YouTube.
 - **Schema management:** pg-boss migrations run in the `migrate` job. Runtime processes start with migration disabled. The API uses a send-only instance with the transaction adapter. Archive after 7 days; delete after 30.
-- **Deploys restart workers** (App Platform). Handlers must tolerate SIGTERM: stop polling, finish or abandon within the grace period (S-17), and rely on pg-boss expiry for redelivery.
+- **Deploys restart workers** (`deploy/deploy.sh`). Handlers must tolerate SIGTERM: stop polling, finish or abandon within the grace period (120 s, §22.4), and rely on pg-boss expiry for redelivery.
 - **Observability:** every handler logs `jobId`, `queue`, duration and attempt. The pg-boss dashboard is mounted at `/admin/jobs` for `SYSTEM_ADMIN` only.
 
 ### 5.7 Redis-free replacements
@@ -552,7 +556,7 @@ CREATE TABLE policies (                -- owner: identity. Versioned, append-onl
   CHECK ((scope_type = 'INSTITUTION') = (scope_id IS NULL)));
 CREATE UNIQUE INDEX policies_version ON policies (policy_type, scope_type, COALESCE(scope_id,'00000000-0000-0000-0000-000000000000'), policy_version);
 
-CREATE TABLE integration_configs (     -- owner: ops. Non-secret config; secrets live in App Platform encrypted env vars.
+CREATE TABLE integration_configs (     -- owner: ops. Non-secret config; secrets live in the deploy environment (§22.3).
   @std, provider text NOT NULL UNIQUE CHECK (provider IN ('google_workspace','video_host','sendgrid')),
   status text NOT NULL DEFAULT 'UNVERIFIED' CHECK (status IN ('UNVERIFIED','VERIFIED','DEGRADED','DISABLED')),
   config jsonb NOT NULL,         -- google: {primaryDomain, gcpProjectId, pubsubSubscription, accessMode:'RESTRICTED'}; video_host: {provider:'cloudflare_stream', accountId, customerSubdomain}
@@ -833,7 +837,7 @@ CREATE TABLE videos (                  -- owner: video. The learner-facing objec
   youtube_video_id text CHECK (youtube_video_id ~ '^[A-Za-z0-9_-]{11}$'),   -- NULL only while an automatic upload is PROCESSING/FAILED
   youtube_channel_url text, thumbnail_url text, duration_ms bigint,
   last_checked_at timestamptz, unavailable_reason text,
-  audio_key text,                                    -- optional Spaces audio (integration slice, D-09)
+  audio_key text,                                    -- optional R2 audio (integration slice, D-09)
   publish_after timestamptz, published_at timestamptz,
   deleted_at timestamptz, delete_after timestamptz, deleted_by uuid, youtube_delete_reminded_at timestamptz,
   added_by uuid,
@@ -1476,7 +1480,7 @@ Domain-wide delegation (DWD): a service account impersonates a **host account**.
 | Pub/Sub pull | IAM `roles/pubsub.subscriber` for the worker's service account (not DWD) |
 
 - Use `google-auth-library` `JWT({ email, key, scopes, subject: hostEmail })`. Tokens are cached in memory per `(hostEmail, scopeSet)` until 5 minutes before expiry.
-- The service-account key is an **App Platform encrypted env var** (`GOOGLE_SA_KEY_JSON_B64`). Rotate it at least every 90 days, and **never log tokens**.
+- The service-account key is a **GitHub environment secret** (`GOOGLE_SA_KEY_JSON_B64`), written to the VPS's `app.env` at deploy (§22.3). Rotate it at least every 90 days, and **never log tokens**.
 
 ### 11.4 Class Meeting state machine
 
@@ -1813,7 +1817,7 @@ A denial returns 404. On success it returns, with `Cache-Control: no-store`:
 - **Click-to-load facade:** the page first shows only the thumbnail (~10 KB) and a play button. The YouTube IFrame API and player load **only when the student taps play**, because the player itself is a large download (measured in S-11).
 - **Privacy-enhanced mode:** use `youtube-nocookie.com`, with `rel=0` (end-screen suggestions limited to GLIM's channel) and `playsinline=1`.
 - **Quality:** YouTube adapts the quality automatically, and the app can't force a starting quality. A **data-saver tip** under the player says: "On mobile data, tap ⚙ → Quality → 144p (≈ 40 MB/hour) or 240p (≈ 70 MB/hour)." Data-saver mode shows this tip first.
-- **No audio-only option in v1** (D-09). YouTube's embedded player has none; 144p is the lowest-data option. The integration slice may add an optional Spaces audio file (~18 MB/hour) extracted from the Drive original.
+- **No audio-only option in v1** (D-09). YouTube's embedded player has none; 144p is the lowest-data option. The integration slice may add an optional R2 audio file (~18 MB/hour) extracted from the Drive original.
 - **Resume:** start at `resumeMs` (the `start` parameter, then `seekTo`). While playing, read `getCurrentTime()` every 15 s, and on pause and `pagehide` (with `keepalive`), and send it to `PATCH /videos/:id/progress {positionMs, durationMs, seq}`. The server:
   - upserts the progress and clamps it to the duration
   - keeps `max_position_ms`
@@ -1868,7 +1872,7 @@ YouTube hosting and delivery cost **$0**, kept indefinitely. The trade-offs acce
 - Each offering has a learner space with: overview, schedule (in the viewer's timezone, with the Room), lecturers, materials, Class Meetings, recordings, assignments, quizzes and exams, released grades, and announcements.
 - **Materials:** FILE/LINK/TEXT, `publish_at`, `section_label`. Markdown is **sanitized** with an allow-list.
 - **Files:** the upload flow is:
-  1. `POST /files/uploads {name, mime, sizeBytes, purpose}` returns a presigned **PUT/multipart URL to Spaces**. There's a MIME allow-list and per-purpose caps: materials 100 MB, submissions 20 MB, passport photo 2 MB, import 10 MB.
+  1. `POST /files/uploads {name, mime, sizeBytes, purpose}` returns a presigned **PUT/multipart URL to R2**. There's a MIME allow-list and per-purpose caps: materials 100 MB, submissions 20 MB, passport photo 2 MB, import 10 MB.
   2. `POST /files/:id/complete` (HEAD verifies size).
   3. `GET /files/:id/download` (authorize, then a **302 to a 5-minute presigned GET** with `Content-Disposition: attachment`).
 
@@ -1989,7 +1993,7 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
   - a QR code to `https://<app>/verify/<code>`, plus the serial and a short hash in the footer
   - UNOFFICIAL carries a watermark
 
-  The PDF is stored via `files` in Spaces. Integrity is anchored on `snapshot_sha256`.
+  The PDF is stored via `files` in R2. Integrity is anchored on `snapshot_sha256`.
 - **Verify (public):** `GET /api/v1/public/transcripts/:code` (rate-limited) returns `{valid, status, issuedAt, institutionName, programmeName, studentInitials, asOf, snapshotSha256}`. `/verify/:code` displays it.
 - **Revoke/supersede:** revoking (with a reason, audited) sets `REVOKED`. A reopen sets `SUPERSEDED` automatically. A re-issue gets a new serial.
 - **Delivery:** the student downloads it. The Registrar may email the PDF to the recipient through SendGrid (attachment ≤ 5 MB, or an authenticated expiring link).
@@ -2018,7 +2022,7 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
 
 ### 15.2 Imports (onboarding existing GLIM data; D-04)
 
-`POST /imports {kind, fileId, dryRun}` (Idempotency-Key) starts an `import.run` job. It streams the CSV from Spaces, validates every row with Zod, and works in batches of 200 inside transactions.
+`POST /imports {kind, fileId, dryRun}` (Idempotency-Key) starts an `import.run` job. It streams the CSV from R2, validates every row with Zod, and works in batches of 200 inside transactions.
 
 - **Kinds:**
 
@@ -2250,10 +2254,10 @@ Practices:
 
 ### 19.1 Security baseline
 
-- **Transport:** TLS by App Platform; HSTS.
+- **Transport:** TLS by Caddy (Let's Encrypt); HSTS set by Caddy.
 - **Content Security Policy:**
   - `default-src 'self'`
-  - `frame-src https://www.youtube-nocookie.com`; `script-src 'self'` plus the YouTube IFrame API host(s) (`https://www.youtube.com`; confirm in S-Y1); `img-src` adds `https://i.ytimg.com`; `connect-src` adds the Spaces endpoint
+  - `frame-src https://www.youtube-nocookie.com`; `script-src 'self'` plus the YouTube IFrame API host(s) (`https://www.youtube.com`; confirm in S-Y1); `img-src` adds `https://i.ytimg.com`; `connect-src` adds the R2 endpoint
   - `frame-ancestors 'none'`
   - no inline scripts
 - **Headers and cookies:** `Referrer-Policy: no-referrer`; `nosniff`; cookies per §8.3; CSRF header; same-origin API.
@@ -2261,10 +2265,10 @@ Practices:
 - **Abuse protection:** rate limits (§5.4).
 - **Uploads:** MIME allow-list, size caps, `Content-Disposition: attachment`; markdown sanitisation.
 - **SSRF:** the server never fetches URLs supplied by users.
-- **Secrets:** stored as App Platform **encrypted env vars**, never in the repo or logs. The inventory is in `docs/secrets.md`, with rotation periods: Google SA key ≤ 90 days, SendGrid key ≤ 180 days, Spaces keys ≤ 180 days. The YouTube channel OAuth refresh token (integration slice) is stored encrypted at rest with `TOKEN_ENCRYPTION_KEY`.
+- **Secrets:** stored as **GitHub environment secrets** and written at deploy to `/opt/glim/app.env` on the VPS (mode 600), never in the repo or logs. The inventory is in `docs/secrets.md`, with rotation periods: Google SA key ≤ 90 days, SendGrid key ≤ 180 days, R2 token ≤ 180 days. The YouTube channel OAuth refresh token (integration slice) is stored encrypted at rest with `TOKEN_ENCRYPTION_KEY`.
 - **Dependencies:** `pnpm audit`, Renovate, gitleaks, container scanning (Trivy) in CI.
-- **Database:** Managed PG **trusted sources** = the App Platform app only.
-- **Least privilege:** Spaces keys scoped to the bucket; YouTube OAuth scopes limited to `youtube.upload` + `youtube` for the channel (integration slice); Google DWD scopes per §11.3.
+- **Database:** Neon **IP Allow** = the VPS's IP only (Scale plan). On the Launch plan, long random passwords and `sslmode=verify-full`. The API port is never published; only Caddy is reachable.
+- **Least privilege:** the R2 token scoped to the two buckets; YouTube OAuth scopes limited to `youtube.upload` + `youtube` for the channel (integration slice); Google DWD scopes per §11.3.
 
 ### 19.2 Webhook/event authenticity
 
@@ -2291,7 +2295,7 @@ All inbound events are deduplicated by id in the inbox.
 
 ### 19.4 Nigeria data protection (NDPA 2023, GAID 2025)
 
-- **Cross-border transfers:** DigitalOcean (LON), Google (Workspace and **YouTube**) and SendGrid all process data outside Nigeria. The DigitalOcean review is done (C-15). **DPAs or terms review for all processors are a launch gate** (C-41). YouTube is a consumer service under Google's standard terms, not the Workspace DPA, so the DPIA must cover publishing class recordings there (ADR-0003, D-08).
+- **Cross-border transfers:** Hostinger (Germany), Neon (Frankfurt), Cloudflare R2 (EU jurisdiction), Google (Workspace and **YouTube**) and SendGrid all process data outside Nigeria. The earlier DigitalOcean review (C-15) doesn't cover the new hosts. **DPAs or terms review for all processors are a launch gate** (C-41). YouTube is a consumer service under Google's standard terms, not the Workspace DPA, so the DPIA must cover publishing class recordings there (ADR-0003, D-08).
 - **Sensitive data:** the application's spiritual-background answers reveal religious belief, which is sensitive personal data. The rules:
   - collect them only with the explicit section-8 consent
   - restrict access (INV-15)
@@ -2321,17 +2325,17 @@ There's no separate consent step.
 
 ## 20. Observability and SLOs
 
-### 20.1 Telemetry (ADR-0002: no self-hosted stack)
+### 20.1 Telemetry (no self-hosted stack)
 
-- `pino` JSON logs go to stdout and are collected as **App Platform runtime logs**. Every request and job carries `requestId`/`jobId`; the job payload carries the originating `requestId`. Optionally, logs can be forwarded to a managed log service later.
-- **App Platform insights and alert policies** cover CPU, memory, restart count, deployment failure and domain/TLS issues. **DO Managed PG alerts** cover CPU, disk and connections. **DO Uptime** checks `/readyz`, the login page and the public apply page. Alerts go by email to the System Admin.
+- `pino` JSON logs go to stdout and are kept by **Docker on the VPS** (5 × 10 MB per container, rotated); read them with `docker compose logs`. Every request and job carries `requestId`/`jobId`; the job payload carries the originating `requestId`. Optionally, logs can be forwarded to a managed log service later.
+- An **external uptime monitor** checks `/readyz`, the login page and the public apply page. The VPS emails the System Admin when its disk is nearly full (`docs/runbooks/server.md`). Neon's console shows compute, storage and connections, and its usage emails warn on spend. A failed deploy fails the GitHub workflow, which emails whoever started it. Alerts go by email to the System Admin.
 - **In-app ops page** (§15.3): failures, queue depth/age (from pg-boss), Google and YouTube status, unavailable videos, Drive storage, and email bounces. This is the System Admin's primary dashboard.
 
 ### 20.2 SLOs and alerts (best effort; single region)
 
 | Service | Target | Alert |
 | ------- | ------ | ----- |
-| Core API availability | 99.5 % monthly | DO Uptime on `/readyz` (2 consecutive failures) |
+| Core API availability | 99.5 % monthly (target; one VPS, §22.2) | external uptime monitor on `/readyz` (2 consecutive failures) |
 | Read/write API p95 | < 300 ms / < 500 ms | measured in logs; reviewed monthly |
 | Join authorization | p95 < 1.5 s end-to-end (server < 100 ms) | — |
 | Video authorization | p95 < 300 ms | — |
@@ -2453,7 +2457,7 @@ Failure injection: Google 429/5xx storms, oEmbed unreachable, worker kill, Postg
 
 ---
 
-## 22. DevOps on DigitalOcean App Platform (ADR-0002)
+## 22. DevOps on a Hostinger VPS with Neon and R2 (ADR-0004)
 
 ### 22.1 Environments
 
@@ -2461,35 +2465,40 @@ Failure injection: Google 429/5xx storms, oEmbed unreachable, worker kill, Postg
 | --- | ------- | ----- |
 | Local | `docker compose`: `postgres:18`, MinIO, Mailpit, FakeGoogleServer, FakeVideoHost | `pnpm dev` runs api, worker and web with hot reload. Seeds: synthetic GLIM programmes (CERT, DIP), curricula, 200 students, an intake with applications, meetings with Rooms. |
 | CI | Ephemeral containers (Postgres 18, MinIO) | No external network except package registries |
-| Staging | A separate App Platform app `glim-staging` + a small Managed PG + a separate Spaces bucket | Fakes by default. Real YouTube checks use a test channel. Real Google smoke tests use a dedicated staging host account in a test OU. |
-| Production | App Platform app `glim` | §22.2 |
+| Staging | A second, smaller Hostinger VPS running `deploy/compose.yaml`, its own Neon project (scale-to-zero allowed) and its own R2 buckets | Fakes by default. Real YouTube checks use a test channel. Real Google smoke tests use a dedicated staging host account in a test OU. |
+| Production | Hostinger VPS + Neon + R2 | §22.2 |
 
-### 22.2 Production topology (check current App Platform sizes/prices at build time)
+### 22.2 Production topology (check current Hostinger and Neon plans at build time)
 
 | Component | Spec (launch) |
 | --------- | ------------- |
-| Region | **LON** by default (S-13). App, Managed PG and Spaces in the same region. |
-| `api` service | 2 instances (zero-downtime deploys), ≥ 1 vCPU / 1 GiB each; health check `/readyz`; serves the SPA |
-| `worker` worker | 1 instance, ≥ 1 vCPU / 2 GiB (integration slice: streaming Drive → YouTube uploads); `WORKER_ROLE=all`. The image includes `pg_dump`. |
-| `migrate` job | `PRE_DEPLOY`; runs Drizzle + pg-boss migrations as `glim_migrator` |
-| PostgreSQL 18 (DO Managed) | 1 vCPU / 2 GiB with **1 standby** (recommended); pool `glim-tx` (transaction mode) + direct connection; trusted source = the app |
-| Spaces | Private bucket `glim-files` (files, photos, PDFs; optional audio later) + `glim-backups` (logical dumps, lifecycle 12 weeks) |
+| Region | **Frankfurt** (ADR-0004): Neon `aws-eu-central-1` and Hostinger's German data centre, which must be in or near Frankfurt. The VPS-to-database round trip should be a few milliseconds; measure it after setup (`docs/runbooks/server.md`). R2 in its EU jurisdiction. |
+| VPS | Hostinger **KVM 2** or larger (2 vCPU / 8 GB), Ubuntu LTS, Docker Engine with Compose. Firewall: 22, 80 and 443 only. SSH by key only. Holds no college data. |
+| `api` | 2 containers (`api1`, `api2`) from the one image; health check `/readyz`; serve the SPA; reachable only through Caddy, never published |
+| `worker` | 1 container, `WORKER_ROLE=all`. The image includes `pg_dump` 18. |
+| `migrate` | A one-off container that `deploy/deploy.sh` runs before new code starts; Drizzle + pg-boss migrations as `glim_migrator` |
+| Caddy | HTTPS with Let's Encrypt; HSTS; load-balances `api1`/`api2` with health checks; overwrites `X-Real-IP` with the client's address (`CLIENT_IP_HEADER`) |
+| PostgreSQL 18 (Neon) | Launch plan (Scale for IP Allow and an uptime SLA). Production branch protected. Compute autoscaling **0.25–1 CU**, scale-to-zero **off**. `DATABASE_URL` uses the pooled host (`-pooler`, PgBouncer in transaction mode); pg-boss, migrations and `pg_dump` use the direct host. Every URL has `sslmode=verify-full`. |
+| R2 | Private buckets `glim-files` (CORS for `APP_ORIGIN`) and `glim-backups` (lifecycle: delete after 12 weeks), with one API token scoped to both |
 | Video | **YouTube channel** owned by GLIM (Brand Account), with the System Admin and one other person as owner/manager; uploads unlisted (Appendix A.4) |
 | Email | SendGrid (domain authenticated: SPF/DKIM; DMARC `p=quarantine` after warm-up) |
-| DNS/TLS | App Platform custom domain (e.g. `portal.<glim-domain>`) with managed TLS |
+| DNS/TLS | An `A` record for `portal.<glim-domain>` pointing at the VPS; Caddy gets and renews the certificate |
 
-The 99.5% target assumes two API instances and a PG standby. Running without a standby is cheaper, with an RPO of up to 24 h; the System Admin decides, and the choice is recorded in `docs/decisions.md`.
+The database is managed, so losing the VPS loses no data. The app is one VPS, though, so the 99.5% target is plausible but not guaranteed: a dead VPS means downtime until it's rebuilt from `docs/runbooks/server.md` (target under 2 h). This is recorded in `docs/decisions.md`.
 
-### 22.3 Configuration (validated by Zod in `shared/config`; secrets as App Platform encrypted env vars)
+### 22.3 Configuration (validated by Zod in `shared/config`)
+
+Settings that are the same in every environment (`NODE_ENV`, `PORT`, `INSTITUTION_DEFAULT_TZ`, `LOG_LEVEL`, `MAIL_PROVIDER`, `CLIENT_IP_HEADER`, instance counts and pool sizes, `WORKER_ROLE`) are in `deploy/compose.yaml`. The rest are **GitHub environment variables and secrets**. Each deploy writes them to `/opt/glim/app.env` on the VPS (mode 600) with `scripts/render-env.sh`.
 
 | Variable | Purpose |
 | -------- | ------- |
 | `NODE_ENV`, `APP_ORIGIN`, `INSTITUTION_DEFAULT_TZ` | basics |
-| `DATABASE_URL` (pooled/tx), `DATABASE_URL_DIRECT`, `DATABASE_URL_MIGRATOR`, `DB_CONNECTION_BUDGET`, `DB_POOL_API`, `DB_POOL_WORKER` | database (§5.2) |
+| `DATABASE_URL` (Neon pooled host), `DATABASE_URL_DIRECT`, `DATABASE_URL_MIGRATOR`, `DB_CONNECTION_BUDGET`, `DB_POOL_API`, `DB_POOL_WORKER` | database (§5.2) |
+| `CLIENT_IP_HEADER` (`x-real-ip`, set by Caddy) | client IP for rate limits and audit |
 | `WORKER_ROLE` (`general\|google\|media\|scheduler\|all`), `QUEUE_CONCURRENCY_<NAME>` | workers/queues |
 | `GOOGLE_PROJECT_ID`, `GOOGLE_SA_KEY_JSON_B64` (secret), `GOOGLE_PUBSUB_SUBSCRIPTION`, `GOOGLE_EVENTS_MODE` (`pull\|push`), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (secret) | Google |
 | `VIDEO_HOST` (`youtube_link\|youtube_api\|fake`), `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` (secret), `TOKEN_ENCRYPTION_KEY` (secret) — the last three for the integration slice only. Channel URLs live in `settings`. | video (C-43) |
-| `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_BUCKET`, `STORAGE_BACKUP_BUCKET`, `STORAGE_ACCESS_KEY` (secret), `STORAGE_SECRET_KEY` (secret) | Spaces / MinIO |
+| `STORAGE_ENDPOINT`, `STORAGE_REGION` (`auto` for R2), `STORAGE_BUCKET`, `STORAGE_BACKUP_BUCKET`, `STORAGE_ACCESS_KEY` (secret), `STORAGE_SECRET_KEY` (secret) | R2 / MinIO |
 | `MAIL_PROVIDER` (`sendgrid\|smtp`), `SENDGRID_API_KEY` (secret), `SENDGRID_WEBHOOK_PUBLIC_KEY`, `MAIL_FROM`, `SMTP_URL` (dev) | email |
 | `SESSION_SECRET`, `CSRF_SECRET` (secrets) | auth |
 | `BACKUP_AGE_RECIPIENT` | public key for encrypting logical backups |
@@ -2500,12 +2509,11 @@ The 99.5% target assumes two API instances and a PG standby. Running without a s
 
 ### 22.4 Images
 
-- `docker/Dockerfile.api`: multi-stage, non-root Node image. It builds `apps/web` and copies `dist` into the static directory.
-- `docker/Dockerfile.worker`: Node + `ffmpeg`/`ffprobe` + `postgresql-client`.
-- Both are built by GitHub Actions and pushed to the **DigitalOcean Container Registry**. The App Platform components reference the image tags.
-- **Graceful shutdown:** on SIGTERM, stop pg-boss polling and the Pub/Sub subscriber, finish in-flight jobs within the grace period (S-17), and close pools.
+- `docker/Dockerfile`: one multi-stage, non-root Node image for the API, the worker and `migrate`, which differ only by command. It builds `apps/web` into the API's static directory and includes `postgresql-client-18` for `pg_dump`.
+- Built by GitHub Actions and pushed to **GitHub's container registry** (`ghcr.io/<owner>/glim:<commit>`). The VPS pulls it during a deploy with the job's short-lived token.
+- **Graceful shutdown:** on SIGTERM, stop pg-boss polling and the Pub/Sub subscriber, finish in-flight jobs within the grace period (`stop_grace_period`: API 30 s, worker 120 s), and close pools.
 
-### 22.5 CI/CD (GitHub Actions → App Platform)
+### 22.5 CI/CD (GitHub Actions → VPS)
 
 1. Install with lockfile verification.
 2. Lint + format + typecheck + `deps:check`.
@@ -2515,13 +2523,16 @@ The 99.5% target assumes two API instances and a PG standby. Running without a s
 6. Web build + `budget:check` + Lighthouse CI + axe.
 7. Container build + Trivy + gitleaks.
 8. Playwright e2e on compose.
-9. Push images to DOCR.
-10. **Deploy staging:** `doctl apps update glim-staging --spec .do/app.staging.yaml`, which updates the image tags, runs `migrate` as `PRE_DEPLOY`, then does a rolling replace.
-11. Smoke checks.
-12. Manual approval.
+9. Push the image to GHCR.
+10. **Deploy staging** (`.github/workflows/deploy-vps.yml`):
+    1. copy `deploy/` to `/opt/glim` on the VPS;
+    2. write `app.env` from the environment's variables and secrets;
+    3. run `deploy.sh <image>`. It pulls the image, runs `migrate` (a failure stops the deploy with the old version still running), then replaces `api1` and `api2` one at a time, waiting for each to be healthy, then the worker.
+11. Smoke check `/readyz`.
+12. Manual approval (required reviewers on the `production` environment).
 13. **Deploy production** the same way.
 
-**Rollback:** App Platform "rollback to previous deployment" (documented in `docs/runbooks/deploy.md`). Because migrations are expand/contract, the previous image always runs on the new schema.
+**Rollback:** `/opt/glim/deploy.sh --rollback` on the VPS switches back to the previous image without migrating (`docs/runbooks/deploy.md`). Because migrations are expand/contract, the previous image always runs on the new schema.
 
 ### 22.6 Migration discipline (expand/contract)
 
@@ -2533,10 +2544,11 @@ The 99.5% target assumes two API instances and a PG standby. Running without a s
 
 ### 22.7 Backups and disaster recovery
 
-- **Postgres:** DO Managed daily backups with PITR (within DO's retention window). In addition, a **weekly logical dump** (`db.logical-backup`): `pg_dump -Fc` over the direct connection, encrypted with `age` to `BACKUP_AGE_RECIPIENT`, uploaded to `glim-backups`, and kept for 12 weeks. The age private key is held offline by the System Admin and one other named person.
+- **Postgres:** Neon's **instant restore** (point in time) within the plan's history window: 7 days on Launch, up to 30 on Scale. It restores the branch in place, so connection strings don't change, and keeps the pre-restore state as a backup branch. In addition, a **weekly logical dump** (`db.logical-backup`): `pg_dump -Fc` over the direct connection, encrypted with `age` to `BACKUP_AGE_RECIPIENT`, uploaded to `glim-backups` in R2, and kept for 12 weeks. It's the copy outside Neon. The age private key is held offline by the System Admin and one other named person.
 - **Videos:** hosted on YouTube (C-43). In the integration slice, Meet originals stay in Workspace Drive (D-07). For v1 link-based uploads, the uploader keeps their source file. YouTube Studio offers the channel owner a download. There's no other backup (accepted).
-- **Spaces files:** versioning/lifecycle where supported; academic records live in Postgres.
-- **RPO/RTO:** RPO ≤ 5 min with PITR (≤ 7 days with the weekly dump as a last resort); RTO ≤ 4 h. Run a **restore drill** twice a year following `docs/runbooks/restore.md`, written step by step for the System Admin.
+- **R2 files:** R2 has no object versioning, so a deleted file is gone. Academic records live in Postgres.
+- **The VPS** holds no data. If it's lost, rebuild it from `docs/runbooks/server.md` and redeploy.
+- **RPO/RTO:** RPO ≤ 5 min within Neon's history window (≤ 7 days with the weekly dump as a last resort); RTO ≤ 4 h for the database and ≤ 2 h for the VPS. Run a **restore drill** twice a year following `docs/runbooks/restore.md`, and rebuild staging from `server.md` once a term.
 
 ---
 
@@ -2601,7 +2613,7 @@ Each WP is a branch (`wp-NN-name`), owns paths, lists its dependencies and has a
 
 | WP | Name | Owns | Depends | Acceptance |
 | -- | ---- | ---- | ------- | ---------- |
-| WP-CONT-1 | Files (Spaces), materials, announcements (M) | `modules/content`, `integrations/storage` | 04 | presigned flows; per-purpose caps; sanitised markdown |
+| WP-CONT-1 | Files (R2), materials, announcements (M) | `modules/content`, `integrations/storage` | 04 | presigned flows; per-purpose caps; sanitised markdown |
 | WP-ASM-1 | Assignments & submissions (M) | `modules/assessment` | CONT-1 | late rules; resubmission; deny tests |
 | WP-ASM-2 | Question bank, quizzes, online exams (L) | `modules/assessment` | ASM-1 | snapshot immutability; timer + auto-expire; autosave idempotency; `eligible_study_mode` |
 | WP-ASM-3 | Gradebook, paper-exam entry, grade release (M) | `modules/assessment` | ASM-1/2 | AC-11; `If-Match`; audit + `grade_changes`; mixed-source exam column; weights validation; CSV grade import |
@@ -2617,7 +2629,7 @@ Each WP is a branch (`wp-NN-name`), owns paths, lists its dependencies and has a
 
 | WP | Name | Owns | Depends | Acceptance |
 | -- | ---- | ---- | ------- | ---------- |
-| WP-DEVOPS-1 | App Platform specs (staging/prod), DOCR, deploy workflow, Spaces buckets, backups job, runbooks (M) | `.do/`, `.github/workflows/`, `docs/runbooks` | 00 | staging reproducible from the spec; rollback tested; restore drill documented |
+| WP-DEVOPS-1 | VPS compose + Caddy (staging/prod), GHCR, deploy workflow, R2 buckets, backups job, runbooks (M; ADR-0004) | `deploy/`, `.github/workflows/`, `docs/runbooks` | 00 | staging rebuildable from `server.md`; rollback tested; restore drill documented |
 | WP-HARD-1 | Load/failure tests, budgets (M) | `tests/load` | all | §21.4 pass criteria |
 | WP-HARD-2 | Privacy & security hardening, DSAR export/erasure, DPAs, runbooks (M) | `modules/identity` (privacy), `docs/` | all | §19 checklist; INV-15 audit; breach runbook; C-41 DPAs recorded |
 
@@ -2631,7 +2643,7 @@ Each WP is a branch (`wp-NN-name`), owns paths, lists its dependencies and has a
 | Attendance | Meet evidence + roll call converge to attendance per policy with mode; unresolved review; audited overrides; reports (AC-06, AC-11, AC-18) |
 | Video | YouTube-hosted recordings linked, checked and embedded for entitled viewers with resume; unavailable videos detected; System Admin management (AC-07–10, AC-19) |
 | Results | Gradebook (incl. hybrid exams) → course results → GPA/CGPA → approved → published; award classes; transcripts issued, verified, revoked/superseded (AC-13–15) |
-| Security/privacy | Authorization deny tests, secrets in App Platform, audit, NDPA checklist, DPAs |
+| Security/privacy | Authorization deny tests, secrets in GitHub environments, audit, NDPA checklist, DPAs |
 | Reliability | pg-boss redelivery, reconciliation, restore drill |
 | Low bandwidth | Budgets pass; thumbnail facade; 144p tip; 3G playback measured in S-11 |
 
@@ -2687,7 +2699,7 @@ Do every step in **staging first**. Record the outcomes in `docs/runbooks/` and 
    - **publish to Production**
 
    Then create an OAuth **Web client** with the redirect URI `https://<app>/api/v1/auth/google/callback`.
-3. Create the **service account** `glim-meet` and enable domain-wide delegation. Create a JSON key and paste it, base64-encoded, into the App Platform encrypted env var `GOOGLE_SA_KEY_JSON_B64`. Rotate it at least every 90 days.
+3. Create the **service account** `glim-meet` and enable domain-wide delegation. Create a JSON key and paste it, base64-encoded, into the GitHub environment secret `GOOGLE_SA_KEY_JSON_B64`. Rotate it at least every 90 days.
 4. Admin Console → Security → API controls → **Domain-wide delegation**: add the Client ID with these scopes:
    - `https://www.googleapis.com/auth/meetings.space.created`
    - `https://www.googleapis.com/auth/meetings.space.readonly`
@@ -2700,23 +2712,23 @@ Do every step in **staging first**. Record the outcomes in `docs/runbooks/` and 
    4. Grant the service account `roles/pubsub.subscriber`.
 6. The admin wizard (§15.3) creates one Workspace Events subscription per host account and runs the connection test.
 
-### A.3 DigitalOcean
+### A.3 Hosting: Hostinger, Neon, Cloudflare R2 (ADR-0004)
 
-1. Choose the region (**LON**, or the S-13 result). Create the **Managed PostgreSQL 18** cluster:
-   - 1 vCPU / 2 GiB, with a standby recommended
-   - database `glim`
-   - users `glim_migrator` and `glim_app`
-   - connection pool **`glim-tx`** in **transaction** mode for `glim_app` (the mode can't be changed later)
-   - trusted source = the App Platform app
-2. Create the **Spaces** buckets `glim-files` and `glim-backups` (private). Create a Spaces access key and add a lifecycle rule that aborts incomplete multipart uploads after 1 day and expires backups after 12 weeks.
-3. Create the **Container Registry**.
-4. **App Platform:**
-   1. Create the app from `.do/app.yaml` (components `api`, `worker`, and `migrate` (PRE_DEPLOY)).
-   2. Attach the database.
-   3. Set the env vars from §22.3, marking secrets as encrypted.
-   4. Add the custom domain.
-   5. Set up alert policies (CPU, memory, restarts, deploy failed) to the System Admin's email.
-5. Set up **DO Uptime** checks for `/readyz`, `/login` and `/apply`.
+The step-by-step version is `docs/runbooks/server.md`. In short:
+
+1. **Neon:** create the project in **`aws-eu-central-1`** (Frankfurt) with Postgres 18.
+   - Protect the production branch, set compute autoscaling to 0.25–1 CU, and turn scale-to-zero off.
+   - Create the database `glim` and the role `glim_migrator` (Console) as its owner. Create `glim_app` with SQL, so it gets no extra privileges.
+   - On the Scale plan, turn on **IP Allow** for the VPS's IP.
+2. **Cloudflare R2:** create the private buckets `glim-files` and `glim-backups` in the EU jurisdiction.
+   - `glim-files` gets a CORS rule for `APP_ORIGIN`. `glim-backups` gets a lifecycle rule deleting objects after 12 weeks. Both abort incomplete multipart uploads after 1 day.
+   - Create an API token with Object Read & Write on those two buckets only.
+3. **Hostinger:** a KVM 2 or larger VPS in Germany, with Ubuntu LTS.
+   - Set up SSH keys, a `deploy` user in the `docker` group, a firewall allowing 22, 80 and 443, and unattended security upgrades.
+   - Install Docker Engine with Compose, and create `/opt/glim` owned by `deploy`.
+4. **DNS:** point `portal.<glim-domain>` (`A` record) at the VPS's IP.
+5. **GitHub:** create the `staging` and `production` environments with the variables and secrets in `docs/runbooks/deploy.md`. `production` needs required reviewers.
+6. Run the Deploy workflow, then set up an **external uptime monitor** for `/readyz`, `/login` and `/apply`.
 
 ### A.4 YouTube channel (C-43)
 
@@ -2742,7 +2754,7 @@ Do every step in **staging first**. Record the outcomes in `docs/runbooks/` and 
 ### A.6 Launch checklist
 
 - Spikes S-01…S-17 and S-Y1 closed or accepted.
-- DPAs/terms reviewed: DigitalOcean, Google (Workspace + YouTube), SendGrid (C-41). Recording notice mentions YouTube (D-08).
+- DPAs/terms reviewed: Hostinger, Neon, Cloudflare, Google (Workspace + YouTube), SendGrid (C-41). Recording notice mentions YouTube (D-08).
 - NDPC registration status recorded.
 - Privacy notice, recording notice and Statement of Faith URL live.
 - Backups and restore drill done.
@@ -2762,16 +2774,16 @@ Each spike produces `docs/spikes/S-xx.md` (what was tried, the evidence, the dec
 | S-02 | Can one host account own many spaces with different co-hosts and concurrent conferences? Does auto-recording start when the co-host Lecturer (room laptop) joins? | All behave; recordings land in host Drive | Tune the pool | WP-MEET-4 |
 | S-03 | In `RESTRICTED` mode, do **external** members join without knocking? Member limits? | No knock for members; ≥ 60 members per space | Staff-only sync + host admits | WP-MEET-4 |
 | S-04 | Do user-target Workspace Events subscriptions fire for API-created spaces? Lifetime and renewal? Envelope attributes? Minimal scopes? | Events arrive; routing is possible | Per-space subscriptions; reconciliation-only mode | WP-MEET-5 |
-| S-05 | Recording file facts: container/codecs, MB per hour, `md5Checksum` present, `drive.meet.readonly` allows `alt=media` under DWD, download speed to App Platform (LON) | Download + MD5 verification works | Broaden the Drive scope; adjust timeouts | WP-VIDEO-2 |
+| S-05 | Recording file facts: container/codecs, MB per hour, `md5Checksum` present, `drive.meet.readonly` allows `alt=media` under DWD, download speed to the VPS (Frankfurt) | Download + MD5 verification works | Broaden the Drive scope; adjust timeouts | WP-VIDEO-2 |
 | S-08 | Business Standard: REST participant and recording data available; co-host recording privilege; Drive quota | All available | Upgrade the host licences or accept manual attendance | WP-MEET, ATT |
 | S-09 | An admin setting to block anonymous joiners | Anonymous blocked | Manual matching for anonymous participants | WP-ATT |
 | S-10 | A narrower scope for trashing Meet recordings | A narrower scope works | Keep the broad scope or make cleanup manual | WP-VIDEO-2 |
 | S-11 | YouTube embed on target devices (Android Chrome, Samsung Internet, iOS Safari ≥ 15, low-end 2 GB Android): player download size, startup on 3G from Lagos ISPs, 144p availability and MB/hour, resume via `start`/`seekTo`, `getCurrentTime` reliability | Plays and resumes; 144p available; numbers recorded for the tip | Adjust the tip; link to the YouTube app as a fallback | WP-VIDEO-4 |
-| S-13 | RTT from Lagos (MTN, Airtel, Glo, fixed) to App Platform LON vs FRA vs AMS | Lowest p50/p95 chosen | Keep LON | WP-DEVOPS-1 |
+| S-13 | RTT from Lagos (MTN, Airtel, Glo, fixed) to LON vs FRA vs AMS. **Decided by ADR-0004: Frankfurt**; still worth measuring for the record | Lowest p50/p95 chosen | — | WP-DEVOPS-1 |
 | S-14 | SendGrid deliverability to Gmail, Yahoo and Nigerian providers; bounce handling | > 98 % inbox for transactional mail | Switch provider behind `Mailer` | WP-NOTIF-1 |
 | S-15 | PG18 + Drizzle: exclusion constraints (room + lecturer), virtual generated column, custom SQL round-trip; pg-boss over the direct connection; advisory locks through the `glim-tx` pool | All migrate and behave | Direct connections for affected paths | WP-02/07 |
 | S-16 | `@react-pdf/renderer`: Unicode names, 4-semester pagination, render time | Correct glyphs; < 3 s | Switch the PDF adapter | WP-TRN-1 |
-| S-17 | App Platform: SIGTERM grace period for workers; worker memory/CPU for a 1.5 GB streamed upload (integration slice); path routing of `/api` + SPA in one service; `PRE_DEPLOY` job behaviour on failure | All confirmed with numbers | Adjust job expiry, instance size, or split worker roles | WP-DEVOPS-1, VIDEO-2 |
+| S-17 | ~~App Platform specifics~~ (ADR-0004: grace periods, routing and the migrate step are now ours, in `deploy/`). Still open: worker memory/CPU on the VPS for a 1.5 GB streamed upload (integration slice) | Confirmed with numbers | Adjust job expiry or the VPS size | VIDEO-2 |
 | **S-Y1** | **YouTube** (C-43): oEmbed responses for public, unlisted, private, deleted and embedding-disabled videos, and the `author_url` format for the channel check; whether ads appear on GLIM's non-monetised channel; the least-privileged Studio role that can upload; privacy-enhanced embed + IFrame API script hosts for the CSP. Integration slice: API audit process/timeline, `videos.insert` quota cost vs ~5 uploads/day, unaudited-upload privacy lock, `processingDetails`/duration availability | All behaviours documented | Adjust error mapping; manual upload continues if the audit is pending | WP-VIDEO-* |
 
 ### B.1 S-01 for the System Admin — no code required (≈ 45 minutes)

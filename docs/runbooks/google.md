@@ -8,7 +8,7 @@ GLIM ships with both integrations **off**:
 - `LIVE_PROVIDER=none`: Lecturers paste a Meet link on each Class Meeting, and online attendance is marked at roll call.
 - `VIDEO_HOST=youtube_link`: recordings are uploaded by hand in YouTube Studio and their links pasted in.
 
-Turn each one on only after its steps below are done in **staging** first (TRD Appendix A). Each switch is a change to an App Platform environment variable and a redeploy. Each can be switched off again the same way. Meetings already provisioned keep their Meet link; new ones go back to pasted links.
+Turn each one on only after its steps below are done in **staging** first (TRD Appendix A). Each switch is a change to a GitHub environment variable and a redeploy (`deploy.md`). Each can be switched off again the same way. Meetings already provisioned keep their Meet link; new ones go back to pasted links.
 
 ## Before you start: the spikes
 
@@ -25,7 +25,7 @@ The two that change the most:
 
 Do Appendix A.1 and A.2 in full: the host accounts in their own organisational unit, Meet settings, the Cloud project with its APIs, the `glim-meet` service account, the Pub/Sub topic and pull subscription. Then:
 
-1. Base64-encode the service account's JSON key (`base64 -i key.json`) and set it as the **encrypted** App Platform variable `GOOGLE_SA_KEY_JSON_B64`. Delete the downloaded file.
+1. Base64-encode the service account's JSON key (`base64 -i key.json`) and set it as the GitHub environment **secret** `GOOGLE_SA_KEY_JSON_B64`. Delete the downloaded file.
 2. Set `GOOGLE_PROJECT_ID`, `GOOGLE_PUBSUB_TOPIC` (`glim-meet-events`) and `GOOGLE_PUBSUB_SUBSCRIPTION` (`glim-meet-events-pull`). Short names are completed with the project ID.
 3. Set `LIVE_PROVIDER=google_meet` and redeploy. The app refuses to start if a value is missing, and names the variable (never its value).
 

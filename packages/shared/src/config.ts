@@ -71,7 +71,7 @@ const envSchema = z.object({
   API_INSTANCE_COUNT: int(2),
   WORKER_INSTANCE_COUNT: int(1),
 
-  /** A header set by the platform edge with the client's IP (App Platform: do-connecting-ip). */
+  /** A header set by the edge proxy with the client's IP (Caddy on the VPS: x-real-ip). */
   CLIENT_IP_HEADER: optionalText,
 
   WORKER_ROLE: z.enum(WORKER_ROLES).default("all"),

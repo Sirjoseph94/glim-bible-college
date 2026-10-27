@@ -4,7 +4,7 @@ import type { FastifyReply } from "fastify";
 import type { PgBoss } from "pg-boss";
 import { BOSS } from "../../common/tokens";
 
-/** App Platform health checks (TRD §16 Health). Not part of the versioned API. */
+/** Health checks for Docker and Caddy (TRD §16 Health). Not part of the versioned API. */
 @Controller()
 export class HealthController {
   constructor(
