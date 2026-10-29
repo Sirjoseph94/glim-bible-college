@@ -83,8 +83,8 @@ export function PrivacyPage() {
           <li>
             <strong>Class recordings.</strong> Class Meetings may be recorded, including the people
             who appear or speak. Recordings are published on the college's YouTube channel as
-            unlisted videos, so that students can watch them again. Anyone who has the link can
-            view an unlisted video.
+            unlisted videos, so that students can watch them again. Anyone who has the link can view
+            an unlisted video.
           </li>
           <li>
             <strong>Results, awards and transcripts.</strong> Your results, GPA and CGPA, standing,
@@ -115,7 +115,10 @@ export function PrivacyPage() {
           <li>Hostinger runs the server, in the United Kingdom.</li>
           <li>Neon hosts the database, in Frankfurt, Germany.</li>
           <li>Cloudflare stores uploaded files and backups, in the European Union.</li>
-          <li>Google provides sign-in with Google, Google Meet for online Class Meetings and YouTube for recordings.</li>
+          <li>
+            Google provides sign-in with Google, Google Meet for online Class Meetings and YouTube
+            for recordings.
+          </li>
           <li>Brevo sends our emails, from France.</li>
         </Bullets>
         <p>
@@ -137,7 +140,9 @@ export function PrivacyPage() {
             default). Applications you start but never submit are deleted 12 months after you last
             edit them.
           </li>
-          <li>Your academic record (results, awards, transcripts and coursework): kept permanently.</li>
+          <li>
+            Your academic record (results, awards, transcripts and coursework): kept permanently.
+          </li>
           <li>Class recordings: until the college deletes them.</li>
           <li>Backups: encrypted weekly copies of the database, deleted after 12 weeks.</li>
         </Bullets>
@@ -153,10 +158,10 @@ export function PrivacyPage() {
             <strong>Correct it.</strong> Ask the college to correct anything that's wrong.
           </li>
           <li>
-            <strong>Erase it.</strong> Ask us to erase your account. We delete your sign-in
-            details, notifications, applications (with the sensitive answers) and photos. The law
-            requires us to keep your academic record and our record of actions, which stay under a
-            pseudonym instead of your name.
+            <strong>Erase it.</strong> Ask us to erase your account. We delete your sign-in details,
+            notifications, applications (with the sensitive answers) and photos. The law requires us
+            to keep your academic record and our record of actions, which stay under a pseudonym
+            instead of your name.
           </li>
           <li>
             <strong>Withdraw consent</strong> for the sensitive answers in your application, or{" "}
@@ -219,15 +224,18 @@ export function TermsPage() {
         <p>
           These terms apply when you use the {LEGAL_NAME} website and its services, whether you're
           applying, studying, teaching or working for the college. By using the site you agree to
-          them. Your studies are also governed by the college's academic policies; where they
-          differ from these terms, the academic policies apply.
+          them. Your studies are also governed by the college's academic policies; where they differ
+          from these terms, the academic policies apply.
         </p>
       </Part>
 
       <Part id="terms-account" title="Your account">
         <Bullets>
           <li>Your account is for you alone. Don't share it or let anyone else sign in as you.</li>
-          <li>Keep your password and Google account secure, and tell us at once if you think someone else has used your account.</li>
+          <li>
+            Keep your password and Google account secure, and tell us at once if you think someone
+            else has used your account.
+          </li>
           <li>Give accurate information, especially in your application.</li>
         </Bullets>
       </Part>
@@ -236,9 +244,16 @@ export function TermsPage() {
         <p>You agree not to:</p>
         <Bullets>
           <li>submit work that isn't your own, or help someone else do so;</li>
-          <li>share class recordings, their links or course materials outside your course without permission;</li>
-          <li>upload anything unlawful or harmful, or anything you don't have the right to share;</li>
-          <li>try to reach accounts or data that aren't yours, or interfere with how the site works.</li>
+          <li>
+            share class recordings, their links or course materials outside your course without
+            permission;
+          </li>
+          <li>
+            upload anything unlawful or harmful, or anything you don't have the right to share;
+          </li>
+          <li>
+            try to reach accounts or data that aren't yours, or interfere with how the site works.
+          </li>
         </Bullets>
       </Part>
 

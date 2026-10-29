@@ -15,7 +15,9 @@ const router = createRouter({
 });
 
 function render(page: React.ReactElement) {
-  return renderToStaticMarkup(<RouterContextProvider router={router}>{page}</RouterContextProvider>);
+  return renderToStaticMarkup(
+    <RouterContextProvider router={router}>{page}</RouterContextProvider>,
+  );
 }
 
 describe.each([
