@@ -14,7 +14,9 @@ import { describeError, type ErrorCopy } from "../api/error-copy";
 import { PageHeader } from "../components/app/page-header";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
 import { useDetailBar } from "../components/app/shell-parts";
+import { attendanceExplanation, ranFor } from "../components/teaching/attendance-explanation";
 import { AttendanceRow } from "../components/teaching/attendance-row";
+import { MeetParticipants } from "../components/teaching/meet-participants";
 import { Time } from "../components/time";
 import { Badge, type BadgeStatus, type Tone } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
@@ -64,12 +66,22 @@ function useBackToCourse(meeting: ClassMeeting | undefined) {
   );
 }
 
-/** "Kings of Judah, part 2 · Mon 12 Oct, 10:00" under a page's title. */
-function MeetingMeta({ meeting }: { meeting: ClassMeeting | undefined }) {
+/**
+ * "Kings of Judah, part 2 · Mon 12 Oct, 10:00" under a page's title, with "class ran 58 min"
+ * where the attendance page knows it (§11.8).
+ */
+function MeetingMeta({
+  meeting,
+  ran = null,
+}: {
+  meeting: ClassMeeting | undefined;
+  ran?: string | null;
+}) {
   if (meeting === undefined) return null;
   return (
     <>
       {meeting.title} · <Time value={meeting.scheduledStart} />
+      {ran === null ? null : ` · ${ran}`}
     </>
   );
 }
@@ -519,8 +531,8 @@ function OverrideSheet({
 
 /**
  * A Class Meeting's attendance, for its Lecturers (TRD §12.5; handoff §11.8): the counts, then
- * every student, the ones to look at first. ("Participants we couldn't match" and the policy's
- * thresholds wait on the API: .scratch/ui-overhaul/issues/02.)
+ * every student, the ones to look at first, and what Present and Partial mean under the class's
+ * own policy (ui #05). Google Meet participants are reviewed below the list.
  */
 export function MeetingAttendancePage() {
   const { meetingId } = useParams({ from: "/teach/meetings/$meetingId/attendance" });
@@ -577,7 +589,10 @@ export function MeetingAttendancePage() {
   return (
     <div className="space-y-4">
       {online ? null : <OfflineBanner />}
-      <PageHeader title="Attendance" meta={<MeetingMeta meeting={meeting.data} />} />
+      <PageHeader
+        title="Attendance"
+        meta={<MeetingMeta meeting={meeting.data} ran={ranFor(view.ranSeconds)} />}
+      />
       <p className="text-body-sm text-ink">
         {view.attendanceState === "FINAL" ? (
           <>
@@ -585,6 +600,8 @@ export function MeetingAttendancePage() {
           </>
         ) : view.attendanceState === "PENDING" ? (
           "Not taken yet."
+        ) : view.attendanceState === "REVIEW_REQUIRED" ? (
+          "Needs your check: someone in the Google Meet call isn't identified yet, or the call was much shorter than the class."
         ) : (
           "Provisional: it becomes final shortly after the class ends."
         )}
@@ -633,11 +650,13 @@ export function MeetingAttendancePage() {
                   />
                 ))}
               </Card>
-              <p className="text-body-sm text-ink-muted">
-                Tap a student to change their status; a reason is required.
-              </p>
+              <p className="text-body-sm text-ink-muted">{attendanceExplanation(view.rule)}</p>
             </>
           )}
+          {/* Google Meet classes: who was online, to confirm (integration slice). */}
+          {meeting.data !== undefined && meeting.data.providerStatus !== null ? (
+            <MeetParticipants meetingId={meetingId} />
+          ) : null}
         </div>
         {/* Desktop: the class's facts beside the list (§11.8). */}
         <aside aria-label="About this class" className="space-y-3">

@@ -227,8 +227,16 @@ describe("finalization", () => {
     const service = t.app.get(AttendanceService);
     expect(await service.finalize(m.id)).toBe("SKIPPED"); // not ended yet
     await at("2026-11-03T09:05:00Z");
-    unwrap(await t.app.get(MeetingLifecycleService).start(m.id, SYSTEM_ACTOR));
-    unwrap(await t.app.get(MeetingLifecycleService).end(m.id, SYSTEM_ACTOR));
+    unwrap(
+      await t.app
+        .get(MeetingLifecycleService)
+        .start(m.id, { ...SYSTEM_ACTOR, userId: p.l1Primary.userId }),
+    );
+    unwrap(
+      await t.app
+        .get(MeetingLifecycleService)
+        .end(m.id, { ...SYSTEM_ACTOR, userId: p.l1Primary.userId }),
+    );
     // The worker's subscriber queues finalization after the 10-minute finalize delay.
     const dispatch = createDispatcher(createSubscribers(t.app));
     await drainQueues(t.boss, { "domain-event": (job) => dispatch(job.data as DomainEvent) });
@@ -313,6 +321,37 @@ describe("reading attendance", () => {
       computedStatus: "ABSENT",
       overrideStatus: "EXCUSED",
     });
+    // The rule the page explains comes from the meeting's policy snapshot, not hard-coded words.
+    expect(body.rule).toEqual({
+      basis: "ACTUAL_CAPPED",
+      presentThresholdBp: 7500,
+      partialThresholdBp: 2500,
+    });
+    // Roll call only, never online: there's no class length to tell.
+    expect(body.ranSeconds).toBeNull();
+    const original = await t.db.pool.query<{ s: unknown }>(
+      "SELECT policy_snapshot AS s FROM class_meetings WHERE id = $1",
+      [m.id],
+    );
+    await t.db.pool.query(
+      `UPDATE class_meetings
+          SET policy_snapshot = jsonb_set(coalesce(policy_snapshot, '{}'), '{attendance}',
+                '{"version": 9, "config": {"basis": "SCHEDULED", "presentThresholdBp": 8000}}')
+        WHERE id = $1`,
+      [m.id],
+    );
+    const changed = await t.request({
+      url: `/api/v1/class-meetings/${m.id}/attendance`,
+      headers: p.l1Primary.headers,
+    });
+    expect(changed.json<MeetingAttendance>().rule).toMatchObject({
+      basis: "SCHEDULED",
+      presentThresholdBp: 8000,
+    });
+    await t.db.pool.query("UPDATE class_meetings SET policy_snapshot = $2 WHERE id = $1", [
+      m.id,
+      original.rows[0]?.s ?? null,
+    ]);
     for (const who of ["sEnrolled", "sOther", "l4Other"] as const) {
       const denied = await t.request({
         url: `/api/v1/class-meetings/${m.id}/attendance`,

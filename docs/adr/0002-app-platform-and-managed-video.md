@@ -1,6 +1,8 @@
 # App Platform hosting with Cloudflare Stream for video
 
-> **Video provider superseded by [ADR-0003](0003-video-delivery-cost.md)** (7 Oct 2026): recordings are now hosted on GLIM's YouTube channel as unlisted videos. The hosting parts of this ADR (App Platform, Managed PG, Spaces, SendGrid, no self-hosted transcoding) still stand.
+> **Video provider superseded by [ADR-0003](0003-video-delivery-cost.md)** (7 Oct 2026): recordings are now hosted on GLIM's YouTube channel as unlisted videos.
+>
+> **Hosting superseded by [ADR-0004](0004-hostinger-vps-hosting.md)** (27 Oct 2026): the app runs on a Hostinger VPS, the database on Neon, and files and backups in Cloudflare R2. SendGrid and "no self-hosted transcoding" still stand.
 
 The original spec ran on DigitalOcean droplets because its self-hosted ffmpeg pipeline needed more disk and longer-running jobs than App Platform allows (about 2 GiB of temporary disk, and a restart on every deploy). GLIM has a single system admin and no devops staff, so we run the app and Managed PostgreSQL on **DigitalOcean App Platform**, and hand recording transcoding, storage and protected playback to a managed video service. The owner chose **Cloudflare Stream** on 7 October 2026; Bunny Stream was the alternative considered.
 

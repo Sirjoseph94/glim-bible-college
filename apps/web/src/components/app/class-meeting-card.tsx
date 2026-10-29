@@ -1,14 +1,15 @@
 import type { ClassMeeting, meetings } from "@glim/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { api, ApiError } from "../../api/client";
-import { errorText } from "../../api/error-copy";
+import { describeError, errorText } from "../../api/error-copy";
 import { Icon } from "../../design/icons";
 import { cn } from "../../design/cn";
 import { Badge, type BadgeStatus } from "../ui/badge";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { Time } from "../time";
+import { joinWaitUntil, secondsLeft } from "./join-wait";
 
 const BADGE: Record<ClassMeeting["state"], BadgeStatus> = {
   SCHEDULED: "scheduled",
@@ -18,6 +19,45 @@ const BADGE: Record<ClassMeeting["state"], BadgeStatus> = {
   CANCELLED: "cancelled",
   NO_SHOW: "no_show",
 };
+
+/** What the card says about the recording; NOT_PUBLISHED and FAILED reach only staff. */
+const RECORDING: Record<
+  NonNullable<ClassMeeting["recording"]>["status"],
+  { text: string; className: string }
+> = {
+  PROCESSING: { text: "Recording processing", className: "text-ink-muted" },
+  PUBLISHED: { text: "Recording ready", className: "text-success" },
+  NOT_PUBLISHED: { text: "Ready to publish", className: "text-ink-muted" },
+  FAILED: { text: "Recording failed", className: "text-danger" },
+};
+
+/**
+ * The meeting's recording: a word for where it is, and Watch recording once the viewer can play
+ * it. Before a recording exists, an ended class that was recorded expects one.
+ */
+function RecordingStatus({ meeting }: { meeting: ClassMeeting }) {
+  const { recording } = meeting;
+  if (recording === null)
+    return meeting.state === "ENDED" && meeting.recordingMode !== "OFF" ? (
+      <p className="text-body-sm text-ink-muted">Recording expected</p>
+    ) : null;
+  const word = RECORDING[recording.status];
+  return (
+    <div className="space-y-2">
+      <p className={cn("text-body-sm", word.className)}>{word.text}</p>
+      {recording.status === "PUBLISHED" ? (
+        <Link
+          to="/recordings/$videoId"
+          params={{ videoId: recording.videoId }}
+          className={buttonClass({ variant: "secondary", block: true })}
+        >
+          <Icon name="play" size={16} />
+          Watch recording
+        </Link>
+      ) : null}
+    </div>
+  );
+}
 
 /** "in 3 h 20 min" when a time is less than a day away (§10.6), else null. */
 function startsIn(iso: string, now: Date): string | null {
@@ -38,35 +78,70 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [problem, setProblem] = useState<{ text: string; linkGoogle: boolean } | null>(null);
+  const [problem, setProblem] = useState<{
+    text: string;
+    title: string;
+    linkGoogle: boolean;
+  } | null>(null);
+  // While the Meet link is being prepared: Join waits for the server's Retry-After.
+  const [waitUntil, setWaitUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (waitUntil === null) return;
+    const timer = setInterval(() => {
+      const at = Date.now();
+      setNow(at);
+      if (at >= waitUntil) {
+        setWaitUntil(null);
+        setProblem((p) => (p === null ? p : { ...p, text: `${p.title}. You can try again now.` }));
+      }
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [waitUntil]);
+  const waiting = waitUntil === null ? null : secondsLeft(waitUntil, now);
+  const problemId = useId();
+  const [phone, setPhone] = useState<
+    { region: string; phone: string; pin: string }[] | "none" | null
+  >(null);
   const live = meeting.state === "LIVE";
+  const join = () =>
+    api<typeof meetings.joinClassMeeting>("POST", "/class-meetings/:id/join", {
+      params: { id: meeting.id },
+    });
+  const failed = (error: unknown) => {
+    setProblem({
+      text: errorText(error),
+      title: describeError(error).title,
+      linkGoogle: error instanceof ApiError && error.code === "GOOGLE_ACCOUNT_REQUIRED",
+    });
+    const at = Date.now();
+    setNow(at);
+    setWaitUntil(joinWaitUntil(error, at));
+    // The class closed (or isn't open yet): fetch its real state for the card.
+    if (error instanceof ApiError && error.code === "JOIN_WINDOW_CLOSED") {
+      void queryClient.invalidateQueries({ queryKey: ["me", "schedule"] });
+      void queryClient.invalidateQueries({ queryKey: ["class-meetings"] });
+    }
+  };
   return (
     <div className="space-y-2 pt-2">
       <Button
         variant={live ? "live" : "primary"}
         block
         loading={busy}
+        disabled={waiting !== null}
+        {...(waiting === null ? {} : { "aria-describedby": problemId })}
         onClick={() => {
           setBusy(true);
           setProblem(null);
-          api<typeof meetings.joinClassMeeting>("POST", "/class-meetings/:id/join", {
-            params: { id: meeting.id },
-          })
+          join()
             .then((joined) => {
               setOpening(true);
               window.location.assign(joined.onlineLink);
             })
-            .catch((error: unknown) => {
-              setProblem({
-                text: errorText(error),
-                linkGoogle: error instanceof ApiError && error.code === "GOOGLE_ACCOUNT_REQUIRED",
-              });
-              // The class closed (or isn't open yet): fetch its real state for the card.
-              if (error instanceof ApiError && error.code === "JOIN_WINDOW_CLOSED") {
-                void queryClient.invalidateQueries({ queryKey: ["me", "schedule"] });
-                void queryClient.invalidateQueries({ queryKey: ["class-meetings"] });
-              }
-            })
+            .catch(failed)
             .finally(() => {
               setBusy(false);
             });
@@ -74,13 +149,52 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
       >
         {live ? "Join live class" : "Join class"}
       </Button>
+      {/* Low data (§11.5): Google Meet's dial-in numbers, when Google gives them. */}
+      {meeting.providerStatus !== null && phone === null ? (
+        <Button
+          variant="quiet"
+          size="sm"
+          block
+          onClick={() => {
+            setProblem(null);
+            join()
+              .then((joined) => {
+                setPhone(joined.dialIn === null ? "none" : joined.dialIn.numbers);
+              })
+              .catch(failed);
+          }}
+        >
+          Join by phone instead
+        </Button>
+      ) : null}
+      {phone === "none" ? (
+        <p className="text-body-sm text-ink-muted">
+          Joining by phone isn't available for this class.
+        </p>
+      ) : phone !== null ? (
+        <ul aria-label="Dial-in numbers" className="space-y-1 text-body-sm">
+          {phone.map((n) => (
+            <li key={n.phone}>
+              {n.region}:{" "}
+              <a
+                href={`tel:${n.phone.replaceAll(" ", "")},,${n.pin}#`}
+                className="font-semibold underline"
+              >
+                {n.phone}
+              </a>
+              , PIN {n.pin}#
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div role="status" className="text-body-sm">
         {opening ? <p className="text-ink-muted">Opening Google Meet…</p> : null}
       </div>
+      {/* Announced once; the countdown below ticks outside the live region. */}
       <div role="alert" className="text-body-sm">
         {problem ? (
           <p className="text-warning">
-            {problem.text}{" "}
+            {waiting === null ? problem.text : `${problem.title}.`}{" "}
             {problem.linkGoogle ? (
               <Link to="/profile" className="font-semibold underline">
                 Link Google account
@@ -89,6 +203,11 @@ function JoinAction({ meeting }: { meeting: ClassMeeting }) {
           </p>
         ) : null}
       </div>
+      {waiting === null ? null : (
+        <p id={problemId} className="text-body-sm text-ink-muted">
+          Try again in {String(waiting)} s.
+        </p>
+      )}
     </div>
   );
 }
@@ -110,12 +229,10 @@ export function ClassMeetingCard({
   const live = meeting.state === "LIVE";
   const soon = startsIn(meeting.scheduledStart, new Date());
   const cancelled = meeting.state === "CANCELLED";
-  const joinable =
-    (meeting.state === "OPEN" || live) && meeting.hasOnlineLink && actions === undefined;
-  const where = [
-    meeting.room ? `On campus: ${meeting.room.name}` : null,
-    meeting.hasOnlineLink ? "Online" : null,
-  ]
+  // A Google Meet class can be joined while its link is being prepared: the server says so.
+  const online = meeting.hasOnlineLink || meeting.providerStatus !== null;
+  const joinable = (meeting.state === "OPEN" || live) && online && actions === undefined;
+  const where = [meeting.room ? `On campus: ${meeting.room.name}` : null, online ? "Online" : null]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -138,15 +255,16 @@ export function ClassMeetingCard({
         <Time value={meeting.scheduledEnd} withDate={false} />
         {where ? ` · ${where}` : null}
       </p>
+      {cancelled && meeting.cancelReason !== null ? (
+        <p className="text-body-sm text-ink-muted">{meeting.cancelReason}</p>
+      ) : null}
       {meeting.state === "SCHEDULED" && soon ? (
         <p className="flex items-center gap-1 text-label text-info">
           <Icon name="clock" size={16} />
           Starts in {soon}
         </p>
       ) : null}
-      {meeting.state === "ENDED" && meeting.recordingMode !== "OFF" ? (
-        <p className="text-body-sm text-ink-muted">Recording expected</p>
-      ) : null}
+      {cancelled ? null : <RecordingStatus meeting={meeting} />}
       {joinable ? <JoinAction meeting={meeting} /> : null}
       {actions && !cancelled ? <div className="pt-2">{actions}</div> : null}
     </article>

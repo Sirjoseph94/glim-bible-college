@@ -23,6 +23,14 @@ export interface SemesterScope {
   cohortId?: string | undefined;
 }
 
+/** A programme's Course Offerings this semester and how many are finalized. */
+export interface CourseCounts {
+  programmeId: string;
+  programmeCode: string;
+  offerings: number;
+  offeringsFinalized: number;
+}
+
 /** The figures a semester result stores; a change in any bumps `calc_version`. */
 interface Figures {
   creditsAttemptedX10: number;
@@ -271,6 +279,51 @@ export class SemesterResultsService {
     return this.rows(this.db.read, scope);
   }
 
+  /** The Registrar's list: the rows, and each programme's Course Offerings and how many are finalized. */
+  async listing(
+    scope: SemesterScope,
+  ): Promise<{ items: SemesterResultRow[]; courses: CourseCounts[] }> {
+    const [items, courses] = await Promise.all([this.list(scope), this.courseCounts(scope)]);
+    return { items, courses };
+  }
+
+  /**
+   * Per programme in scope: the Course Offerings its students take this semester (enrolled or
+   * completed), and how many have a non-draft course result for every one of those students. An
+   * offering not finalized yet has no result for some of them, so it doesn't count.
+   */
+  private async courseCounts(scope: SemesterScope): Promise<CourseCounts[]> {
+    const { rows } = await this.db.read.execute<{
+      programme_id: string;
+      programme_code: string;
+      offerings: number;
+      finalized: number;
+    }>(sql`
+      WITH per AS (
+        SELECT pe.programme_id, ce.course_offering_id,
+               bool_and(EXISTS (SELECT 1 FROM course_results cr
+                                 WHERE cr.course_enrollment_id = ce.id AND cr.status <> 'DRAFT')) AS done
+          FROM course_enrollments ce
+          JOIN semester_enrollments se ON se.id = ce.semester_enrollment_id
+          JOIN programme_enrollments pe ON pe.id = ce.programme_enrollment_id
+         WHERE se.semester_id = ${scope.semesterId}
+           AND ce.status IN ('ENROLLED', 'COMPLETED')
+           ${scope.programmeId === undefined ? sql`` : sql`AND pe.programme_id = ${scope.programmeId}`}
+           ${scope.cohortId === undefined ? sql`` : sql`AND pe.cohort_id = ${scope.cohortId}`}
+         GROUP BY pe.programme_id, ce.course_offering_id)
+      SELECT per.programme_id, p.code AS programme_code, count(*)::int AS offerings,
+             (count(*) FILTER (WHERE done))::int AS finalized
+        FROM per JOIN programmes p ON p.id = per.programme_id
+       GROUP BY per.programme_id, p.code
+       ORDER BY p.code`);
+    return rows.map((r) => ({
+      programmeId: r.programme_id,
+      programmeCode: r.programme_code,
+      offerings: r.offerings,
+      offeringsFinalized: r.finalized,
+    }));
+  }
+
   /**
    * Approves DRAFT semester results in scope with their course results (FINALIZED → APPROVED).
    * A student with a reopened (DRAFT) course result in the semester is skipped until it's
@@ -505,6 +558,15 @@ export class SemesterResultsService {
         drafts: sql<number>`(SELECT count(*)::int FROM course_results cr
           WHERE cr.programme_enrollment_id = ${sr.programmeEnrollmentId}
             AND cr.semester_id = ${sr.semesterId} AND cr.status = 'DRAFT')`,
+        draftCodes: sql<
+          string[]
+        >`(SELECT coalesce(json_agg(DISTINCT c.code ORDER BY c.code), '[]'::json)
+          FROM course_results cr JOIN courses c ON c.id = cr.course_id
+          WHERE cr.programme_enrollment_id = ${sr.programmeEnrollmentId}
+            AND cr.semester_id = ${sr.semesterId} AND cr.status = 'DRAFT')`,
+        levelNo: sql<number | null>`(SELECT se.level_no FROM semester_enrollments se
+          WHERE se.programme_enrollment_id = ${sr.programmeEnrollmentId}
+            AND se.semester_id = ${sr.semesterId} LIMIT 1)`,
       })
       .from(sr)
       .innerJoin(pe, eq(pe.id, sr.programmeEnrollmentId))
@@ -530,6 +592,8 @@ export class SemesterResultsService {
       calcVersion: x.row.calcVersion,
       computedAt: x.row.computedAt.toISOString(),
       draftCourseResults: x.drafts,
+      draftCourseCodes: x.draftCodes,
+      levelNo: x.levelNo,
     }));
   }
 }

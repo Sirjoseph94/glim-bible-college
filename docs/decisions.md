@@ -14,8 +14,8 @@ The record of what GLIM's owner has decided, and the defaults still awaiting con
 | Tenancy | **GLIM only.** Multi-tenancy is removed. | ADR-0001 |
 | Delivery | **Hybrid.** The same class runs in a room and on Google Meet at once. | §11, §12 |
 | Scale | About **100–200 students and 10–25 staff**. Classes of 15–30, with 3–5 running at the same time. | §21.4, §22.2 |
-| Operations | One **System Admin** operates everything. **DigitalOcean App Platform** for the server, Managed PostgreSQL for the database, **SendGrid** for email. | ADR-0002, §22 |
-| Video | A managed service rather than self-hosting. The provider is now **YouTube, unlisted** (C-43, 7 Oct 2026; replaced Cloudflare Stream). Files go in DigitalOcean Spaces. Cloudflare R2 and the Worker are dropped. | ADR-0002, ADR-0003, §13 |
+| Operations | One **System Admin** operates everything. The app runs on a **Hostinger VPS** (Germany) with Docker Compose and Caddy. The database is **Neon** PostgreSQL in Frankfurt. Files and backups are in **Cloudflare R2**. **SendGrid** for email. (27 Oct 2026; replaced App Platform, DO Managed PostgreSQL and Spaces.) Availability: the database is managed, but the app is one server, so 99.5% is a target, not a guarantee. | ADR-0004, §22 |
+| Video | A managed service rather than self-hosting. The provider is now **YouTube, unlisted** (C-43, 7 Oct 2026; replaced Cloudflare Stream). Files go in R2 (ADR-0004). | ADR-0002, ADR-0003, §13 |
 
 ### Vocabulary (see `GLOSSARY.md`)
 
@@ -88,7 +88,7 @@ There's also the derived **Applicant**. Auditor, Platform Admin, departments and
 | Q-15 | No students under 18. |
 | Q-18 | Official transcripts wait for Registrar approval. Unofficial transcripts show finalized results marked *Provisional*. |
 | Recording consent | Notice only. |
-| DPAs | Data processing agreements or terms reviews for DigitalOcean, Google (Workspace and YouTube) and SendGrid are a launch requirement. |
+| DPAs | Data processing agreements or terms reviews for Hostinger, Neon, Cloudflare, Google (Workspace and YouTube) and SendGrid are a launch requirement. |
 
 ### Kept from v2.1 (still in force)
 
@@ -109,13 +109,13 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 |---|---|---|---|
 | UI-Q1 | Vocabulary | **`GLOSSARY.md` wins.** UI copy and code say Lecturer, Class Meeting and Matric Number, never "teacher", unqualified "session" or "student number". The handoff's SessionCard is built as `ClassMeetingCard`, and its "Teacher" role and copy are read as Lecturer. | handoff §6.3, §9.14, §12 |
 | UI-Q2 | Player | **Keep the YouTube embed for now** (ADR-0003). WP-UI-06 restyles the facade, stage, resume banner and data-saver tip. No QualityMenu, no Audio only, and no 180-day purge state (recordings are kept indefinitely). | handoff §9.16, §11.4 |
-| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. Until it lands, the card shows only the six real states, with `NO_SHOW` as "Didn't take place". | handoff §9.14 |
+| UI-Q3 | Recording state on Class Meeting cards | **Raise an API change:** `.scratch/ui-overhaul/issues/01-class-meeting-recording-status.md`. **Done (14 Oct 2026):** the card shows Recording expected, processing, ready (with Watch recording), and for staff Ready to publish or Recording failed. | handoff §9.14 |
 | UI-Q4 | Roll call | Compose it from §9.18 AttendanceRow and the §9.20 offline queue. | WP-UI-09 |
 | UI-Q5 | Course routes | Add `/courses/$offeringId` (WP-UI-05) and `/teach/$offeringId` (WP-UI-09). `/courses` and `/teach` become lists linking to them. Announcements go in the Overview tab. | handoff §11.3, §11.9 |
 | UI-Q6 | Lecturer home | A Lecturer's `/` is Lecturer Today (§11.7). | WP-UI-04/09 |
 | UI-Q7 | Admissions and registration screens | Compose them from §9/§10 in WP-UI-11 ("composed, not specified"). INV-15 is unchanged. | WP-UI-11 |
 | UI-Q8 | Transcripts | **Merge** the transcripts pages into the results pages: the student's into `/results` (§11.6), the Registrar's requests into the semester results page (§11.10). The old paths redirect. | WP-UI-08, WP-UI-10 |
-| UI-Q9 | Data the API doesn't return | **Skip for now.** No UI is built for it; it is documented for future work in `.scratch/ui-overhaul/issues/02-ui-data-gaps.md`. | — |
+| UI-Q9 | Data the API doesn't return | **Skip for now.** No UI is built for it; it is documented for future work in `.scratch/ui-overhaul/issues/02-ui-data-gaps.md`. **14 Oct 2026:** split into tickets 03–12; 03–06 are built. | — |
 | UI-Q10 | Radix UI | **Install it** for Dialog/Sheet, DropdownMenu, Tabs, RadioGroup, Checkbox, Switch and Tooltip. In practice Dialog, DropdownMenu, Tabs and Switch are used; Checkbox and Radio stay native (§9.5) and Tooltip has no use yet, so those three were removed until one does. | handoff §3.1 |
 | UI-Q11 | Google sign-in button | **A design exception is approved for the four-colour "G" mark.** Checked against Google's *Sign in with Google* branding guidelines: the standard G must sit on white and cannot be recoloured, and the button may only use Google's light, dark or neutral themes, not a brand fill. So the brand-green `primary` button in §11.1 is **not** acceptable. "Continue with Google" stays the first, full-width button, but uses Google's light theme (white fill, `#747775` 1 px stroke, `#1F1F1F` text) in light mode and its dark theme (`#131314` fill, `#8E918F` stroke, `#E3E3E3` text) in dark mode, with the G on white. Those values are design exceptions too. | handoff §11.1 |
 | UI-Q12 | Collapsible section | Add a "Disclosure" component to §9 (restyled native `<details>`). | WP-UI-03 |
@@ -123,6 +123,19 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 | UI-Q14 | Budget tooling | WP-UI-01 extends `budget-check.mjs` to report brotli and gzip and adds a Playwright check that the first screen downloads no fonts and no images except the crest. Signed-in Lighthouse runs come in WP-UI-12 (done: Home, Courses and Schedule as the online student, `apps/web/scripts/lighthouse.mjs`). | handoff §14 |
 | UI-Q15 | Spec references | The handoff's `SCHOOL_LMS_BUILD_SPEC.md` v2.1 references mean the equivalent sections of `docs/TRD.md` v3.0 (frontend is §18). | — |
 | UI-Q16 | Tailwind's default palette | WP-UI-01 adds the tokens alongside Tailwind's defaults, with the raw-value lint as a warning. WP-UI-12 removes the defaults and makes the lint an error (done). | handoff §15.1 |
+
+## 14 October 2026 — Google integration
+
+| ID | Topic | Decision | Where |
+|---|---|---|---|
+| GI-1 | When Google can't create a Class Meeting's Meet link | **Confirmed by the owner.** If the space isn't READY (still being made, or Google refused) and a Lecturer pasted a Meet link on the Class Meeting, students joining get the pasted link. Otherwise they're told the link is being prepared (`PROVIDER_NOT_READY`). The TRD (§11.6, §11.10) had no way in for students when provisioning failed. | `.scratch/google-integration/spec.md`, `lifecycle.service.ts` |
+
+## 29 October 2026 — Hosting
+
+| ID | Topic | Decision | Where |
+|---|---|---|---|
+| OPS-1 | Staging environment (TRD §22.2, ADR-0004 expect one) | **Confirmed by the owner.** Launch with production only. The Deploy workflow skips staging unless the repository variable `STAGING_ENABLED` is `true`, so each release goes to production after its required reviewers approve. Until staging exists, the staging-only work (k6 load tests, the restore drill with the real `age` key, the termly rebuild practice) needs another place, such as a temporary VPS and Neon branch. | `.github/workflows/deploy.yml`, `docs/runbooks/deploy.md` |
+| OPS-2 | Email provider (TRD C-22, ADR-0002 named SendGrid) | **Confirmed by the owner.** Send through **Brevo over SMTP**: `MAIL_PROVIDER=smtp` with `SMTP_URL` (a secret) on Brevo's relay. Production refuses anything but `smtps://` (implicit TLS on 465), so the SMTP key never travels unencrypted. The SendGrid adapter and webhook stay in the code but are unused. **Bounces:** Brevo blocks hard-bounced and complaining addresses itself, but the app no longer records them (`users.email_status`, the SUPPRESSED notifications in §15.1) until a Brevo webhook receiver is built. The VPS disk alert sends through the same SMTP relay. | `packages/shared/src/config.ts`, `deploy/compose.yaml`, `deploy/disk-alert.sh`, `docs/secrets.md`, TRD A.5 |
 
 ## Defaults applied — awaiting owner confirmation
 
@@ -149,3 +162,4 @@ These came up while writing the spec; none was put to the owner yet. They're bui
 | Q-02 | Spike S-01: does Meet report a stable ID for Gmail participants? Until it passes, online attendance runs in review mode. | System Admin (TRD Appendix B.1) |
 | S-Y1 | YouTube checks: link-check behaviour for unlisted/private/deleted videos, ads on GLIM's channel, which Studio role lets Lecturers upload, playback on target phones, API audit path (TRD Appendix B) | Build team + System Admin |
 | Q-17 | Total Class Meetings per day (sizing only; default ≤ 10 of ≤ 90 min) | Owner |
+| OPS-2a | A Brevo webhook receiver so bounces and spam complaints set `users.email_status` and suppress queued email again (§15.1), as the SendGrid webhook did | Developer |

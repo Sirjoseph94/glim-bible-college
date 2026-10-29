@@ -1,9 +1,9 @@
 import type { ClassMeetingState, ErrorCode } from "@glim/contracts";
 
 /**
- * The Class Meeting state machine (TRD §11.4), with the v1 interim triggers (spec): the
- * Lecturer's Start and End, and the `meeting-tick` cron. `state` models only the class's
- * lifecycle; no provider events exist in this slice.
+ * The Class Meeting state machine (TRD §11.4): the Lecturer's Start and End, the `meeting-tick`
+ * cron, and (with Google Meet on) the conference starting and ending in Meet. `state` models only
+ * the class's lifecycle.
  */
 export type MeetingEvent =
   /** The join window opened (tick). */
@@ -16,7 +16,11 @@ export type MeetingEvent =
   | "OVERRUN"
   /** The tick found the join window closed on a class that never started. */
   | "WINDOW_CLOSED"
-  | "CANCEL";
+  | "CANCEL"
+  /** A conference started in the meeting's Meet space (event or reconciliation). */
+  | "CONFERENCE_STARTED"
+  /** The last conference in the space ended. */
+  | "CONFERENCE_ENDED";
 
 export interface MeetingContext {
   /** The class was started at least once. */
@@ -66,6 +70,13 @@ export function transition(
       if (state !== "SCHEDULED" && state !== "OPEN")
         return refuse("The class isn't waiting to start.");
       return !ctx.everStarted && !ctx.hasRollCall ? to("NO_SHOW") : to("ENDED");
+    case "CONFERENCE_STARTED":
+      if (state === "SCHEDULED" || state === "OPEN") return to("LIVE");
+      // Reconnect after a crash or an accidental end (§11.4).
+      if (state === "ENDED" && ctx.withinOverrun && !ctx.finalized) return to("LIVE");
+      return refuse(`This class is ${label(state)}; a call in Meet doesn't change it.`);
+    case "CONFERENCE_ENDED":
+      return state === "LIVE" ? to("ENDED") : refuse("Only a live class ends with its call.");
     case "CANCEL":
       if (state === "SCHEDULED" || state === "OPEN") return to("CANCELLED");
       if (state === "LIVE")

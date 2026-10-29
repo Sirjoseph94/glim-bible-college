@@ -1,7 +1,7 @@
 import { createTransport } from "nodemailer";
 import type { MailMessage, Mailer } from "./port";
 
-/** SMTP delivery, used with Mailpit in local development. */
+/** SMTP delivery: Brevo in production (`smtps://`, decisions.md OPS-2), Mailpit in local development. */
 export class SmtpMailer implements Mailer {
   private readonly transport;
 

@@ -1,11 +1,28 @@
 import type { EndpointSpec, ErrorEnvelope, ResponseOf } from "@glim/contracts";
 import { reportNetworkFailure, reportNetworkSuccess } from "./network";
 
+/** `Retry-After` as whole seconds from now: a number of seconds or an HTTP date; null if neither. */
+export function retryAfterSeconds(header: string | null, now = new Date()): number | null {
+  if (header === null) return null;
+  const value = header.trim();
+  if (/^\d+$/.test(value)) return Number(value);
+  const at = Date.parse(value);
+  if (!/[a-z]/i.test(value) || Number.isNaN(at)) return null;
+  return secondsUntil(at, now.getTime());
+}
+
+/** Whole seconds from `now` until `until` (both epoch ms), never below zero. */
+export function secondsUntil(until: number, now: number): number {
+  return Math.max(0, Math.ceil((until - now) / 1000));
+}
+
 /** A failed API call, carrying the error envelope (TRD §5.4). */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly envelope: ErrorEnvelope | null,
+    /** How long the server asked to wait before trying again (`Retry-After`), if it said. */
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(envelope?.error.message ?? `Request failed (${String(status)})`);
   }
@@ -77,7 +94,7 @@ export async function api<E extends EndpointSpec>(
   reportNetworkSuccess();
   if (!res.ok) {
     const envelope = (await res.json().catch(() => null)) as ErrorEnvelope | null;
-    throw new ApiError(res.status, envelope);
+    throw new ApiError(res.status, envelope, retryAfterSeconds(res.headers.get("retry-after")));
   }
   if (res.status === 204) return undefined as ResponseOf<E>;
   // A 202 may carry the queued resource (e.g. an import) or nothing at all.

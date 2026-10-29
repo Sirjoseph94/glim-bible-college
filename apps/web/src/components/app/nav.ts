@@ -162,10 +162,11 @@ const AREAS: Area[] = [
     to: "/admin/ops",
     icon: "alert",
     shows: staff("SYSTEM_ADMIN"),
-    covers: ["/admin/ops", "/admin/jobs"],
+    covers: ["/admin/ops", "/admin/jobs", "/admin/integrations"],
     pages: [
       { label: "Failures", to: "/admin/ops" },
       { label: "Job queues", to: "/admin/jobs" },
+      { label: "Integrations", to: "/admin/integrations" },
     ],
   },
   { label: "Profile", to: "/profile", icon: "user", shows: () => true, covers: ["/profile"] },

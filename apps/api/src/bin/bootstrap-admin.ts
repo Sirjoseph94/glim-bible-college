@@ -39,7 +39,7 @@ const app = await NestFactory.createApplicationContext(
     mailer: createMailer(config),
     identityProvider: createIdentityProvider(config),
     objectStorage: createObjectStorage(config),
-    videoHost: createVideoHost(),
+    videoHost: createVideoHost(config),
     transcriptRenderer: new ReactPdfTranscriptRenderer(),
   }),
   { logger: false },

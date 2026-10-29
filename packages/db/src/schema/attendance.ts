@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   uniqueIndex,
@@ -12,7 +13,7 @@ import {
 import { enumCheck, std, tstz } from "./columns";
 import { students } from "./enrollment";
 import { users } from "./identity";
-import { classMeetings } from "./meetings";
+import { classMeetings, conferenceRecords } from "./meetings";
 
 /**
  * Owner: attendance. In-room (and, in v1, online) roll-call evidence for a Class Meeting
@@ -108,3 +109,59 @@ export const attendanceRecords = pgTable(
 
 /** The virtual `status` column (override, else computed): select it with this. */
 export const attendanceStatus = sql<string>`attendance_records.status`;
+
+/**
+ * Owner: attendance. Raw online evidence (TRD §6.4, INV-7): one row per participant session the
+ * provider reported, upserted until finalization and never deleted. Only the match columns
+ * change after the first write, through matching or an audited manual match (§12.4).
+ */
+export const providerParticipantSessions = pgTable(
+  "provider_participant_sessions",
+  {
+    ...std(),
+    classMeetingId: uuid("class_meeting_id")
+      .notNull()
+      .references(() => classMeetings.id, { onDelete: "cascade" }),
+    conferenceRecordId: uuid("conference_record_id")
+      .notNull()
+      .references(() => conferenceRecords.id, { onDelete: "cascade" }),
+    providerParticipantId: text("provider_participant_id").notNull(),
+    providerSessionId: text("provider_session_id").notNull().unique(),
+    participantKind: text("participant_kind").notNull(),
+    providerUserId: text("provider_user_id"),
+    displayName: text("display_name"),
+    startedAt: tstz("started_at").notNull(),
+    endedAt: tstz("ended_at"),
+    matchedUserId: uuid("matched_user_id").references(() => users.id, { onDelete: "set null" }),
+    matchMethod: text("match_method").notNull().default("NONE"),
+    matchStatus: text("match_status").notNull().default("UNMATCHED"),
+    raw: jsonb().$type<Record<string, unknown>>().notNull(),
+    firstSeenAt: tstz("first_seen_at").notNull().defaultNow(),
+    lastSeenAt: tstz("last_seen_at").notNull().defaultNow(),
+  },
+  (t) => [
+    enumCheck("provider_participant_sessions.participant_kind", t.participantKind),
+    enumCheck("provider_participant_sessions.match_method", t.matchMethod),
+    enumCheck("provider_participant_sessions.match_status", t.matchStatus),
+    index("provider_participant_sessions_meeting_user").on(t.classMeetingId, t.matchedUserId),
+  ],
+);
+
+/**
+ * Owner: attendance. A Meet user id a person confirmed belongs to a user, so later meetings
+ * match it automatically (TRD §12.4 MANUAL, "persisting the Google id"). Kept apart from
+ * `identities` on purpose: a staff member's match must never become a way to sign in.
+ */
+export const participantAliases = pgTable(
+  "participant_aliases",
+  {
+    ...std(),
+    provider: text().notNull().default("google_meet"),
+    providerUserId: text("provider_user_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [uniqueIndex("participant_aliases_provider_user").on(t.provider, t.providerUserId)],
+);

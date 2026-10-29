@@ -4,6 +4,7 @@ import type { ActiveSession } from "@glim/modules/identity";
 import {
   AvailabilityService,
   PlaybackService,
+  RecordingsService,
   VideoAdminService,
   VideosService,
 } from "@glim/modules/video";
@@ -22,6 +23,7 @@ export class VideosController {
     @Inject(PlaybackService) private readonly playback: PlaybackService,
     @Inject(VideoAdminService) private readonly admin: VideoAdminService,
     @Inject(AvailabilityService) private readonly availability: AvailabilityService,
+    @Inject(RecordingsService) private readonly recordings: RecordingsService,
   ) {}
 
   @Endpoint(video.listVideos)
@@ -164,5 +166,15 @@ export class VideosController {
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof video.restoreVideo>> {
     return unwrap(await this.admin.restore(params.id, { ...actor, userId: session.userId }));
+  }
+
+  @Endpoint(video.retryIngest)
+  async retryIngest(
+    @Params(video.retryIngest) params: ParamsOf<typeof video.retryIngest>,
+    @CurrentSession() session: ActiveSession,
+    @Actor() actor: AuditActor,
+  ): Promise<Reply<typeof video.retryIngest>> {
+    unwrap(await this.recordings.retry(params.id, { ...actor, userId: session.userId }));
+    return this.admin.adminView(params.id);
   }
 }

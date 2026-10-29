@@ -21,11 +21,10 @@ export function queueOptions(queue: QueueName) {
   };
 }
 
-/** Creates every v1 queue and its dead-letter queue if missing. Idempotent. */
+/** Creates every queue and its dead-letter queue if missing. Idempotent. */
 export async function ensureQueues(boss: PgBoss): Promise<void> {
   const existing = new Set((await boss.getQueues()).map((q) => q.name));
   for (const queue of Object.keys(QUEUES) as QueueName[]) {
-    if (QUEUES[queue].slice !== "v1") continue;
     const dlq = deadLetterQueue(queue);
     if (!existing.has(dlq)) await boss.createQueue(dlq, { deleteAfterSeconds: 30 * DAY });
     if (!existing.has(queue)) await boss.createQueue(queue, queueOptions(queue));

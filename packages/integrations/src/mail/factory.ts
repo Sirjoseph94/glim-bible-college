@@ -3,7 +3,7 @@ import { SendGridMailer } from "./sendgrid";
 import { SmtpMailer } from "./smtp";
 import type { Config } from "@glim/shared/config";
 
-/** Binds the Mailer port: SendGrid in production, SMTP (Mailpit) locally (TRD §22.3). */
+/** Binds the Mailer port: SMTP (Brevo in production, Mailpit locally; decisions.md OPS-2) or SendGrid. */
 export function createMailer(config: Config): Mailer {
   const { mail } = config;
   if (mail.provider === "sendgrid") {

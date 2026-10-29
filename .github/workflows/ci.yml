@@ -39,6 +39,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f docker/Dockerfile -t glim:ci .
+      # The image has no pnpm, so start each entry point the way deploy/compose.yaml does. With no
+      # settings, each must load its code and stop at the config check.
+      - name: Entry points start
+        run: |
+          check() {
+            out=$(docker run --rm -e NODE_ENV=production "$@" 2>&1) && { echo "$out"; exit 1; }
+            grep -q "Invalid configuration" <<<"$out" || { echo "$out"; exit 1; }
+          }
+          tsx=(node_modules/.bin/tsx --tsconfig ../../tsconfig.base.json)
+          check glim:ci
+          check -w /app/apps/worker glim:ci "${tsx[@]}" src/main.ts
+          check -w /app/packages/db glim:ci "${tsx[@]}" src/bin/migrate.ts
+          echo "api, worker and migrate start"
       # Trivy (TRD §21.2 security checklist): the image's OS packages and the lockfile's
       # dependencies, failing on fixable HIGH or CRITICAL vulnerabilities.
       - name: Trivy image scan

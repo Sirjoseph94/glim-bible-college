@@ -1,13 +1,21 @@
-import type { DomainEvent, QueueName } from "@glim/contracts";
+import { QUEUES, type DomainEvent, type QueueName } from "@glim/contracts";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
 import { SessionService, UserAdminService } from "@glim/modules/identity";
-import { AttendanceService } from "@glim/modules/attendance";
-import { MeetingLifecycleService, SeriesService } from "@glim/modules/class-meeting";
+import { AttendanceService, ParticipantsService } from "@glim/modules/attendance";
+import { LIVE_PROVIDER, type LiveProvider } from "@glim/integrations/live-provider/port";
+import {
+  MeetEventsService,
+  MeetingLifecycleService,
+  ProvisioningService,
+  GoogleIntegrationService,
+  SeriesService,
+  SubscriptionsService,
+} from "@glim/modules/class-meeting";
 import { ImportsService } from "@glim/modules/imports";
 import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService, InboxService, OpsService } from "@glim/modules/ops";
-import { AvailabilityService, VideoAdminService } from "@glim/modules/video";
+import { AvailabilityService, RecordingsService, VideoAdminService } from "@glim/modules/video";
 import { QuizAttemptsService } from "@glim/modules/assessment";
 import { SemesterResultsService } from "@glim/modules/results";
 import { TranscriptsService } from "@glim/modules/transcripts";
@@ -39,6 +47,48 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const imports = deps.context.get(ImportsService);
   const series = deps.context.get(SeriesService);
   const lifecycle = deps.context.get(MeetingLifecycleService);
+  const provisioning = deps.context.get(ProvisioningService);
+  const meetEvents = deps.context.get(MeetEventsService);
+  const subscriptions = deps.context.get(SubscriptionsService);
+  const participants = deps.context.get(ParticipantsService);
+  const recordings = deps.context.get(RecordingsService);
+  const googleIntegration = deps.context.get(GoogleIntegrationService);
+  // Google Meet (integration slice): without a provider these queues get no handler, so their
+  // cron schedules are removed and nothing polls Google.
+  const google: HandlerRegistry =
+    deps.context.get<LiveProvider | null>(LIVE_PROVIDER) === null
+      ? {}
+      : {
+          "class-meeting.provision": (job) =>
+            provisioning.provision((job.data as { meetingId: string }).meetingId, {
+              final: job.retryCount >= QUEUES["class-meeting.provision"].retryLimit,
+            }),
+          "class-meeting.sync-access": (job) =>
+            provisioning.syncAccess((job.data as { meetingId: string }).meetingId),
+          "class-meeting.end": (job) =>
+            provisioning.endConference((job.data as { meetingId: string }).meetingId),
+          "meeting.reconcile": () => meetEvents.reconcile(),
+          "recording.discover": (job) =>
+            recordings.discover(
+              job.data as { meetingId: string; conferenceId: string; recordingId: string },
+            ),
+          "recording.ingest": (job) =>
+            recordings.ingest((job.data as { recordingId: string }).recordingId, {
+              final: job.retryCount >= QUEUES["recording.ingest"].retryLimit,
+            }),
+          "recording.reconcile": () => recordings.reconcile(),
+          "ops.google-check": () => googleIntegration.runCheck(),
+          "drive.storage-monitor": () => googleIntegration.monitorStorage(),
+          "drive.cleanup": (job) =>
+            recordings.cleanup((job.data as { recordingId: string }).recordingId),
+          "conference.sync": (job) =>
+            participants.syncConference(
+              (job.data as { conferenceRecordId: string }).conferenceRecordId,
+            ),
+          // The 15-minute sweep, or one subscription a lifecycle event named.
+          "subscription.renew": (job) =>
+            subscriptions.run((job.data as { remoteName?: string } | null)?.remoteName),
+        };
   const attendance = deps.context.get(AttendanceService);
   const userAdmin = deps.context.get(UserAdminService);
   const videoAvailability = deps.context.get(AvailabilityService);
@@ -55,6 +105,7 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
     "admissions.purge": () => purge.run(),
     "class-meeting.series-extend": () => series.extend(),
     "meeting.tick": () => lifecycle.tick(),
+    ...google,
     // The daily sweep, or one video the System Admin asked to recheck from the ops page.
     "video.availability-check": async (job) => {
       const one = job.data as { videoId?: string; actorUserId?: string } | null;
@@ -65,6 +116,13 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
       });
     },
     "video.purge-deleted": () => videoAdmin.purgeDeleted(),
+    // The channel connection (integration slice); both skip when the app can't act as it.
+    "video.youtube-processing-sync": (job) => {
+      const { videoId, poll } = job.data as { videoId: string; poll?: number };
+      return recordings.processingSync(videoId, poll ?? 0);
+    },
+    "video.youtube-metadata": (job) =>
+      recordings.syncMetadata((job.data as { videoId: string }).videoId),
     "quiz.expire": (job) => quizAttempts.expire((job.data as { attemptId: string }).attemptId),
     "transcript.generate": (job) =>
       transcripts.generate((job.data as { transcriptId: string }).transcriptId),

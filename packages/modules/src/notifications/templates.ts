@@ -258,4 +258,49 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
         ? {}
         : { link: { label: "Open in YouTube Studio", url: str(data.studioUrl) } }),
     }),
+
+  "meeting.provision-failed": ({ data, appOrigin }) =>
+    email({
+      subject: `No Google Meet link yet: ${str(data.courseCode)} ${str(data.title)}`,
+      category: "meeting-provision-failed",
+      paragraphs: [
+        `Google couldn't create the Meet for ${str(data.courseCode)} "${str(data.title)}" on ${meetingTime(data)}.`,
+        `Google said: ${str(data.reason) || "no reason given"}.`,
+        "Try again from the ops page once the problem is fixed. Until then, a Lecturer can paste a Meet link on the Class Meeting, and students joining will get that.",
+      ],
+      link: { label: "Open the ops page", url: `${appOrigin}/admin/ops` },
+    }),
+
+  "integration.google-degraded": ({ data, appOrigin }) =>
+    email({
+      subject: "Google integration needs attention",
+      category: "integration-degraded",
+      paragraphs: [
+        `Google refused a request for ${str(data.subject) || "the integration"}: ${str(data.reason)}.`,
+        "This usually means a domain-wide delegation scope is missing or a host account was suspended. Run the connection test to see which.",
+      ],
+      link: { label: "Open the Google integration", url: `${appOrigin}/admin/integrations` },
+    }),
+
+  "integration.drive-storage": ({ data, appOrigin }) =>
+    email({
+      subject: `Recording storage ${str(data.percent)}% full on ${str(data.hostEmail)}`,
+      category: "drive-storage",
+      paragraphs: [
+        `The host account ${str(data.hostEmail)} has used ${str(data.percent)}% of its Google Drive storage. Meet recordings are kept there.`,
+        "Free space or add storage before it fills, or new recordings will fail.",
+      ],
+      link: { label: "Open the Google integration", url: `${appOrigin}/admin/integrations` },
+    }),
+
+  "recording.failed": ({ data, appOrigin }) =>
+    email({
+      subject: `${str(data.courseCode)} recording not uploaded: ${str(data.title)}`,
+      category: "recording-failed",
+      paragraphs: [
+        `The recording of ${str(data.courseCode)} "${str(data.title)}" couldn't be put on YouTube: ${str(data.reason)}.`,
+        "Retry it from Videos. The original stays in the host account's Google Drive.",
+      ],
+      link: { label: "Manage videos", url: `${appOrigin}/admin/videos` },
+    }),
 };

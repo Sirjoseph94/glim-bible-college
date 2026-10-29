@@ -71,7 +71,7 @@ const envSchema = z.object({
   API_INSTANCE_COUNT: int(2),
   WORKER_INSTANCE_COUNT: int(1),
 
-  /** A header set by the platform edge with the client's IP (App Platform: do-connecting-ip). */
+  /** A header set by the edge proxy with the client's IP (Caddy on the VPS: x-real-ip). */
   CLIENT_IP_HEADER: optionalText,
 
   WORKER_ROLE: z.enum(WORKER_ROLES).default("all"),
@@ -80,7 +80,22 @@ const envSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID: optionalText,
   GOOGLE_OAUTH_CLIENT_SECRET: optionalText,
 
+  /** The Google integration switch (integration slice): `none` keeps v1's pasted Meet links. */
+  LIVE_PROVIDER: z.enum(["none", "google_meet", "fake"]).default("none"),
+  GOOGLE_PROJECT_ID: optionalText,
+  /** The DWD service account's JSON key, base64 (secret, TRD §11.3). */
+  GOOGLE_SA_KEY_JSON_B64: optionalText,
+  /** `projects/<p>/subscriptions/<s>`, or just `<s>` with GOOGLE_PROJECT_ID. */
+  GOOGLE_PUBSUB_SUBSCRIPTION: optionalText,
+  /** `projects/<p>/topics/<t>`, or just `<t>`: where Workspace Events publish. */
+  GOOGLE_PUBSUB_TOPIC: optionalText,
+  GOOGLE_EVENTS_MODE: z.enum(["pull", "push"]).default("pull"),
+
   VIDEO_HOST: z.enum(["youtube_link", "youtube_api", "fake"]).default("youtube_link"),
+  YOUTUBE_OAUTH_CLIENT_ID: optionalText,
+  YOUTUBE_OAUTH_CLIENT_SECRET: optionalText,
+  /** 32 bytes, base64: encrypts the YouTube channel token at rest (secret). */
+  TOKEN_ENCRYPTION_KEY: optionalText,
   DRIVE_CLEANUP_MODE: z.enum(["NONE", "TRASH_AFTER_INGEST"]).default("NONE"),
 
   STORAGE_ENDPOINT: optionalText,
@@ -135,8 +150,17 @@ export interface Config {
     oidcIssuer: string;
     oauthClientId: string | undefined;
     oauthClientSecret: string | undefined;
+    projectId: string | undefined;
+    /** Parsed from GOOGLE_SA_KEY_JSON_B64; never logged. */
+    serviceAccount: GoogleServiceAccount | undefined;
+    pubsubSubscription: string | undefined;
+    pubsubTopic: string | undefined;
+    eventsMode: "pull" | "push";
   };
+  liveProvider: "none" | "google_meet" | "fake";
   videoHost: "youtube_link" | "youtube_api" | "fake";
+  youtube: { oauthClientId: string | undefined; oauthClientSecret: string | undefined };
+  tokenEncryptionKey: Buffer | undefined;
   driveCleanupMode: "NONE" | "TRASH_AFTER_INGEST";
   storage: {
     endpoint: string;
@@ -158,6 +182,36 @@ export interface Config {
   features: { directUpload: boolean; phoneDialIn: boolean };
   /** Test harness overrides: use an existing server instead of starting Testcontainers. */
   testing: { postgresUrl: string | undefined; s3Endpoint: string | undefined };
+}
+
+export interface GoogleServiceAccount {
+  clientEmail: string;
+  /** The numeric client id the Admin Console's domain-wide delegation entry needs. */
+  clientId: string;
+  privateKey: string;
+}
+
+/** Decodes the service-account key; null if it isn't one. Never echoes the input. */
+function parseServiceAccount(b64: string): GoogleServiceAccount | null {
+  try {
+    const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as Record<string, unknown>;
+    const { client_email: clientEmail, client_id: clientId, private_key: privateKey } = json;
+    if (
+      typeof clientEmail !== "string" ||
+      typeof privateKey !== "string" ||
+      !privateKey.includes("PRIVATE KEY")
+    )
+      return null;
+    return { clientEmail, clientId: typeof clientId === "string" ? clientId : "", privateKey };
+  } catch {
+    return null;
+  }
+}
+
+/** `<s>` + project → `projects/<project>/<kind>/<s>`; a full name is kept. */
+function qualify(name: string | undefined, kind: string, project: string | undefined) {
+  if (name === undefined || name.startsWith("projects/")) return name;
+  return project === undefined ? name : `projects/${project}/${kind}/${name}`;
 }
 
 export class ConfigError extends Error {
@@ -191,10 +245,56 @@ export function loadConfig(env: Env = process.env): Config {
     if (mailProvider === "sendgrid" && e.SENDGRID_API_KEY === undefined) {
       problems.push("SENDGRID_API_KEY: required when MAIL_PROVIDER=sendgrid");
     }
+    // Brevo in production (decisions.md OPS-2). Implicit TLS only, so the SMTP key is never sent
+    // in the clear; the URL holds the key, so it's never echoed.
+    if (mailProvider === "smtp") {
+      if (e.SMTP_URL === undefined) problems.push("SMTP_URL: required when MAIL_PROVIDER=smtp");
+      else if (!e.SMTP_URL.startsWith("smtps://"))
+        problems.push("SMTP_URL: must be smtps:// (implicit TLS, port 465) in production");
+    }
   }
-  if (mailProvider === "smtp" && production) {
-    problems.push("MAIL_PROVIDER: smtp is for local development only");
+
+  const serviceAccount =
+    e.GOOGLE_SA_KEY_JSON_B64 === undefined
+      ? undefined
+      : parseServiceAccount(e.GOOGLE_SA_KEY_JSON_B64);
+  if (serviceAccount === null)
+    problems.push("GOOGLE_SA_KEY_JSON_B64: must be a base64 service-account JSON key");
+  const pubsubSubscription = qualify(
+    e.GOOGLE_PUBSUB_SUBSCRIPTION,
+    "subscriptions",
+    e.GOOGLE_PROJECT_ID,
+  );
+  const pubsubTopic = qualify(e.GOOGLE_PUBSUB_TOPIC, "topics", e.GOOGLE_PROJECT_ID);
+  if (e.LIVE_PROVIDER === "google_meet") {
+    if (e.GOOGLE_SA_KEY_JSON_B64 === undefined)
+      problems.push("GOOGLE_SA_KEY_JSON_B64: required when LIVE_PROVIDER=google_meet");
+    for (const [name, value] of [
+      ["GOOGLE_PUBSUB_SUBSCRIPTION", pubsubSubscription],
+      ["GOOGLE_PUBSUB_TOPIC", pubsubTopic],
+    ] as const)
+      if (value === undefined || !value.startsWith("projects/"))
+        problems.push(
+          `${name}: required when LIVE_PROVIDER=google_meet (a full name, or set GOOGLE_PROJECT_ID)`,
+        );
   }
+  let tokenEncryptionKey: Buffer | undefined;
+  if (e.TOKEN_ENCRYPTION_KEY !== undefined) {
+    tokenEncryptionKey = Buffer.from(e.TOKEN_ENCRYPTION_KEY, "base64");
+    if (tokenEncryptionKey.length !== 32)
+      problems.push("TOKEN_ENCRYPTION_KEY: must be 32 bytes, base64-encoded");
+  }
+  if (e.VIDEO_HOST === "youtube_api")
+    for (const name of [
+      "YOUTUBE_OAUTH_CLIENT_ID",
+      "YOUTUBE_OAUTH_CLIENT_SECRET",
+      "TOKEN_ENCRYPTION_KEY",
+    ] as const)
+      if (e[name] === undefined) problems.push(`${name}: required when VIDEO_HOST=youtube_api`);
+  if (production && e.LIVE_PROVIDER === "fake")
+    problems.push("LIVE_PROVIDER: fake is for development and tests only");
+  if (production && e.VIDEO_HOST === "fake")
+    problems.push("VIDEO_HOST: fake is for development and tests only");
 
   const pick = (name: keyof typeof DEV): string => e[name] ?? DEV[name];
 
@@ -243,8 +343,19 @@ export function loadConfig(env: Env = process.env): Config {
       oidcIssuer: e.GOOGLE_OIDC_ISSUER,
       oauthClientId: e.GOOGLE_OAUTH_CLIENT_ID,
       oauthClientSecret: e.GOOGLE_OAUTH_CLIENT_SECRET,
+      projectId: e.GOOGLE_PROJECT_ID,
+      serviceAccount: serviceAccount ?? undefined,
+      pubsubSubscription,
+      pubsubTopic,
+      eventsMode: e.GOOGLE_EVENTS_MODE,
     },
+    liveProvider: e.LIVE_PROVIDER,
     videoHost: e.VIDEO_HOST,
+    youtube: {
+      oauthClientId: e.YOUTUBE_OAUTH_CLIENT_ID,
+      oauthClientSecret: e.YOUTUBE_OAUTH_CLIENT_SECRET,
+    },
+    tokenEncryptionKey,
     driveCleanupMode: e.DRIVE_CLEANUP_MODE,
     storage: {
       endpoint: pick("STORAGE_ENDPOINT"),

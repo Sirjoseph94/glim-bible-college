@@ -32,6 +32,7 @@ const POLICY_TITLES: Record<string, string> = {
   NOTIFICATION: "Notifications",
   ADMISSIONS: "Admissions",
   GRADING_DEFAULTS: "Grading defaults",
+  GOOGLE_MEET: "Google Meet",
 };
 
 /** "presentThresholdBp" → "Present threshold (bp)". */

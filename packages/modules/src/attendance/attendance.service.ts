@@ -6,24 +6,27 @@ import {
 } from "@glim/contracts";
 import { Db, schema, type Database, type TxQueue } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
+import { RoleService } from "@glim/modules/authorization";
 import { MeetingLifecycleService } from "@glim/modules/class-meeting";
+import { NotificationsService } from "@glim/modules/notifications";
 import { CLOCK, domainError, err, ok, type Clock, type DomainResult } from "@glim/shared";
 import { toLocalDate } from "@glim/shared/time";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { computeAttendance, type AttendanceResult, type RollCallInput } from "./domain/compute";
+import {
+  computeAttendance,
+  unresolvedParticipants,
+  type AttendanceResult,
+  type RollCallInput,
+} from "./domain/compute";
+import { ParticipantsService } from "./participants.service";
 
 type MeetingRow = typeof schema.classMeetings.$inferSelect;
 type RecordRow = typeof schema.attendanceRecords.$inferSelect;
 type RecordView = MeetingAttendance["records"][number];
 
 const DAY = 86_400_000;
-/**
- * v1 spec: with no conference data the short-conference review flag isn't used, so a meeting
- * computed from roll call alone is FINAL rather than REVIEW_REQUIRED.
- */
-const SHORT_CONFERENCE_REVIEW: boolean = false;
 
 function snapshot(meeting: MeetingRow) {
   const s = meeting.policySnapshot as {
@@ -70,6 +73,9 @@ export class AttendanceService {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(MeetingLifecycleService) private readonly lifecycle: MeetingLifecycleService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ParticipantsService) private readonly participants: ParticipantsService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(RoleService) private readonly roles: RoleService,
   ) {}
 
   /** The `attendance.recompute` job. Returns how many records changed, or why it didn't run. */
@@ -79,11 +85,14 @@ export class AttendanceService {
       if (meeting === null || meeting.state === "CANCELLED" || meeting.state === "NO_SHOW")
         return "SKIPPED";
       if (this.locked(meeting)) return "LOCKED";
-      const { changed } = await this.compute(db, meeting);
+      const { changed, review } = await this.compute(db, meeting);
       if (meeting.attendanceState === "PENDING")
         await this.lifecycle.recordAttendanceState(db, meetingId, {
           attendanceState: "PROVISIONAL",
         });
+      // Everything a reviewer needed to resolve has been: the meeting's attendance is final.
+      if (meeting.attendanceState === "REVIEW_REQUIRED" && !review)
+        await this.lifecycle.recordAttendanceState(db, meetingId, { attendanceState: "FINAL" });
       return changed;
     });
   }
@@ -101,22 +110,40 @@ export class AttendanceService {
   }
 
   /**
-   * The `class-meeting.finalize` job: computes the records one last time, marks the meeting
-   * FINAL with `finalized_at` and emits `attendance.finalized`. Skips a meeting that has gone
-   * live again, or is already finalized.
+   * The `class-meeting.finalize` job (§12.6): with Google Meet, reads every conference's
+   * participants one last time; then computes the records, and marks the meeting FINAL — or
+   * REVIEW_REQUIRED, telling its Lecturers, when the call was short and students lack a roll-call
+   * mark, or someone unidentified was in it for longer than `unmatchedReviewMinutes` — with
+   * `finalized_at`, and emits `attendance.finalized`. Skips a meeting that has gone live again,
+   * or is already finalized.
    */
-  finalize(meetingId: string): Promise<"FINAL" | "REVIEW_REQUIRED" | "SKIPPED"> {
-    return this.db.withTx(async ({ db, boss }) => {
+  async finalize(meetingId: string): Promise<"FINAL" | "REVIEW_REQUIRED" | "SKIPPED"> {
+    const m = schema.classMeetings;
+    const [before] = await this.db.read.select().from(m).where(eq(m.id, meetingId));
+    if (before === undefined || before.state !== "ENDED" || before.finalizedAt !== null)
+      return "SKIPPED";
+    if (before.provider !== null) {
+      const c = schema.conferenceRecords;
+      const records = await this.db.read
+        .select({ id: c.id })
+        .from(c)
+        .where(eq(c.classMeetingId, meetingId));
+      // A provider outage throws here, and the job is retried (§11.10).
+      for (const record of records) await this.participants.syncConference(record.id);
+    }
+    return this.db.withTx(async (tx) => {
+      const { db, boss } = tx;
       const meeting = await this.lock(db, meetingId);
       if (meeting === null || meeting.state !== "ENDED" || meeting.finalizedAt !== null)
         return "SKIPPED";
-      const { shortConference } = await this.compute(db, meeting);
-      const state = SHORT_CONFERENCE_REVIEW && shortConference ? "REVIEW_REQUIRED" : "FINAL";
+      const { review } = await this.compute(db, meeting);
+      const state = review ? "REVIEW_REQUIRED" : "FINAL";
       const now = this.clock.now();
       await this.lifecycle.recordAttendanceState(db, meetingId, {
         attendanceState: state,
         finalizedAt: now,
       });
+      if (review) await this.askForReview(tx, meeting);
       await boss.publish(
         "attendance.finalized",
         { meetingId, offeringId: meeting.courseOfferingId, attendanceState: state },
@@ -155,15 +182,26 @@ export class AttendanceService {
       .innerJoin(pe, eq(pe.id, schema.courseEnrollments.programmeEnrollmentId))
       .where(eq(r.classMeetingId, meetingId))
       .orderBy(asc(s.familyName), asc(s.givenName), asc(r.studentId));
+    const { policy } = snapshot(meeting);
     const lockedAt =
       meeting.finalizedAt === null
         ? null
-        : new Date(meeting.finalizedAt.getTime() + snapshot(meeting).policy.lockAfterDays * DAY);
+        : new Date(meeting.finalizedAt.getTime() + policy.lockAfterDays * DAY);
+    // Every record shares the meeting's denominator. It is the time the class ran unless the
+    // policy counts the scheduled length; 0 means it never ran online (roll call only).
+    const denominator = rows[0]?.record.effectiveSeconds ?? 0;
+    const ranSeconds = policy.basis !== "SCHEDULED" && denominator > 0 ? denominator : null;
     return {
       meetingId,
       attendanceState: meeting.attendanceState as MeetingAttendance["attendanceState"],
       finalizedAt: meeting.finalizedAt?.toISOString() ?? null,
       lockedAt: lockedAt?.toISOString() ?? null,
+      rule: {
+        basis: policy.basis,
+        presentThresholdBp: policy.presentThresholdBp,
+        partialThresholdBp: policy.partialThresholdBp,
+      },
+      ranSeconds,
       records: rows.map(({ record, status, givenName, familyName, matricNumber }) => ({
         studentId: record.studentId,
         name: `${givenName} ${familyName}`,
@@ -408,6 +446,32 @@ export class AttendanceService {
 
   // ---- helpers ----
 
+  /** A Lecturer task (§12.4): someone in the call needs identifying, or the call was short. */
+  private async askForReview(
+    tx: { db: Database; boss: TxQueue },
+    meeting: MeetingRow,
+  ): Promise<void> {
+    const a = schema.lecturerAssignments;
+    const l = schema.lecturers;
+    const lecturers = await tx.db
+      .selectDistinct({ userId: l.userId })
+      .from(a)
+      .innerJoin(l, eq(l.id, a.lecturerId))
+      .where(and(eq(a.courseOfferingId, meeting.courseOfferingId), eq(a.status, "ACTIVE")));
+    const recipients = lecturers.map((x) => x.userId);
+    if (recipients.length === 0)
+      recipients.push(...(await this.roles.holders("ACADEMIC_ADMIN", tx.db)));
+    for (const userId of recipients)
+      await this.notifications.notify(tx, {
+        userId,
+        kind: "attendance.review-required",
+        title: `Check online attendance: ${meeting.title}`,
+        data: { meetingId: meeting.id, link: `/teach/meetings/${meeting.id}/attendance` },
+        email: false,
+        dedupeKey: `attendance-review:${meeting.id}`,
+      });
+  }
+
   /** Serializes recompute and finalize per meeting (§12.5). */
   private async lock(db: Database, meetingId: string): Promise<MeetingRow | null> {
     await db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${meetingId}))`);
@@ -430,7 +494,7 @@ export class AttendanceService {
   private async compute(
     db: Database,
     meeting: MeetingRow,
-  ): Promise<{ changed: number; shortConference: boolean }> {
+  ): Promise<{ changed: number; review: boolean }> {
     const { version, policy } = snapshot(meeting);
     const ce = schema.courseEnrollments;
     const enrolled = await db
@@ -455,17 +519,51 @@ export class AttendanceService {
         mode: mark.mode as RollCallInput["mode"],
       };
     const now = this.clock.now();
+    // Online evidence from Meet (integration slice); a pasted-link meeting has none (v1).
+    const studentUsers =
+      enrolled.length === 0
+        ? []
+        : await db
+            .select({ id: schema.students.id, userId: schema.students.userId })
+            .from(schema.students)
+            .where(
+              inArray(
+                schema.students.id,
+                enrolled.map((e) => e.studentId),
+              ),
+            );
+    const evidence =
+      meeting.provider === null
+        ? { conferences: [], online: {}, participants: [] }
+        : await this.participants.evidence(
+            db,
+            meeting.id,
+            new Map(studentUsers.map((x) => [x.userId, x.id])),
+          );
     const outcome = computeAttendance({
       scheduledStart: meeting.scheduledStart,
       scheduledEnd: meeting.scheduledEnd,
-      // v1: no provider, so no conference or participant evidence (spec).
-      conferences: [],
-      online: {},
+      conferences: evidence.conferences,
+      online: evidence.online,
       capAt: now,
       policy,
       enrolledStudentIds: enrolled.map((e) => e.studentId),
       rollCall,
     });
+    const unresolved = unresolvedParticipants({
+      scheduledStart: meeting.scheduledStart,
+      scheduledEnd: meeting.scheduledEnd,
+      conferences: evidence.conferences,
+      capAt: now,
+      windowPaddingMinutes: policy.windowPaddingMinutes,
+      participants: evidence.participants,
+    });
+    // With no conference data (a pasted link, v1 spec) the review flags don't apply.
+    const review =
+      meeting.provider !== null &&
+      evidence.conferences.length > 0 &&
+      (outcome.shortConference ||
+        unresolved.some((u) => u.seconds > policy.unmatchedReviewMinutes * 60));
 
     const r = schema.attendanceRecords;
     const existing = new Map(
@@ -507,6 +605,6 @@ export class AttendanceService {
         changed++;
       }
     }
-    return { changed, shortConference: outcome.shortConference };
+    return { changed, review };
   }
 }

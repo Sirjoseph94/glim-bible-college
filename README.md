@@ -8,7 +8,7 @@ The school management system for GLIM Online Bible College (Gospel Light Interna
 - assignments, quizzes and exams;
 - results, awards and transcripts.
 
-It serves **one institution** of about 100–200 students and 10–25 staff. It runs on DigitalOcean App Platform with Managed PostgreSQL, and sends email through SendGrid.
+It serves **one institution** of about 100–200 students and 10–25 staff. It runs on a Hostinger VPS with Docker Compose, keeps its data in Neon PostgreSQL and its files in Cloudflare R2, and sends email through Brevo (ADR-0004, decisions.md OPS-2).
 
 This README has two parts:
 - [**Using the system**](#using-the-system): what each kind of user does, and where in the app they do it.
@@ -123,12 +123,14 @@ Results move through these stages, all under **Results**:
 | **Audit** | Who did what, and when. The audit log can't be edited. |
 | **Ops** | Failures with a **Replay** button, the YouTube check, and suppressed email addresses |
 | **Jobs** | Background job queues. You're emailed when a queue falls behind by more than 2 minutes. |
+| **Integrations** | Google Meet (host accounts, the Admin Console values, a background test) and GLIM's YouTube channel connection. Both are off until switched on: until then Lecturers paste Meet links and recordings are added by link. |
 | **Settings** | Institution details, YouTube channel URLs, and the privacy-notice, recording-notice and Statement of Faith URLs |
 
 The System Admin's runbooks, written in plain steps, are in [`docs/runbooks/`](docs/runbooks):
 - [deploying and rolling back](docs/runbooks/deploy.md);
 - [restoring the database](docs/runbooks/restore.md);
 - [a provider being down](docs/runbooks/provider-outage.md);
+- [switching on Google Meet and automatic recording upload](docs/runbooks/google.md);
 - [a data breach](docs/runbooks/breach.md).
 
 ---
@@ -248,4 +250,4 @@ These come from the TRD (§0.2) and are enforced in review and, where possible, 
 - a Trivy scan of the image and the lockfile;
 - Lighthouse CI (LCP ≤ 4 s on slow 4G).
 
-**Deploys** go to staging first, then to production after manual approval (see [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md)).
+**Deploys** go to production after manual approval (and to staging first, once `STAGING_ENABLED` is on) (see [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md)).

@@ -36,7 +36,7 @@ export interface LoggerOptions {
   level: string;
 }
 
-/** JSON logs to stdout, collected by App Platform (TRD §20.1). */
+/** JSON logs to stdout, kept by Docker on the VPS (TRD §20.1). */
 export function createLogger(options: LoggerOptions, destination?: DestinationStream): Logger {
   return pino(
     {

@@ -120,6 +120,7 @@ describe("policies", () => {
       "NOTIFICATION",
       "ADMISSIONS",
       "GRADING_DEFAULTS",
+      "GOOGLE_MEET",
     ]);
   });
 

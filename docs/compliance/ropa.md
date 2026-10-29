@@ -12,9 +12,9 @@ Protection Officer to review. This is the engineering record of what the system 
 | 4 | Teaching and assessment | Students, Lecturers | Submissions and files, quiz answers, grades and feedback, attendance (roll call, online presence) | Teach and assess | Contract | PostgreSQL; Spaces (files) | Permanent as part of the academic record |
 | 5 | Recordings | Students and Lecturers who appear or speak | Video and audio of Class Meetings | Let students rewatch classes | Legitimate interest, with the recording notice (C-40) | **YouTube** (unlisted videos on GLIM's channel, Google's consumer terms; covered by the DPIA, D-08) | Until deleted by the System Admin (C-24) |
 | 6 | Results, awards and transcripts | Students and graduates | Course and semester results, GPA, CGPA, standing, award class, certificate numbers, issued transcripts (snapshot with legal name and Matric Number) | Academic records; verification for third parties | Legal obligation (academic records); contract | PostgreSQL; Spaces (PDFs) | Permanent. Public verification shows only initials, programme, status and dates |
-| 7 | Notifications and email | All users | Email address, notification content, delivery status, bounces | Tell people what they need to know | Contract; legitimate interest | PostgreSQL; **SendGrid** (email delivery, signed bounce webhook) | Notifications deleted on erasure |
+| 7 | Notifications and email | All users | Email address, notification content, delivery status, bounces | Tell people what they need to know | Contract; legitimate interest | PostgreSQL; **Brevo** (email delivery over SMTP; it blocks hard-bounced and complaining addresses itself) | Notifications deleted on erasure |
 | 8 | Audit log | Staff and users acting in the system | Who did what and when, with IP and request id | Accountability and security | Legal obligation; legitimate interest | PostgreSQL (append-only) | Kept; personal details in it are ids, not names |
-| 9 | Backups | Everyone above | A copy of the database | Disaster recovery | Legitimate interest | Spaces backup bucket, age-encrypted | Rotated per the backup runbook |
+| 9 | Backups | Everyone above | A copy of the database | Disaster recovery | Legitimate interest | R2 backup bucket, age-encrypted | Rotated per the backup runbook |
 
 ## Data subject rights
 
@@ -24,4 +24,4 @@ Protection Officer to review. This is the engineering record of what the system 
 
 ## Transfers outside Nigeria
 
-DigitalOcean (London), Google (sign-in, YouTube) and SendGrid process data outside Nigeria. Their DPAs or terms review is a launch gate (C-41); YouTube runs under Google's consumer terms, so the DPIA covers publishing recordings there (ADR-0003).
+Hostinger (VPS in Germany), Neon (database, Frankfurt), Cloudflare (R2 files and backups, EU jurisdiction), Google (sign-in, YouTube) and Brevo (France) process data outside Nigeria (ADR-0004). Their DPAs or terms review is a launch gate (C-41); YouTube runs under Google's consumer terms, so the DPIA covers publishing recordings there (ADR-0003).

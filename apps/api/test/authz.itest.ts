@@ -268,13 +268,41 @@ const SAMPLES: Record<string, Sample> = {
   }),
   "GET /admin/ops/failures": () => Promise.resolve({ url: "/api/v1/admin/ops/failures" }),
   // Provisioning can't be replayed in v1: allowed callers get 400.
+  // Allowed callers queue a subscription sweep (202), which does nothing with Google Meet off.
   "POST /admin/ops/replay/:kind/:id": () =>
-    Promise.resolve({ url: "/api/v1/admin/ops/replay/meeting-provision/x" }),
+    Promise.resolve({ url: "/api/v1/admin/ops/replay/subscription/any" }),
   "GET /admin/jobs": () => Promise.resolve({ url: "/api/v1/admin/jobs" }),
   "GET /admin/integrations/youtube/status": () =>
     Promise.resolve({ url: "/api/v1/admin/integrations/youtube/status" }),
   "POST /admin/integrations/youtube/test": () =>
     Promise.resolve({ url: "/api/v1/admin/integrations/youtube/test" }),
+  // Redirects: to Google's consent (or back, when uploads are off) for allowed callers.
+  "GET /admin/integrations/youtube/connect": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/connect" }),
+  // No state cookie: allowed callers are sent back with youtube=failed; nothing is stored.
+  "GET /admin/integrations/youtube/callback": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/callback?code=x&state=y" }),
+  "POST /admin/integrations/youtube/disconnect": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/youtube/disconnect" }),
+  "GET /admin/integrations/google": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/google" }),
+  "POST /admin/integrations/google": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/google", payload: { primaryDomain: null } }),
+  // Google Meet is off here: allowed callers get 409; nothing is queued.
+  "POST /admin/integrations/google/test": () =>
+    Promise.resolve({ url: "/api/v1/admin/integrations/google/test" }),
+  // A malformed Google id: allowed callers get 400; nothing is added.
+  "POST /admin/integrations/google/host-accounts": () =>
+    Promise.resolve({
+      url: "/api/v1/admin/integrations/google/host-accounts",
+      payload: { email: "authz-host@glim.test", providerUserId: "not-a-number" },
+    }),
+  // An out-of-range weight: allowed callers get 400; nothing changes.
+  "PATCH /admin/integrations/google/host-accounts/:id": () =>
+    Promise.resolve({
+      url: "/api/v1/admin/integrations/google/host-accounts/00000000-0000-4000-8000-000000000000",
+      payload: { weight: 99 },
+    }),
   // The Registrar holds a staff role, so allowed callers get 409 and nobody is erased.
   "POST /users/:id/erase": () =>
     Promise.resolve({
@@ -631,6 +659,27 @@ const SAMPLES: Record<string, Sample> = {
   // Not started, so allowed callers get 409.
   "POST /class-meetings/:id/end": async (t) => ({
     url: `/api/v1/class-meetings/${await meetingFixture(t)}/end`,
+    offering: "O1",
+  }),
+  // Without Google Meet on, allowed callers get 409 ("isn't switched on"); nothing changes.
+  "POST /class-meetings/:id/reprovision": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/reprovision`,
+    offering: "O1",
+  }),
+  // No Meet call happened: allowed callers get an empty list.
+  "GET /class-meetings/:id/participants": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/participants`,
+    offering: "O1",
+  }),
+  // Someone not on the course: allowed callers get 400; nothing changes.
+  "POST /class-meetings/:id/participants/:pid/match": async (t) => ({
+    url: `/api/v1/class-meetings/${await meetingFixture(t)}/participants/nobody/match`,
+    offering: "O1",
+    payload: { userId: "00000000-0000-4000-8000-000000000000" },
+  }),
+  // A link video can't be re-ingested: allowed callers get 409; nothing changes.
+  "POST /videos/:id/retry-ingest": async (t) => ({
+    url: `/api/v1/videos/${await videoFixture(t)}/retry-ingest`,
     offering: "O1",
   }),
   "GET /class-meetings/:id/roll-call": async (t) => ({
