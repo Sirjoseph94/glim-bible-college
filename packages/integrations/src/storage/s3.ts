@@ -1,5 +1,6 @@
 import {
   AbortMultipartUploadCommand,
+  BucketAlreadyOwnedByYou,
   CompleteMultipartUploadCommand,
   CreateBucketCommand,
   CreateMultipartUploadCommand,
@@ -77,7 +78,12 @@ export class S3ObjectStorage implements ObjectStorage {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: bucket }));
     } catch {
-      await this.client.send(new CreateBucketCommand({ Bucket: bucket }));
+      try {
+        await this.client.send(new CreateBucketCommand({ Bucket: bucket }));
+      } catch (error) {
+        // Another process (a parallel test file) created it between the two calls.
+        if (!(error instanceof BucketAlreadyOwnedByYou)) throw error;
+      }
     }
   }
 
