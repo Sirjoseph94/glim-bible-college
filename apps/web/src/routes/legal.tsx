@@ -109,6 +109,51 @@ export function PrivacyPage() {
         </p>
       </Part>
 
+      {/* Google API Services User Data Policy: what the openid/email/profile scopes give us and
+          how it's used (google-sign-in.service.ts keeps the sub, email, name and hosted domain). */}
+      <Part id="privacy-google" title="Signing in with Google">
+        <p>
+          If you sign in with Google, Google tells us your Google account ID, your email address
+          (and that Google has verified it), your name and, for a Google Workspace account, its
+          domain. We ask only for this basic profile; we get no access to your Gmail, Drive,
+          contacts or anything else in your Google account, and we don't keep any Google access
+          tokens.
+        </p>
+        <Bullets>
+          <li>We use it only to sign you in and to match you to your account with the college.</li>
+          <li>
+            We don't sell it, share it with anyone else or use it for advertising, and no one reads
+            it except to run and support the service.
+          </li>
+          <li>We keep it with your account, and delete it when your account is erased.</li>
+          <li>
+            You can remove the college's access at any time in your{" "}
+            <a
+              href="https://myaccount.google.com/connections"
+              className={LINK}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Google account's third-party connections
+            </a>{" "}
+            (opens in a new tab). You then can't sign in with Google until you allow it again. To
+            have the information deleted, ask us to erase your account.
+          </li>
+        </Bullets>
+        <p>
+          The college's use of information received from Google APIs adheres to the{" "}
+          <a
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+            className={LINK}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
+        </p>
+      </Part>
+
       <Part id="privacy-who-helps" title="Who helps us">
         <p>We don't sell your data. These providers process it for us, each only for its job:</p>
         <Bullets>
