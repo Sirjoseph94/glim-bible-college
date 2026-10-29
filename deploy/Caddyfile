@@ -18,3 +18,8 @@
 		health_interval 5s
 	}
 }
+
+# www sends people to the bare domain. Caddy gets its certificate too, once www's DNS points here.
+www.{$APP_DOMAIN} {
+	redir https://{$APP_DOMAIN}{uri} permanent
+}
