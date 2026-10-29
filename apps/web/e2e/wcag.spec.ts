@@ -11,10 +11,10 @@ const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphra
 const REGISTRAR = { email: "e2e-registrar@glim.test", password: "registrar passphrase 2026" };
 const SYSTEM_ADMIN = { email: "e2e-opspage@glim.test", password: "ops passphrase 2026" };
 
-test("public pages: landing, sign-in, apply, forgotten password and transcript verification", async ({
+test("public pages: landing, sign-in, apply, forgotten password, transcript verification, privacy and terms", async ({
   page,
 }) => {
-  for (const path of ["/", "/login", "/apply", "/forgot", "/verify/NOTACODE"])
+  for (const path of ["/", "/login", "/apply", "/forgot", "/verify/NOTACODE", "/privacy", "/terms"])
     await expectAccessible(page, path);
 });
 
@@ -47,7 +47,15 @@ test.describe("in the dark theme", () => {
   test.use({ colorScheme: "dark" });
 
   test("public pages", async ({ page }) => {
-    for (const path of ["/", "/login", "/apply", "/forgot", "/verify/NOTACODE"])
+    for (const path of [
+      "/",
+      "/login",
+      "/apply",
+      "/forgot",
+      "/verify/NOTACODE",
+      "/privacy",
+      "/terms",
+    ])
       await expectAccessible(page, path);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });

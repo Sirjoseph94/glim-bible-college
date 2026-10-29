@@ -78,6 +78,19 @@ const inviteRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/invite"), "InvitePage"),
 });
 
+/** Public whether or not you're signed in; Google's consent screen links to both. */
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/privacy",
+  component: lazyRouteComponent(() => import("./routes/legal"), "PrivacyPage"),
+});
+
+const termsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/terms",
+  component: lazyRouteComponent(() => import("./routes/legal"), "TermsPage"),
+});
+
 /** Staff screens: the server authorizes every call; this only keeps the UI tidy (INV-1). */
 const requireRole =
   (...roles: string[]) =>
@@ -547,6 +560,8 @@ const routeTree = rootRoute.addChildren([
   forgotRoute,
   resetRoute,
   inviteRoute,
+  privacyRoute,
+  termsRoute,
   profileRoute,
   adminUsersRoute,
   adminUserRoute,

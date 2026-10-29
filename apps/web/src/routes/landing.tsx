@@ -344,6 +344,16 @@ function Footer() {
                 Verify a transcript
               </a>
             </li>
+            <li>
+              <Link to="/privacy" className={FOOTER_LINK}>
+                Privacy policy
+              </Link>
+            </li>
+            <li>
+              <Link to="/terms" className={FOOTER_LINK}>
+                Terms of service
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>
