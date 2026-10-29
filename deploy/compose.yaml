@@ -23,7 +23,7 @@ x-env: &env
   PORT: "8080"
   INSTITUTION_DEFAULT_TZ: Africa/Lagos
   LOG_LEVEL: info
-  MAIL_PROVIDER: sendgrid
+  MAIL_PROVIDER: smtp
   # Caddy overwrites this header with the real client IP; the API never trusts X-Forwarded-For.
   CLIENT_IP_HEADER: x-real-ip
   API_INSTANCE_COUNT: "2"

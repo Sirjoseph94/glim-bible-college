@@ -157,7 +157,7 @@ IDs C-01…C-17 come from v2.1; C-18 onward were added in the October 2026 vetti
 | C-19 | **Admissions in scope; fees and payments out** | §10. No application-fee handling. |
 | C-20 | **Hybrid delivery**: the same class runs in a room and on Meet at once | Roll call plus Meet attendance, Rooms (§11, §12). |
 | C-21 | **Scale: ~100–200 students, 10–25 staff; 15–30 students per class; 3–5 simultaneous classes** | One VPS for the app; load targets in §21.4. |
-| C-22 | **A Hostinger VPS for the app (Docker Compose + Caddy); Neon PostgreSQL; Cloudflare R2 for files; SendGrid for email; one System Admin operates it** | ADR-0004 (replaced App Platform, ADR-0002), §22. |
+| C-22 | **A Hostinger VPS for the app (Docker Compose + Caddy); Neon PostgreSQL; Cloudflare R2 for files; Brevo (SMTP) for email (`docs/decisions.md` OPS-2); one System Admin operates it** | ADR-0004 (replaced App Platform, ADR-0002), §22. |
 | C-23 | **Managed video, not self-hosted**; Cloudflare R2 for files (ADR-0004); the media-edge Worker stays dropped. Provider: see C-43. | §13. |
 | C-24 | **Recordings persist** (no time-based purge). The System Admin can upload, edit metadata, replace, download and delete videos. Trimming is out. | §13.6. |
 | C-25 | **Student recording access lasts until their programme enrollment ends** (graduated or withdrawn). Staff keep access. | §13.5. |
@@ -358,7 +358,7 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 | Storage | `@aws-sdk/client-s3`, `@aws-sdk/lib-storage`, `@aws-sdk/s3-request-presigner` → Cloudflare R2; MinIO in dev/CI |
 | PDF | `@react-pdf/renderer` + `qrcode` |
 | Passwords | `argon2` (argon2id) |
-| Mail | SendGrid API (`@sendgrid/mail`) behind `Mailer`; Mailpit via SMTP in dev |
+| Mail | Brevo over SMTP (`smtps://`, nodemailer) behind `Mailer`; Mailpit via SMTP in dev. A SendGrid adapter remains for switching back (OPS-2) |
 | Logging | `pino` (JSON to stdout → Docker logs on the VPS) |
 | Time | `luxon`, `rrule` |
 | Testing | Vitest, Supertest, Testcontainers (Postgres 18, MinIO), Playwright |
@@ -2004,7 +2004,7 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
 
 ### 15.1 Notifications
 
-- **Channels:** in-app (`notifications`) and email (`Mailer` port → **SendGrid** API). No SMS or WhatsApp in v1 (C-37); WhatsApp numbers are stored for later.
+- **Channels:** in-app (`notifications`) and email (`Mailer` port → **Brevo** over SMTP, OPS-2). No SMS or WhatsApp in v1 (C-37); WhatsApp numbers are stored for later.
 - **Email by default** goes only to **critical** kinds:
   - invite, password reset
   - application receipt, decision, offer reminder, offer lapse, acceptance welcome (with Matric Number)
@@ -2017,7 +2017,7 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
 - **Timezone:** emails render times in the recipient's timezone, with Lagos time alongside.
 - **Reminders:** in-app, 15 minutes before a Class Meeting.
 - **Delivery:** the `notify.send` queue (retry 5, backoff). The unique `(user_id, dedupe_key)` prevents duplicates.
-- **Bounces:** SendGrid **signed Event Webhook** → `POST /api/v1/integrations/sendgrid/events` (verify the ECDSA signature, then insert into the inbox). A `bounce`, `dropped` or `spamreport` event sets `users.email_status`, and the system stops emailing that address (`SUPPRESSED`).
+- **Bounces:** with Brevo (OPS-2), Brevo blocks hard-bounced and complaining addresses itself, and the app doesn't yet record them; a Brevo webhook receiver is open work. The SendGrid path, kept for switching back: SendGrid **signed Event Webhook** → `POST /api/v1/integrations/sendgrid/events` (verify the ECDSA signature, then insert into the inbox). A `bounce`, `dropped` or `spamreport` event sets `users.email_status`, and the system stops emailing that address (`SUPPRESSED`).
 - **Content:** plain text plus minimal HTML (< 20 KB, no remote images); deep links into the SPA. No non-critical emails 21:00–06:00 in the recipient's timezone.
 
 ### 15.2 Imports (onboarding existing GLIM data; D-04)
@@ -2481,7 +2481,7 @@ Failure injection: Google 429/5xx storms, oEmbed unreachable, worker kill, Postg
 | PostgreSQL 18 (Neon) | Launch plan (Scale for IP Allow and an uptime SLA). Production branch protected. Compute autoscaling **0.25–1 CU**, scale-to-zero **off**. `DATABASE_URL` uses the pooled host (`-pooler`, PgBouncer in transaction mode); pg-boss, migrations and `pg_dump` use the direct host. Every URL has `sslmode=verify-full`. |
 | R2 | Private buckets `glim-files` (CORS for `APP_ORIGIN`) and `glim-backups` (lifecycle: delete after 12 weeks), with one API token scoped to both |
 | Video | **YouTube channel** owned by GLIM (Brand Account), with the System Admin and one other person as owner/manager; uploads unlisted (Appendix A.4) |
-| Email | SendGrid (domain authenticated: SPF/DKIM; DMARC `p=quarantine` after warm-up) |
+| Email | Brevo over SMTP (domain authenticated: SPF/DKIM; DMARC `p=quarantine` after warm-up) |
 | DNS/TLS | An `A` record for `portal.<glim-domain>` pointing at the VPS; Caddy gets and renews the certificate |
 
 The database is managed, so losing the VPS loses no data. The app is one VPS, though, so the 99.5% target is plausible but not guaranteed: a dead VPS means downtime until it's rebuilt from `docs/runbooks/server.md` (target under 2 h). This is recorded in `docs/decisions.md`.
@@ -2499,7 +2499,7 @@ Settings that are the same in every environment (`NODE_ENV`, `PORT`, `INSTITUTIO
 | `GOOGLE_PROJECT_ID`, `GOOGLE_SA_KEY_JSON_B64` (secret), `GOOGLE_PUBSUB_SUBSCRIPTION`, `GOOGLE_EVENTS_MODE` (`pull\|push`), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (secret) | Google |
 | `VIDEO_HOST` (`youtube_link\|youtube_api\|fake`), `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` (secret), `TOKEN_ENCRYPTION_KEY` (secret) — the last three for the integration slice only. Channel URLs live in `settings`. | video (C-43) |
 | `STORAGE_ENDPOINT`, `STORAGE_REGION` (`auto` for R2), `STORAGE_BUCKET`, `STORAGE_BACKUP_BUCKET`, `STORAGE_ACCESS_KEY` (secret), `STORAGE_SECRET_KEY` (secret) | R2 / MinIO |
-| `MAIL_PROVIDER` (`sendgrid\|smtp`), `SENDGRID_API_KEY` (secret), `SENDGRID_WEBHOOK_PUBLIC_KEY`, `MAIL_FROM`, `SMTP_URL` (dev) | email |
+| `MAIL_PROVIDER` (`smtp\|sendgrid`; `smtp` in production), `SMTP_URL` (secret; `smtps://` required in production), `MAIL_FROM`, `SENDGRID_API_KEY` (secret), `SENDGRID_WEBHOOK_PUBLIC_KEY` | email |
 | `SESSION_SECRET`, `CSRF_SECRET` (secrets) | auth |
 | `BACKUP_AGE_RECIPIENT` | public key for encrypting logical backups |
 | `DRIVE_CLEANUP_MODE` (`NONE\|TRASH_AFTER_INGEST`, default **`NONE`** pending D-07) | safety switch (integration slice) |
@@ -2524,7 +2524,7 @@ Settings that are the same in every environment (`NODE_ENV`, `PORT`, `INSTITUTIO
 7. Container build + Trivy + gitleaks.
 8. Playwright e2e on compose.
 9. Push the image to GHCR.
-10. **Deploy staging** (`.github/workflows/deploy-vps.yml`):
+10. **Deploy staging** (`.github/workflows/deploy-vps.yml`), when the repository variable `STAGING_ENABLED` is `true`. Without staging, steps 10–11 are skipped and production deploys after approval (`docs/decisions.md` OPS-1):
     1. copy `deploy/` to `/opt/glim` on the VPS;
     2. write `app.env` from the environment's variables and secrets;
     3. run `deploy.sh <image>`. It pulls the image, runs `migrate` (a failure stops the deploy with the old version still running), then replaces `api1` and `api2` one at a time, waiting for each to be healthy, then the worker.
@@ -2744,12 +2744,12 @@ The step-by-step version is `docs/runbooks/server.md`. In short:
 5. (Integration slice) Create an OAuth client in the Google Cloud project with scopes `youtube.upload` and `youtube`. Apply for the **YouTube API Services audit** and a quota extension early, because the audit can take weeks. Connect the channel in the app's YouTube integration screen.
 6. Review YouTube's terms with the DPIA (C-41, D-08), and update the recording notice.
 
-### A.5 SendGrid
+### A.5 Brevo (email, OPS-2)
 
-1. Create the account. **Authenticate the sending domain** (SPF/DKIM CNAMEs), add DMARC `p=none`, and move to `p=quarantine` after warm-up.
-2. Create an API key with Mail Send only.
-3. Enable the **Signed Event Webhook** for bounce, dropped and spamreport events, pointing at `/api/v1/integrations/sendgrid/events`, and store the public key.
-4. Warm up: start with at most 200 a day and double weekly (**S-14**). Sign the DPA.
+1. Create the account. **Authenticate the sending domain** (Brevo's SPF/DKIM records and its domain code), add DMARC `p=none`, and move to `p=quarantine` after warm-up.
+2. Generate an **SMTP key** (**SMTP & API → SMTP**). Store `SMTP_URL` = `smtps://<SMTP login, with @ as %40>:<key>@smtp-relay.brevo.com:465` as a secret.
+3. Bounce tracking in the app needs a Brevo webhook receiver (open work); until then Brevo blocks bounced and complaining addresses itself.
+4. Warm up: start with at most 200 a day and double weekly (**S-14**). Accept the DPA.
 
 ### A.6 Launch checklist
 

@@ -112,7 +112,7 @@ Rebuilding a lost VPS? The database (Neon) and files (R2) are untouched. Do only
    ```sh
    echo '0 7 * * * root /opt/glim/disk-alert.sh <your email>' > /etc/cron.d/glim-disk-alert
    ```
-   It uses `disk-alert.sh` and the SendGrid key, both of which the first deploy puts in `/opt/glim`.
+   It uses `disk-alert.sh` and the app's `SMTP_URL` (Brevo), both of which the first deploy puts in `/opt/glim`.
 
 ## D. First deploy and checks
 

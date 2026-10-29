@@ -53,8 +53,11 @@ jobs:
           exit-code: "1"
       - run: docker push "${{ steps.name.outputs.image }}"
 
+  # Only when the repository variable STAGING_ENABLED is "true" (decisions.md OPS-1); otherwise
+  # production deploys straight after the image, still behind its required reviewers.
   staging:
     needs: image
+    if: vars.STAGING_ENABLED == 'true'
     uses: ./.github/workflows/deploy-vps.yml
     permissions:
       contents: read
@@ -67,6 +70,10 @@ jobs:
 
   production:
     needs: [image, staging]
+    # A skipped staging lets production run; a failed one stops it.
+    if: >-
+      !cancelled() && needs.image.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.staging.result)
     uses: ./.github/workflows/deploy-vps.yml
     permissions:
       contents: read

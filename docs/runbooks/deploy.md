@@ -10,7 +10,7 @@ GLIM runs on a Hostinger VPS with Docker Compose. Its database is in Neon and it
 1. A change is merged to `main`. GitHub Actions runs **CI** (lint, types, tests, budgets, secret scan).
 2. When CI passes, the **Deploy** workflow runs:
    1. It builds one container image, tagged with the commit, scans it for vulnerabilities, and pushes it to GitHub's container registry (`ghcr.io/<owner>/glim:<commit>`).
-   2. **Staging:**
+   2. **Staging**, only when the repository variable `STAGING_ENABLED` is `true`. GLIM launched without staging (`docs/decisions.md` OPS-1), so steps 2 and 3 are skipped until it exists:
       - it copies `deploy/` to `/opt/glim` on the staging VPS;
       - it writes `/opt/glim/app.env` from the `staging` environment's variables and secrets;
       - it runs `deploy.sh`.
@@ -49,7 +49,9 @@ The next merge to `main` deploys as usual. If the bad change is still on `main`,
 
 ## Things to set up once
 
-Create two **GitHub environments** in **Settings → Environments**: `staging` and `production`. Give `production` **required reviewers** (the System Admin and one other person).
+Create the `production` **GitHub environment** in **Settings → Environments**, with **required reviewers** (the System Admin and one other person) and deployments from `main` only.
+
+To add staging later: build it with [`server.md`](server.md), create a `staging` environment with the same variables and secrets, then set the repository variable `STAGING_ENABLED` to `true` (**Settings → Secrets and variables → Actions → Variables**).
 
 **Variables**, in each environment:
 
@@ -60,7 +62,7 @@ Create two **GitHub environments** in **Settings → Environments**: `staging` a
 | `DB_CONNECTION_BUDGET` | `50` |
 | `STORAGE_ENDPOINT`, `STORAGE_REGION` | `https://<account-id>.eu.r2.cloudflarestorage.com`, `auto` |
 | `STORAGE_BUCKET`, `STORAGE_BACKUP_BUCKET` | `glim-files`, `glim-backups` (staging: `glim-staging-…`) |
-| `MAIL_FROM`, `SENDGRID_WEBHOOK_PUBLIC_KEY` | The sender, e.g. `GLIM Bible College <no-reply@<glim-domain>>`, and SendGrid's webhook key |
+| `MAIL_FROM` | The sender, e.g. `GLIM Bible College <no-reply@<glim-domain>>`, on a domain authenticated in Brevo |
 | `GOOGLE_OAUTH_CLIENT_ID` | The Google sign-in client |
 | `BACKUP_AGE_RECIPIENT` | The age **public** key (`age1…`) |
 | `LIVE_PROVIDER`, `VIDEO_HOST`, `GOOGLE_PROJECT_ID`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_SUBSCRIPTION`, `GOOGLE_EVENTS_MODE`, `YOUTUBE_OAUTH_CLIENT_ID`, `DRIVE_CLEANUP_MODE`, `FEATURE_*` | Only when switching on the Google integration ([`google.md`](google.md)); leave them out otherwise |

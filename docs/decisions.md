@@ -130,6 +130,13 @@ The design-system handoff is `docs/ui-design-handoff.md`; the audit is `docs/ui-
 |---|---|---|---|
 | GI-1 | When Google can't create a Class Meeting's Meet link | **Confirmed by the owner.** If the space isn't READY (still being made, or Google refused) and a Lecturer pasted a Meet link on the Class Meeting, students joining get the pasted link. Otherwise they're told the link is being prepared (`PROVIDER_NOT_READY`). The TRD (§11.6, §11.10) had no way in for students when provisioning failed. | `.scratch/google-integration/spec.md`, `lifecycle.service.ts` |
 
+## 29 October 2026 — Hosting
+
+| ID | Topic | Decision | Where |
+|---|---|---|---|
+| OPS-1 | Staging environment (TRD §22.2, ADR-0004 expect one) | **Confirmed by the owner.** Launch with production only. The Deploy workflow skips staging unless the repository variable `STAGING_ENABLED` is `true`, so each release goes to production after its required reviewers approve. Until staging exists, the staging-only work (k6 load tests, the restore drill with the real `age` key, the termly rebuild practice) needs another place, such as a temporary VPS and Neon branch. | `.github/workflows/deploy.yml`, `docs/runbooks/deploy.md` |
+| OPS-2 | Email provider (TRD C-22, ADR-0002 named SendGrid) | **Confirmed by the owner.** Send through **Brevo over SMTP**: `MAIL_PROVIDER=smtp` with `SMTP_URL` (a secret) on Brevo's relay. Production refuses anything but `smtps://` (implicit TLS on 465), so the SMTP key never travels unencrypted. The SendGrid adapter and webhook stay in the code but are unused. **Bounces:** Brevo blocks hard-bounced and complaining addresses itself, but the app no longer records them (`users.email_status`, the SUPPRESSED notifications in §15.1) until a Brevo webhook receiver is built. The VPS disk alert sends through the same SMTP relay. | `packages/shared/src/config.ts`, `deploy/compose.yaml`, `deploy/disk-alert.sh`, `docs/secrets.md`, TRD A.5 |
+
 ## Defaults applied — awaiting owner confirmation
 
 These came up while writing the spec; none was put to the owner yet. They're built as defaults that are easy to change.
@@ -155,3 +162,4 @@ These came up while writing the spec; none was put to the owner yet. They're bui
 | Q-02 | Spike S-01: does Meet report a stable ID for Gmail participants? Until it passes, online attendance runs in review mode. | System Admin (TRD Appendix B.1) |
 | S-Y1 | YouTube checks: link-check behaviour for unlisted/private/deleted videos, ads on GLIM's channel, which Studio role lets Lecturers upload, playback on target phones, API audit path (TRD Appendix B) | Build team + System Admin |
 | Q-17 | Total Class Meetings per day (sizing only; default ≤ 10 of ≤ 90 min) | Owner |
+| OPS-2a | A Brevo webhook receiver so bounces and spam complaints set `users.email_status` and suppress queued email again (§15.1), as the SendGrid webhook did | Developer |

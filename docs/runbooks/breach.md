@@ -14,11 +14,11 @@
 Do whatever applies:
 
 - **A staff or student account misused:** suspend the account (Admin → Users → Suspend). Suspending ends its sessions at once. Revoke its staff roles.
-- **A secret leaked** (`SESSION_SECRET`, `CSRF_SECRET`, database, Spaces or SendGrid keys, backup age key): rotate it in App Platform, then redeploy. See `docs/secrets.md` for where each one lives.
+- **A secret leaked** (`SESSION_SECRET`, `CSRF_SECRET`, database, R2 or Brevo SMTP keys, backup age key): rotate it in App Platform, then redeploy. See `docs/secrets.md` for where each one lives.
 - **Sessions may be compromised** (for example a database copy leaked): sessions are random tokens stored only as hashes, so rotating secrets doesn't end them. Sign everyone out from a database console with `UPDATE auth_sessions SET revoked_at = now() WHERE revoked_at IS NULL;` (it takes effect within 5 seconds), then ask staff to change their passwords.
 - **A file shared wrongly:** download links expire after 5 minutes. A transcript sent to the wrong recipient can be revoked (Transcript → Revoke, with the reason), and the verify page then shows it as not valid.
 - **A recording published wrongly:** unpublish or delete it in Admin → Videos, and set it to private in YouTube Studio.
-- **A provider breach** (Hostinger, Neon, Cloudflare, Google, SendGrid): follow their notice, rotate the keys we hold for them, and record what of ours they hold (see `docs/compliance/ropa.md`).
+- **A provider breach** (Hostinger, Neon, Cloudflare, Google, Brevo): follow their notice, rotate the keys we hold for them, and record what of ours they hold (see `docs/compliance/ropa.md`).
 
 ## 3. Assess (within 24 hours)
 
@@ -31,7 +31,7 @@ From the audit log (Admin → Audit log; filter by actor, action and time) and t
 ## 4. Notify (within 72 hours of awareness)
 
 - **NDPC:** the DPO notifies through the NDPC's breach portal or contact, with the nature of the breach, the categories and approximate numbers of people and records, the likely consequences, what was done to contain it, and a contact point. If something isn't known yet, notify anyway and follow up.
-- **The people affected** (when the risk is high): plain language, what happened, what it means for them, what we did and what they should do (for example, watch for phishing). Send it from the college's address; a bulk email can go through SendGrid.
+- **The people affected** (when the risk is high): plain language, what happened, what it means for them, what we did and what they should do (for example, watch for phishing). Send it from the college's address; a bulk email can go through Brevo.
 - **Processors and partners** as their contracts require.
 
 ## 5. Recover and learn

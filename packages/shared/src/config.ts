@@ -245,9 +245,13 @@ export function loadConfig(env: Env = process.env): Config {
     if (mailProvider === "sendgrid" && e.SENDGRID_API_KEY === undefined) {
       problems.push("SENDGRID_API_KEY: required when MAIL_PROVIDER=sendgrid");
     }
-  }
-  if (mailProvider === "smtp" && production) {
-    problems.push("MAIL_PROVIDER: smtp is for local development only");
+    // Brevo in production (decisions.md OPS-2). Implicit TLS only, so the SMTP key is never sent
+    // in the clear; the URL holds the key, so it's never echoed.
+    if (mailProvider === "smtp") {
+      if (e.SMTP_URL === undefined) problems.push("SMTP_URL: required when MAIL_PROVIDER=smtp");
+      else if (!e.SMTP_URL.startsWith("smtps://"))
+        problems.push("SMTP_URL: must be smtps:// (implicit TLS, port 465) in production");
+    }
   }
 
   const serviceAccount =

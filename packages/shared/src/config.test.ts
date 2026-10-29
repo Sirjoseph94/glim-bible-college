@@ -61,6 +61,28 @@ describe("loadConfig", () => {
     expect.unreachable("loadConfig should have thrown");
   });
 
+  describe("email over SMTP in production (Brevo, decisions.md OPS-2)", () => {
+    const { SENDGRID_API_KEY: _k, ...base } = production;
+    const smtp = { ...base, MAIL_PROVIDER: "smtp" };
+    const url = "smtps://glim%40smtp-brevo.com:xsmtpsib-secret@smtp-relay.brevo.com:465";
+
+    it("sends through SMTP_URL", () => {
+      const config = loadConfig({ ...smtp, SMTP_URL: url });
+      expect(config.mail.provider).toBe("smtp");
+      expect(config.mail.smtpUrl).toBe(url);
+    });
+
+    it("needs SMTP_URL", () => {
+      expect(() => loadConfig(smtp)).toThrow(/SMTP_URL: required when MAIL_PROVIDER=smtp/);
+    });
+
+    it("refuses a server that would see the key unencrypted, without echoing the URL", () => {
+      const plain = "smtp://glim%40smtp-brevo.com:xsmtpsib-secret@smtp-relay.brevo.com:587";
+      expect(() => loadConfig({ ...smtp, SMTP_URL: plain })).toThrow(/SMTP_URL: must be smtps:/);
+      expect(() => loadConfig({ ...smtp, SMTP_URL: plain })).not.toThrow(/xsmtpsib-secret/);
+    });
+  });
+
   it("rejects values outside their allowed sets", () => {
     expect(() => loadConfig({ WORKER_ROLE: "everything" })).toThrow(/WORKER_ROLE/);
     expect(() => loadConfig({ INSTITUTION_DEFAULT_TZ: "Mars/Base" })).toThrow(

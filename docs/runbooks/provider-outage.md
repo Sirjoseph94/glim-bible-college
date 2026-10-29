@@ -1,4 +1,4 @@
-# Runbook: a provider is down (YouTube, Google Meet, SendGrid, the database, the server)
+# Runbook: a provider is down (YouTube, Google Meet, Brevo, the database, the server)
 
 **For:** the System Admin.
 **When:** the ops page (`/admin/ops`, `/admin/jobs`) shows failures, you're emailed that a job queue is falling behind, or people report that something isn't working.
@@ -29,16 +29,16 @@ GLIM is built so that an outside service being down delays background work but n
 2. If a class is about to start without a link, a Lecturer can paste a Meet link on it; students get that instead.
 3. When Google is back, **Replay** any *Google Meet link* or *Recording upload* failures on **Ops**. [`google.md`](google.md) has the full table of what each message means.
 
-## SendGrid is down, or email is bouncing
+## Brevo is down, or email is bouncing
 
 **What still works:** everything in the app. In-app notifications appear as usual.
 
 **What waits:** email. Each message is retried up to 5 times with backoff. After that it appears under **Ops → failures** as a failed `notify.send` job.
 
 **What to do:**
-1. Check SendGrid's status page.
+1. Check Brevo's status page (status.brevo.com).
 2. When it's back, replay the failed `notify.send` jobs from **Ops**.
-3. If one person's address bounces, they're marked suppressed (shown on Ops). Once they've corrected their address, **Replay** clears the suppression.
+3. If one person's address bounces, Brevo blocks it and stops sending to it. The app doesn't see the bounce yet (decisions.md OPS-2). Find it in Brevo under **Transactional → Logs**. Once they've corrected their address, remove it from **Contacts → Blocklisted** in Brevo if it's still the same address.
 
 ## The database restarts or fails over
 

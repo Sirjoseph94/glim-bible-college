@@ -8,7 +8,7 @@ The school management system for GLIM Online Bible College (Gospel Light Interna
 - assignments, quizzes and exams;
 - results, awards and transcripts.
 
-It serves **one institution** of about 100–200 students and 10–25 staff. It runs on a Hostinger VPS with Docker Compose, keeps its data in Neon PostgreSQL and its files in Cloudflare R2, and sends email through SendGrid (ADR-0004).
+It serves **one institution** of about 100–200 students and 10–25 staff. It runs on a Hostinger VPS with Docker Compose, keeps its data in Neon PostgreSQL and its files in Cloudflare R2, and sends email through Brevo (ADR-0004, decisions.md OPS-2).
 
 This README has two parts:
 - [**Using the system**](#using-the-system): what each kind of user does, and where in the app they do it.
@@ -250,4 +250,4 @@ These come from the TRD (§0.2) and are enforced in review and, where possible, 
 - a Trivy scan of the image and the lockfile;
 - Lighthouse CI (LCP ≤ 4 s on slow 4G).
 
-**Deploys** go to staging first, then to production after manual approval (see [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md)).
+**Deploys** go to production after manual approval (and to staging first, once `STAGING_ENABLED` is on) (see [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md)).

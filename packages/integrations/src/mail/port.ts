@@ -1,4 +1,4 @@
-/** Outgoing email (TRD §15.1). Adapters: SendGrid (production), SMTP (Mailpit in development), memory (tests). */
+/** Outgoing email (TRD §15.1). Adapters: SMTP (Brevo in production, Mailpit in development), SendGrid, memory (tests). */
 export interface MailMessage {
   to: string;
   subject: string;
