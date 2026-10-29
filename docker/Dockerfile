@@ -27,10 +27,12 @@ RUN apt-get update \
  && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 COPY --chown=node:node . .
-# The pnpm store is dropped once node_modules is linked, and so is the npm bundled with Node:
-# nothing runs them, and Trivy flags their contents (ticket 46).
+# Once node_modules is linked, the pnpm store, pnpm itself and the npm bundled with Node are all
+# dropped: nothing at runtime runs them, and Trivy flags what they bundle (ticket 46; pnpm
+# 12.8.1's own undici). Containers start their entry point with tsx directly.
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
  && rm -rf "$(pnpm store path)" \
+ && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
  && chown -R node:node /app/node_modules
 COPY --from=build --chown=node:node /app/apps/api/static ./apps/api/static
@@ -39,4 +41,6 @@ ENV NODE_ENV=production \
     PORT=8080 \
     PG_DUMP_PATH=/usr/bin/pg_dump
 EXPOSE 8080
-CMD ["pnpm", "--filter", "@glim/api", "start"]
+# The API's `start` script, run without pnpm (deploy/compose.yaml does the same for each service).
+WORKDIR /app/apps/api
+CMD ["node_modules/.bin/tsx", "--tsconfig", "../../tsconfig.base.json", "src/main.ts"]

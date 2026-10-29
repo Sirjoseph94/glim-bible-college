@@ -31,7 +31,9 @@ x-env: &env
 
 x-api: &api
   <<: *app
-  command: [pnpm, --filter, "@glim/api", start]
+  # Each service runs its package's script with tsx directly; the image has no pnpm (docker/Dockerfile).
+  working_dir: /app/apps/api
+  command: [node_modules/.bin/tsx, --tsconfig, ../../tsconfig.base.json, src/main.ts]
   environment:
     <<: *env
     DB_POOL_API: "8"
@@ -54,7 +56,8 @@ services:
 
   worker:
     <<: *app
-    command: [pnpm, --filter, "@glim/worker", start]
+    working_dir: /app/apps/worker
+    command: [node_modules/.bin/tsx, --tsconfig, ../../tsconfig.base.json, src/main.ts]
     environment:
       <<: *env
       WORKER_ROLE: all
@@ -66,7 +69,8 @@ services:
   # Drizzle + pg-boss migrations as glim_migrator, before new code runs (§22.6). Run by deploy.sh.
   migrate:
     <<: *app
-    command: [pnpm, --filter, "@glim/db", migrate]
+    working_dir: /app/packages/db
+    command: [node_modules/.bin/tsx, --tsconfig, ../../tsconfig.base.json, src/bin/migrate.ts]
     environment: *env
     restart: "no"
     profiles: [migrate]

@@ -124,10 +124,17 @@ Rebuilding a lost VPS? The database (Neon) and files (R2) are untouched. Do only
      sh -c 'psql "$DATABASE_URL_DIRECT" -qAt -c "\timing on" -c "select 1" -c "select 1" -c "select 1"'
    ```
    Each `Time:` should be a few milliseconds. Tens of milliseconds means the VPS and Neon aren't in the same city; every page will be slow. This also checks the TLS settings the weekly backup uses.
-3. **Check the site.** Open `https://<domain>/readyz`; it should say `{"status":"ok",...}`. Then sign in and upload a passport photo, which checks R2 and CORS.
-4. **Set up uptime checks.** In any external uptime service (UptimeRobot and Better Stack have free plans), check `https://<domain>/readyz`, `/login` and `/apply` every few minutes, alerting the System Admin by email after 2 failures.
-5. **Neon IP Allow** (Scale plan): now that the VPS's IP is known, do part A step 6.
-6. Record the date and anything that differed from this runbook in `docs/spikes/S-17-app-platform.md`.
+3. **Create the first System Admin.** On the VPS, as `deploy`, with your own name and the Google address you'll sign in with. The image has no pnpm, so this runs the `admin:bootstrap` script with tsx directly:
+   ```sh
+   cd /opt/glim
+   docker compose run --rm --no-deps -w /app/apps/api api1 \
+     node_modules/.bin/tsx --tsconfig ../../tsconfig.base.json src/bin/bootstrap-admin.ts \
+     --email you@<glim-domain> --name "Your Name"
+   ```
+4. **Check the site.** Open `https://<domain>/readyz`; it should say `{"status":"ok",...}`. Then sign in and upload a passport photo, which checks R2 and CORS.
+5. **Set up uptime checks.** In any external uptime service (UptimeRobot and Better Stack have free plans), check `https://<domain>/readyz`, `/login` and `/apply` every few minutes, alerting the System Admin by email after 2 failures.
+6. **Neon IP Allow** (Scale plan): now that the VPS's IP is known, do part A step 6.
+7. Record the date and anything that differed from this runbook in `docs/spikes/S-17-app-platform.md`.
 
 ## Looking after the server
 
