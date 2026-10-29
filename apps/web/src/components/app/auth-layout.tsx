@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { institutionQuery } from "../../api/institution";
 import { Crest } from "../../design/crest";
+import { LegalLinks } from "./legal-links";
 
 /**
  * The signed-out pages (§11.1): the 72px crest and the college's name over one column, 400px
@@ -40,6 +41,9 @@ export function AuthLayout({
         {intro ? <p className="text-body text-ink-muted">{intro}</p> : null}
       </div>
       {children}
+      <footer className="border-t border-line pt-3">
+        <LegalLinks className="justify-center" />
+      </footer>
     </div>
   );
 }

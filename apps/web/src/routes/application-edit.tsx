@@ -709,9 +709,18 @@ function SectionIntro({
       );
     case "consent":
       return (
-        <p className="rounded-md bg-surface-sunken p-3 text-body-sm">
-          {application.texts.consentText}
-        </p>
+        <div className="space-y-2">
+          <p className="rounded-md bg-surface-sunken p-3 text-body-sm">
+            {application.texts.consentText}
+          </p>
+          <p className="text-body-sm text-ink-muted">
+            Our{" "}
+            <Link to="/privacy" className="text-brand underline">
+              privacy policy
+            </Link>{" "}
+            explains how the college uses and protects your answers.
+          </p>
+        </div>
       );
     case "photo":
       return (
