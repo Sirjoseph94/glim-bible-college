@@ -20,10 +20,24 @@ export function setStaticHeaders(reply: FastifyReply, path: string): void {
   );
 }
 
+/**
+ * Pages the web build renders to HTML (apps/web/scripts/prerender.mjs). They go to every request,
+ * whatever its Accept header: Google's OAuth review fetches the privacy policy without a browser.
+ */
+const PRERENDERED: Record<string, string> = {
+  "/privacy": "privacy.html",
+  "/terms": "terms.html",
+};
+
 /** Browser navigations to client-side routes get the SPA shell; API misses stay 404 JSON. */
 export function spaFallback(req: FastifyRequest, reply: FastifyReply): boolean {
   const path = req.url.split("?")[0] ?? "";
   if (req.method !== "GET" && req.method !== "HEAD") return false;
+  const prerendered = PRERENDERED[path];
+  if (prerendered !== undefined) {
+    void reply.header("cache-control", "no-cache").sendFile(prerendered);
+    return true;
+  }
   if (path.startsWith("/api/") || path === "/healthz" || path === "/readyz") return false;
   if (!(req.headers.accept ?? "").includes("text/html")) return false;
   void reply.header("cache-control", "no-cache").sendFile("index.html");
