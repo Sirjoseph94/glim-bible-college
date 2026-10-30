@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { LEGAL_CONTACT, LEGAL_NAME, PrivacyPage, TermsPage } from "./legal";
+import { ContactPage, LEGAL_CONTACT, LEGAL_NAME, PrivacyPage, TermsPage } from "./legal";
 
 /** Links need a router to build their href; this one has no pages. */
 const router = createRouter({
@@ -69,7 +69,25 @@ describe("the privacy policy", () => {
 });
 
 describe("the terms of service", () => {
-  it("links to the privacy policy", () => {
-    expect(render(<TermsPage />)).toContain('href="/privacy"');
+  const html = render(<TermsPage />);
+
+  it("links to the privacy policy and the contact page", () => {
+    expect(html).toContain('href="/privacy"');
+    expect(html).toContain('href="https://glimbiblecollege.com/contact"');
+  });
+
+  it("names only the Google data the app keeps, as the privacy policy does", () => {
+    expect(html).toContain("such as your name and email address");
+    expect(html).not.toContain("picture");
+  });
+});
+
+describe("the contact page", () => {
+  const html = render(<ContactPage />);
+
+  it("gives the college's email and points to applying, the privacy policy and the terms", () => {
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html).toContain(`href="mailto:${LEGAL_CONTACT}"`);
+    for (const href of ["/apply", "/privacy", "/terms"]) expect(html).toContain(`href="${href}"`);
   });
 });

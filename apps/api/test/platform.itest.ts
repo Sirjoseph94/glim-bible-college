@@ -13,6 +13,7 @@ beforeAll(async () => {
   writeFileSync(join(staticDir, "app.abc123.js"), "console.log('app')");
   writeFileSync(join(staticDir, "privacy.html"), "<!doctype html><h1>Privacy policy</h1>");
   writeFileSync(join(staticDir, "terms.html"), "<!doctype html><h1>Terms of service</h1>");
+  writeFileSync(join(staticDir, "contact.html"), "<!doctype html><h1>Contact us</h1>");
   t = await createTestApp({ staticDir });
 });
 
@@ -91,10 +92,11 @@ describe("single origin: SPA and API", () => {
     expect(deep.headers["cache-control"]).toBe("no-cache");
   });
 
-  it("serves the prerendered privacy policy and terms to any client, not only browsers", async () => {
+  it("serves the prerendered privacy policy, terms and contact page to any client, not only browsers", async () => {
     for (const [url, heading] of [
       ["/privacy", "Privacy policy"],
       ["/terms", "Terms of service"],
+      ["/contact", "Contact us"],
     ] as const) {
       // No Accept header, as a crawler or Google's OAuth review may send.
       const res = await t.request({ url });

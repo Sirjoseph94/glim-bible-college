@@ -91,6 +91,12 @@ const termsRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/legal"), "TermsPage"),
 });
 
+const contactRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/contact",
+  component: lazyRouteComponent(() => import("./routes/legal"), "ContactPage"),
+});
+
 /** Staff screens: the server authorizes every call; this only keeps the UI tidy (INV-1). */
 const requireRole =
   (...roles: string[]) =>
@@ -562,6 +568,7 @@ const routeTree = rootRoute.addChildren([
   inviteRoute,
   privacyRoute,
   termsRoute,
+  contactRoute,
   profileRoute,
   adminUsersRoute,
   adminUserRoute,

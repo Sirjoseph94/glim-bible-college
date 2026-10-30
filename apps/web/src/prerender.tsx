@@ -7,7 +7,7 @@ import {
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PublicTopBar } from "./components/app/signed-out-shell";
-import { LEGAL_NAME, PrivacyPage, TermsPage } from "./routes/legal";
+import { ContactPage, LEGAL_NAME, PrivacyPage, TermsPage } from "./routes/legal";
 
 /**
  * Pages built to static HTML (scripts/prerender.mjs), so their text is in the document itself:
@@ -31,9 +31,16 @@ export const PRERENDERED: {
   {
     path: "/terms",
     file: "terms.html",
-    title: `Terms of service · ${LEGAL_NAME}`,
+    title: `Terms of Service · ${LEGAL_NAME}`,
     description: `The terms for using the ${LEGAL_NAME} website and its services.`,
     page: () => <TermsPage />,
+  },
+  {
+    path: "/contact",
+    file: "contact.html",
+    title: `Contact us · ${LEGAL_NAME}`,
+    description: `How to contact ${LEGAL_NAME}.`,
+    page: () => <ContactPage />,
   },
 ];
 

@@ -11,10 +11,19 @@ const LECTURER = { email: "e2e-lecturer@glim.test", password: "lecturer passphra
 const REGISTRAR = { email: "e2e-registrar@glim.test", password: "registrar passphrase 2026" };
 const SYSTEM_ADMIN = { email: "e2e-opspage@glim.test", password: "ops passphrase 2026" };
 
-test("public pages: landing, sign-in, apply, forgotten password, transcript verification, privacy and terms", async ({
+test("public pages: landing, sign-in, apply, forgotten password, transcript verification, privacy, terms and contact", async ({
   page,
 }) => {
-  for (const path of ["/", "/login", "/apply", "/forgot", "/verify/NOTACODE", "/privacy", "/terms"])
+  for (const path of [
+    "/",
+    "/login",
+    "/apply",
+    "/forgot",
+    "/verify/NOTACODE",
+    "/privacy",
+    "/terms",
+    "/contact",
+  ])
     await expectAccessible(page, path);
 });
 
