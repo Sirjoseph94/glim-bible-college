@@ -52,6 +52,17 @@ describe("the privacy policy", () => {
       expect(html).toContain(processor);
   });
 
+  it("says what Google sign-in gives us, with the Limited Use statement and how to revoke it", () => {
+    expect(html).toContain('id="privacy-google"');
+    for (const field of ["Google account ID", "email address", "name", "domain"])
+      expect(html).toContain(field);
+    expect(html).toContain("including the Limited Use requirements");
+    expect(html).toContain(
+      'href="https://developers.google.com/terms/api-services-user-data-policy"',
+    );
+    expect(html).toContain('href="https://myaccount.google.com/connections"');
+  });
+
   it("points to the data download on the Profile page", () => {
     expect(html).toContain("Download my data");
   });
