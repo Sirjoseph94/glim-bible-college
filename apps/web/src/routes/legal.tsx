@@ -12,12 +12,21 @@ const UPDATED = "29 October 2026";
 
 const LINK = "text-brand underline";
 
-function LegalPage({ title, children }: { title: string; children: ReactNode }) {
+function LegalPage({
+  title,
+  meta = <p>Last updated {UPDATED}</p>,
+  children,
+}: {
+  title: string;
+  /** The lines under the title; the privacy policy's last-updated date unless given. */
+  meta?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <article className="space-y-6 pb-8">
       <header className="space-y-1">
         <h1 className="text-display">{title}</h1>
-        <p className="text-body-sm text-ink-muted">Last updated {UPDATED}</p>
+        <div className="space-y-0.5 text-body-sm text-ink-muted">{meta}</div>
       </header>
       {children}
     </article>
@@ -262,96 +271,127 @@ export function PrivacyPage() {
   );
 }
 
+/** The owner's text (30 October 2026), with its numbering. */
 export function TermsPage() {
   return (
-    <LegalPage title="Terms of service">
-      <Part id="terms-about" title="About these terms">
+    <LegalPage
+      title="Terms of Service"
+      meta={
+        <>
+          <p>Effective Date: October 30, 2026</p>
+          <p>Application / Service Name: GLIM Bible College Portal</p>
+          <p>Domain: glimbiblecollege.com</p>
+        </>
+      }
+    >
+      <Part id="terms-acceptance" title="1. Acceptance of Terms">
         <p>
-          These terms apply when you use the {LEGAL_NAME} website and its services, whether you're
-          applying, studying, teaching or working for the college. By using the site you agree to
-          them. Your studies are also governed by the college's academic policies; where they differ
-          from these terms, the academic policies apply.
+          By accessing or using the GLIM Bible College platform (&ldquo;Service&rdquo;), provided by
+          GLIM Bible College (&ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), you agree
+          to be bound by these Terms of Service. If you do not agree to these terms, please do not
+          use or access the Service.
         </p>
       </Part>
 
-      <Part id="terms-account" title="Your account">
-        <Bullets>
-          <li>Your account is for you alone. Don't share it or let anyone else sign in as you.</li>
-          <li>
-            Keep your password and Google account secure, and tell us at once if you think someone
-            else has used your account.
-          </li>
-          <li>Give accurate information, especially in your application.</li>
-        </Bullets>
-      </Part>
-
-      <Part id="terms-use" title="Using the site properly">
-        <p>You agree not to:</p>
-        <Bullets>
-          <li>submit work that isn't your own, or help someone else do so;</li>
-          <li>
-            share class recordings, their links or course materials outside your course without
-            permission;
-          </li>
-          <li>
-            upload anything unlawful or harmful, or anything you don't have the right to share;
-          </li>
-          <li>
-            try to reach accounts or data that aren't yours, or interfere with how the site works.
-          </li>
-        </Bullets>
-      </Part>
-
-      <Part id="terms-content" title="Your work and the college's materials">
+      <Part id="terms-description" title="2. Description of Service">
         <p>
-          You keep the rights to the work you submit. You allow the college to store it, assess it
-          and keep it as part of your academic record. Course materials and class recordings belong
-          to the college and its Lecturers. You may use them for your own studies.
+          GLIM Bible College provides an educational management platform that enables students,
+          faculty, and administrative staff to manage courses, track academic progress, access
+          learning resources, and communicate effectively.
         </p>
       </Part>
 
-      <Part id="terms-recordings" title="Class recordings">
+      <Part id="terms-google" title="3. Third-Party Authentication & Google Integration">
         <p>
-          Class Meetings may be recorded and published on the college's YouTube channel as unlisted
-          videos. If you join a recorded class, you may appear or be heard in the recording. Our{" "}
+          Our Service allows users to log in using third-party authentication services, including
+          Google OAuth.
+        </p>
+        <p>
+          <strong>Authentication &amp; Permissions:</strong> When you choose to sign in using your
+          Google Account, you authorize us to access specific profile information necessary for
+          identity verification and account creation (such as your name, email address, and profile
+          picture).
+        </p>
+        <p>
+          <strong>Use of Google Data:</strong> Any user data accessed via Google APIs will be
+          handled strictly in accordance with Google&rsquo;s{" "}
+          <a
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+            className={LINK}
+            rel="noreferrer"
+            target="_blank"
+          >
+            API Services User Data Policy
+          </a>{" "}
+          and our{" "}
           <Link to="/privacy" className={LINK}>
-            privacy policy
-          </Link>{" "}
-          explains how recordings are handled.
+            Privacy Policy
+          </Link>
+          .
+        </p>
+        <p>
+          <strong>Scope Transparency:</strong> We only request access to the minimum required scopes
+          necessary to authenticate your user identity and facilitate platform functionality. We do
+          not sell, transfer, or misuse your Google account data.
         </p>
       </Part>
 
-      <Part id="terms-availability" title="Availability">
+      <Part id="terms-accounts" title="4. User Accounts & Responsibilities">
         <p>
-          We work to keep the site available, but we can't promise it will never be interrupted.
-          Work you submit while offline is sent when your connection returns. We may change or
-          improve the site over time.
+          <strong>Account Security:</strong> You are responsible for maintaining the confidentiality
+          of your login credentials and for all activities that occur under your account.
+        </p>
+        <p>
+          <strong>Accuracy of Information:</strong> You agree to provide accurate, current, and
+          complete information during registration and to update such information as necessary.
+        </p>
+        <p>
+          <strong>Prohibited Conduct:</strong> You agree not to misuse the Service, attempt
+          unauthorized access to other user accounts, or upload unlawful or harmful content.
         </p>
       </Part>
 
-      <Part id="terms-suspension" title="Suspending an account">
+      <Part id="terms-ip" title="5. Intellectual Property">
         <p>
-          The college may suspend or close an account that breaks these terms or the college's
-          policies, or to protect other users or the service.
+          All content, branding, trademarks, course materials, and underlying software on
+          glimbiblecollege.com are the property of GLIM Bible College or its licensors and are
+          protected by applicable intellectual property laws.
         </p>
       </Part>
 
-      <Part id="terms-liability" title="Our responsibility">
+      <Part id="terms-termination" title="6. Termination of Service">
         <p>
-          We provide the site as it is. To the extent the law allows, the college isn't responsible
-          for losses caused by interruptions, or by things outside its reasonable control. Nothing
-          in these terms limits rights you have by law.
+          We reserve the right to suspend or terminate your access to the Service at our sole
+          discretion, without prior notice, if you breach these Terms of Service or engage in
+          activities that jeopardize the security or integrity of our systems.
+        </p>
+        <p>
+          You may request account deletion at any time by contacting us at the support details
+          provided below.
         </p>
       </Part>
 
-      <Part id="terms-law" title="The law that applies">
-        <p>These terms are governed by the laws of the Federal Republic of Nigeria.</p>
+      <Part id="terms-liability" title="7. Limitation of Liability">
+        <p>
+          To the maximum extent permitted by applicable law, GLIM Bible College shall not be liable
+          for any indirect, incidental, special, consequential, or punitive damages resulting from
+          your use of or inability to use the Service.
+        </p>
       </Part>
 
-      <Part id="terms-changes" title="Changes and contact">
+      <Part id="terms-contact" title="8. Contact Us">
         <p>
-          We may update these terms, and we'll change the date at the top when we do. If a change
-          matters to you, we'll tell you before it applies. Questions: <Contact />.
+          If you have any questions or concerns regarding these Terms of Service or our data
+          handling practices, please contact us at:
+        </p>
+        <p>
+          Email: <Contact />
+        </p>
+        <p>
+          Website:{" "}
+          <a href="https://glimbiblecollege.com/contact" className={LINK}>
+            https://glimbiblecollege.com/contact
+          </a>
         </p>
       </Part>
     </LegalPage>

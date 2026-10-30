@@ -31,7 +31,7 @@ export const PRERENDERED: {
   {
     path: "/terms",
     file: "terms.html",
-    title: `Terms of service · ${LEGAL_NAME}`,
+    title: `Terms of Service · ${LEGAL_NAME}`,
     description: `The terms for using the ${LEGAL_NAME} website and its services.`,
     page: () => <TermsPage />,
   },
