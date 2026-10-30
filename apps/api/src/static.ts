@@ -22,11 +22,13 @@ export function setStaticHeaders(reply: FastifyReply, path: string): void {
 
 /**
  * Pages the web build renders to HTML (apps/web/scripts/prerender.mjs). They go to every request,
- * whatever its Accept header: Google's OAuth review fetches the privacy policy without a browser.
+ * whatever its Accept header: Google's OAuth review fetches the privacy policy, terms and contact
+ * page without a browser.
  */
 const PRERENDERED: Record<string, string> = {
   "/privacy": "privacy.html",
   "/terms": "terms.html",
+  "/contact": "contact.html",
 };
 
 /** Browser navigations to client-side routes get the SPA shell; API misses stay 404 JSON. */

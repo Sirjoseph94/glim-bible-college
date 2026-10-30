@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 const LINK = "inline-flex min-h-tap items-center text-body-sm text-brand underline";
 
 /**
- * Links to the privacy policy and terms of service. Kept apart from routes/legal.tsx so pages in
+ * Links to the privacy policy, terms of service and contact page. Kept apart from routes/legal.tsx so pages in
  * the initial bundle (the landing page, sign-in) don't pull the full texts in with them.
  */
 export function LegalLinks({ className }: { className?: string }) {
@@ -17,6 +17,11 @@ export function LegalLinks({ className }: { className?: string }) {
       <li>
         <Link to="/terms" className={LINK}>
           Terms of service
+        </Link>
+      </li>
+      <li>
+        <Link to="/contact" className={LINK}>
+          Contact
         </Link>
       </li>
     </ul>

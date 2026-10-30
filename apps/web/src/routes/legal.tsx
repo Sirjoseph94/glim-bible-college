@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
 /**
- * The privacy policy and terms of service, public at /privacy and /terms. Every statement about
+ * The privacy policy, terms of service and contact page, public at /privacy, /terms and /contact. Every statement about
  * data follows docs/compliance/ropa.md and the code it cites (cookies, device storage, retention);
  * change them together. Legal review is a launch gate (TRD C-41).
  */
@@ -309,8 +309,7 @@ export function TermsPage() {
         <p>
           <strong>Authentication &amp; Permissions:</strong> When you choose to sign in using your
           Google Account, you authorize us to access specific profile information necessary for
-          identity verification and account creation (such as your name, email address, and profile
-          picture).
+          identity verification and account creation (such as your name and email address).
         </p>
         <p>
           <strong>Use of Google Data:</strong> Any user data accessed via Google APIs will be
@@ -392,6 +391,44 @@ export function TermsPage() {
           <a href="https://glimbiblecollege.com/contact" className={LINK}>
             https://glimbiblecollege.com/contact
           </a>
+        </p>
+      </Part>
+    </LegalPage>
+  );
+}
+
+/** Where the terms send people (section 8). Only what the college has confirmed: no address yet. */
+export function ContactPage() {
+  return (
+    <LegalPage title="Contact us" meta={<p>{LEGAL_NAME}</p>}>
+      <Part id="contact-email" title="Email">
+        <p>
+          Write to <Contact /> with any question about the college, your account, your application
+          or your studies.
+        </p>
+      </Part>
+
+      <Part id="contact-apply" title="Applying">
+        <p>
+          The{" "}
+          <Link to="/apply" className={LINK}>
+            Apply
+          </Link>{" "}
+          page shows the current Intake, its Programmes and how to apply.
+        </p>
+      </Part>
+
+      <Part id="contact-data" title="Your data and these terms">
+        <p>
+          To see, correct or erase the data the college holds about you, or with questions about our{" "}
+          <Link to="/privacy" className={LINK}>
+            Privacy Policy
+          </Link>{" "}
+          or{" "}
+          <Link to="/terms" className={LINK}>
+            Terms of Service
+          </Link>
+          , write to the same address.
         </p>
       </Part>
     </LegalPage>

@@ -354,6 +354,11 @@ function Footer() {
                 Terms of service
               </Link>
             </li>
+            <li>
+              <Link to="/contact" className={FOOTER_LINK}>
+                Contact
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>
