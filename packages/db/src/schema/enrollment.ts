@@ -5,17 +5,16 @@ import {
   integer,
   pgTable,
   primaryKey,
-  smallint,
   text,
-  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { academicSessions, courseOfferings, curricula, programmes, semesters } from "./academic";
+import { curricula, programmes } from "./academic";
+import { courseOfferings } from "./offerings";
 import { applications, intakes } from "./admissions";
 import { cohorts } from "./cohorts";
 import { enumCheck, std, stdRo, tstz } from "./columns";
-import { files } from "./content";
+import { files } from "./files";
 import { users } from "./identity";
 
 /**
@@ -55,7 +54,7 @@ export const students = pgTable(
   (t) => [enumCheck("students.status", t.status), enumCheck("students.gender", t.gender)],
 );
 
-/** Owner: enrollment. Gap-free Matric Numbers per programme and intake year (D-01), row-locked. */
+/** Owner: enrollment. Gap-free Matric Numbers per programme and intake start year, row-locked. */
 export const matricSequences = pgTable(
   "matric_sequences",
   {
@@ -83,10 +82,10 @@ export const programmeEnrollments = pgTable(
       .notNull()
       .references(() => curricula.id, { onDelete: "restrict" }),
     intakeId: uuid("intake_id").references(() => intakes.id, { onDelete: "restrict" }),
-    cohortId: uuid("cohort_id").references(() => cohorts.id, { onDelete: "restrict" }),
-    entrySessionId: uuid("entry_session_id")
+    /** The cohort whose offerings the student is registered for (ADR-0005). */
+    cohortId: uuid("cohort_id")
       .notNull()
-      .references(() => academicSessions.id, { onDelete: "restrict" }),
+      .references(() => cohorts.id, { onDelete: "restrict" }),
     /** NULL only for imported legacy students (D-04). */
     applicationId: uuid("application_id")
       .unique()
@@ -94,7 +93,6 @@ export const programmeEnrollments = pgTable(
     /** 'GLIM/DIP/2027/0001' (D-01). */
     matricNumber: text("matric_number").notNull().unique(),
     studyMode: text("study_mode").notNull(),
-    currentLevel: smallint("current_level").notNull().default(1),
     status: text().notNull().default("ACTIVE"),
     startedOn: date("started_on").notNull(),
     endedOn: date("ended_on"),
@@ -108,38 +106,14 @@ export const programmeEnrollments = pgTable(
   ],
 );
 
-/** Owner: enrollment. A programme enrollment's registration for one semester (§9.3). */
-export const semesterEnrollments = pgTable(
-  "semester_enrollments",
-  {
-    ...std(),
-    programmeEnrollmentId: uuid("programme_enrollment_id")
-      .notNull()
-      .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
-    semesterId: uuid("semester_id")
-      .notNull()
-      .references(() => semesters.id, { onDelete: "restrict" }),
-    levelNo: smallint("level_no").notNull(),
-    status: text().notNull().default("REGISTERED"),
-  },
-  (t) => [
-    unique("semester_enrollments_once").on(t.programmeEnrollmentId, t.semesterId),
-    enumCheck("semester_enrollments.status", t.status),
-  ],
-);
-
 /**
- * Owner: enrollment. THE entitlement source for students (§6.3, INV-1). `student_id` and
- * `programme_enrollment_id` are denormalised; a trigger keeps them consistent with the
- * semester enrollment.
+ * Owner: enrollment. THE entitlement source for students (§6.3, INV-1). `student_id` is
+ * denormalised; a trigger keeps it consistent with the programme enrollment.
  */
 export const courseEnrollments = pgTable(
   "course_enrollments",
   {
     ...std(),
-    semesterEnrollmentId: uuid("semester_enrollment_id")
-      .notNull()
-      .references(() => semesterEnrollments.id, { onDelete: "restrict" }),
     programmeEnrollmentId: uuid("programme_enrollment_id")
       .notNull()
       .references(() => programmeEnrollments.id, { onDelete: "restrict" }),

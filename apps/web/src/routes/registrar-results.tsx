@@ -1,10 +1,12 @@
 import type {
-  academic,
-  calendar,
+  assessment,
+  CohortResultRow,
+  CohortResults,
+  cohorts,
   CourseResultRow,
+  MakeupExam,
   offerings,
   results,
-  SemesterResultRow,
   TranscriptRequest,
   transcripts,
 } from "@glim/contracts";
@@ -15,8 +17,9 @@ import { api } from "../api/client";
 import { describeError, type ErrorCopy } from "../api/error-copy";
 import { meQuery } from "../api/session";
 import { PageHeader } from "../components/app/page-header";
+import { formText } from "../components/form";
+import { CalendarDate } from "../components/time";
 import { isNotAvailable, LoadFailed, NotAvailable } from "../components/app/page-states";
-import { SetupHint } from "../components/app/setup-hint";
 import { useDetailBar } from "../components/app/shell-parts";
 import { useSubmit } from "../components/use-submit";
 import { Badge, type Tone } from "../components/ui/badge";
@@ -31,10 +34,9 @@ import {
   stickyCell,
 } from "../components/ui/data-table";
 import { ConfirmDialog } from "../components/ui/dialog";
-import { Select } from "../components/ui/field";
+import { Select, TextField } from "../components/ui/field";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
-import { cohortLabel, cohortState, summarize, type CohortSummary } from "../components/app/cohorts";
 import { cn } from "../design/cn";
 import { credits, hundredths } from "../design/format";
 
@@ -44,13 +46,6 @@ const KIND_LABELS: Record<CourseResultRow["resultKind"], string> = {
   WITHDRAWN: "Withdrawn",
   EXEMPT: "Exempt",
   AUDIT: "Audit",
-};
-
-const STANDING_LABELS: Record<SemesterResultRow["standing"], string> = {
-  GOOD: "Good standing",
-  PROBATION: "Probation",
-  WITHDRAW_REQUIRED: "Below good standing",
-  UNKNOWN: "",
 };
 
 const resultsKey = (offeringId: string) => ["course-results", offeringId];
@@ -63,7 +58,10 @@ function useHolds(...wanted: string[]): boolean {
 
 /** A course result's state as a word (UI-3). */
 function resultStatus(item: CourseResultRow): { tone: Tone; word: string } {
+  if (item.status === null && item.makeupOn !== null)
+    return { tone: "info", word: `Incomplete — makeup exam on ${item.makeupOn}` };
   if (item.status === null) return { tone: "neutral", word: "Preview" };
+  if (item.status === "APPROVED") return { tone: "success", word: "Approved" };
   if (item.status === "DRAFT") return { tone: "warning", word: "Reopened" };
   return {
     tone: "success",
@@ -130,18 +128,18 @@ export function CourseResultsPage() {
       <LoadFailed what="the results" onRetry={() => void list.refetch()} />
     );
   const r = list.data;
-  const pending = r.items.length - r.finalized;
+  const pending = r.items.length - r.finalized - r.awaitingMakeup;
   const refresh = () => queryClient.invalidateQueries({ queryKey: resultsKey(offeringId) });
   return (
     <div className="space-y-4">
       <PageHeader
         overline={
-          offering.data ? `${offering.data.courseCode} · ${offering.data.sectionCode}` : undefined
+          offering.data ? `${offering.data.courseCode} · ${offering.data.cohortCode}` : undefined
         }
         title="Course results"
         meta={
           offering.data
-            ? `${offering.data.title} · ${offering.data.semesterName}, ${offering.data.sessionCode}`
+            ? `${offering.data.title} · ${offering.data.startsOn} to ${offering.data.endsOn}`
             : undefined
         }
         actions={
@@ -161,6 +159,9 @@ export function CourseResultsPage() {
         {r.finalized === 0
           ? "Nothing is finalized yet: this is what finalizing would record, from the gradebook as it is now."
           : `${String(r.finalized)} of ${String(r.items.length)} results finalized. Students see them straight away.`}
+        {r.awaitingMakeup > 0
+          ? ` ${String(r.awaitingMakeup)} ${r.awaitingMakeup === 1 ? "student waits" : "students wait"} for a makeup exam; finalizing leaves them out until their exam is graded.`
+          : ""}
       </p>
       {r.blocker !== null ? (
         <Banner tone="warning" title="Finalizing can't run yet">
@@ -249,6 +250,14 @@ export function CourseResultsPage() {
           </tbody>
         </DataTable>
       )}
+      {offering.data ? (
+        <MakeupExams
+          offeringId={offeringId}
+          examOn={offering.data.examOn}
+          students={r.items.filter((i) => i.status === null || i.status === "DRAFT")}
+          onChanged={refresh}
+        />
+      ) : null}
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
@@ -288,9 +297,143 @@ export function CourseResultsPage() {
         }}
       >
         The result goes back to draft until the course is finalized again, and the student's
-        semester result waits for it.
+        CGPA is provisional until it's approved again.
       </ConfirmDialog>
     </div>
+  );
+}
+
+/**
+ * Makeup exams (ADR-0005): a later exam date for a student who missed the exam, with a reason.
+ * Finalizing leaves them out until their exam is graded; an online exam is open to them that day.
+ */
+function MakeupExams(props: {
+  offeringId: string;
+  examOn: string;
+  /** Students whose result isn't finalized: only they can be given a makeup date. */
+  students: CourseResultRow[];
+  onChanged: () => Promise<unknown>;
+}) {
+  const queryClient = useQueryClient();
+  const key = ["makeup-exams", props.offeringId];
+  const list = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      api<typeof assessment.listMakeupExams>("GET", "/course-offerings/:id/makeup-exams", {
+        params: { id: props.offeringId },
+        signal,
+      }),
+  });
+  const { busy, problem, fieldErrors, run } = useSubmit();
+  const [removing, setRemoving] = useState<MakeupExam | null>(null);
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: key });
+    await props.onChanged();
+  };
+  return (
+    <section className="space-y-3" aria-label="Makeup exams">
+      <h2 className="text-heading">Makeup exams</h2>
+      {list.data && list.data.items.length > 0 ? (
+        <Card list role="list">
+          {list.data.items.map((m) => (
+            <div
+              key={m.studentId}
+              role="listitem"
+              className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+            >
+              <p className="text-body-sm">
+                {m.studentName} · <CalendarDate value={m.makeupOn} />
+                <span className="block text-meta text-ink-muted">{m.reason}</span>
+              </p>
+              <Button
+                size="sm"
+                variant="quiet"
+                aria-label={`Remove ${m.studentName}'s makeup exam`}
+                onClick={() => {
+                  setRemoving(m);
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+        </Card>
+      ) : (
+        <p className="text-body-sm text-ink-muted">Nobody has a makeup exam.</p>
+      )}
+      {props.students.length > 0 ? (
+        <form
+          className="grid gap-3 md:grid-cols-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const d = new FormData(form);
+            void run(async () => {
+              await api<typeof assessment.setMakeupExam>(
+                "PUT",
+                "/course-offerings/:id/makeup-exams/:studentId",
+                {
+                  params: { id: props.offeringId, studentId: formText(d, "studentId") },
+                  body: { makeupOn: formText(d, "makeupOn"), reason: formText(d, "reason") },
+                },
+              );
+              form.reset();
+              await refresh();
+            });
+          }}
+        >
+          {problem ? (
+            <div className="md:col-span-3">
+              <Banner tone="danger" title={problem.title}>
+                {problem.body}
+              </Banner>
+            </div>
+          ) : null}
+          <Select name="studentId" label="Student" required error={fieldErrors.studentId}>
+            {props.students.map((st) => (
+              <option key={st.studentId} value={st.studentId}>
+                {st.studentName}
+              </option>
+            ))}
+          </Select>
+          <TextField
+            name="makeupOn"
+            type="date"
+            label="Makeup exam on"
+            min={props.examOn}
+            required
+            error={fieldErrors.makeupOn}
+          />
+          <TextField name="reason" label="Reason" required error={fieldErrors.reason} />
+          <div className="md:col-span-3">
+            <Button type="submit" variant="secondary" loading={busy}>
+              Set makeup exam
+            </Button>
+          </div>
+        </form>
+      ) : null}
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null);
+        }}
+        title={`Remove ${removing?.studentName ?? ""}'s makeup exam?`}
+        confirmLabel="Remove"
+        tone="danger"
+        onConfirm={async () => {
+          if (removing === null) return;
+          await api<typeof assessment.removeMakeupExam>(
+            "DELETE",
+            "/course-offerings/:id/makeup-exams/:studentId",
+            { params: { id: props.offeringId, studentId: removing.studentId } },
+          );
+          setRemoving(null);
+          await refresh();
+        }}
+      >
+        Finalizing the course includes them again, with their exam grade as it stands.
+      </ConfirmDialog>
+    </section>
   );
 }
 
@@ -326,7 +469,7 @@ export function ResultsCoursesPage() {
                     <span className="font-mono text-code text-brand">{o.courseCode}</span> {o.title}
                   </span>
                   <span className="block text-meta text-ink-muted">
-                    {o.semesterName}, {o.sessionCode} · section {o.sectionCode}
+                    {o.cohortCode} · {o.startsOn} to {o.endsOn}
                   </span>
                 </span>
               </Link>
@@ -338,264 +481,199 @@ export function ResultsCoursesPage() {
   );
 }
 
-interface Cohort {
-  /** Null until the programme list has loaded: no action can be scoped to it yet. */
-  programmeId: string | null;
-  code: string;
-  /** Its Course Offerings this semester and how many are finalized. */
-  courses: { offerings: number; offeringsFinalized: number } | undefined;
-  rows: SemesterResultRow[];
-  summary: CohortSummary;
-}
-
-const STUDENT_STATUS: Record<SemesterResultRow["status"], { tone: Tone; word: string }> = {
-  DRAFT: { tone: "warning", word: "Provisional" },
-  APPROVED: { tone: "info", word: "Approved, not published" },
-  PUBLISHED: { tone: "success", word: "Published" },
+const STANDING_LABELS: Record<CohortResultRow["summary"]["standing"], string> = {
+  GOOD: "Good standing",
+  PROBATION: "Probation",
+  WITHDRAW_REQUIRED: "Below good standing",
+  UNKNOWN: "",
 };
 
-const students = (n: number) => `${String(n)} ${n === 1 ? "student's" : "students'"}`;
+type CohortOffering = CohortResults["offerings"][number];
 
-/** What confirming does, and to whom (§10.5): only the students it changes are counted. */
-function confirmText(s: CohortSummary, action: "approve" | "publish"): string {
-  const waiting =
-    s.blocked > 0 ? ` ${String(s.blocked)} with a reopened course result stay provisional.` : "";
-  return action === "approve"
-    ? `${students(s.ready + s.approved)} GPA and CGPA become official and they are told; official transcripts can include this semester.${waiting}`
-    : `${students(s.approved)} approved results are published and they are told.${waiting}`;
+/** Where an offering's results stand, as a word (UI-3). */
+function offeringState(o: CohortOffering): { tone: Tone; word: string } {
+  if (o.enrolled === 0) return { tone: "neutral", word: "No students" };
+  if (o.approved === o.enrolled) return { tone: "success", word: "Approved" };
+  if (o.finalized > o.approved) return { tone: "warning", word: "Ready to approve" };
+  if (o.finalized === 0) return { tone: "neutral", word: "Not finalized" };
+  return { tone: "info", word: "Partly finalized" };
 }
 
 /**
- * The Registrar's semester results (TRD §14.5; handoff §11.10): each cohort's state with its next
- * step ("Approve and publish"), the students' results, and transcript requests alongside
- * (decision UI-Q8). Compute runs first, from finalized course results. Cohorts are programmes,
- * with their levels and how many of their courses are finalized (ui #06).
+ * The Registrar's cohort results (TRD §14.5, ADR-0005; handoff §11.10): each offering's results
+ * from finalized to approved, with Approve per offering or for the whole cohort, the students'
+ * results and CGPA, and transcript requests alongside (decision UI-Q8). A CGPA stays Provisional
+ * until every result it counts is approved.
  */
-export function SemesterResultsPage() {
+export function CohortResultsPage() {
   const queryClient = useQueryClient();
-  const canTranscripts = useHolds("REGISTRAR", "SYSTEM_ADMIN");
-  const sessions = useQuery({
-    queryKey: ["academic-sessions"],
-    queryFn: ({ signal }) =>
-      api<typeof calendar.listAcademicSessions>("GET", "/academic-sessions", { signal }),
+  const canApprove = useHolds("REGISTRAR", "SYSTEM_ADMIN");
+  const cohortList = useQuery({
+    queryKey: ["cohorts"],
+    queryFn: ({ signal }) => api<typeof cohorts.listCohorts>("GET", "/cohorts", { signal }),
   });
-  const semesters = useQuery({
-    queryKey: ["semesters", "all"],
+  const [chosen, setChosen] = useState("");
+  const cohortId = chosen === "" ? (cohortList.data?.items[0]?.id ?? "") : chosen;
+  const view = useQuery({
+    queryKey: ["cohort-results", cohortId],
+    enabled: cohortId !== "",
     queryFn: ({ signal }) =>
-      api<typeof calendar.listSemesters>("GET", "/semesters", { query: {}, signal }),
-  });
-  const programmes = useQuery({
-    queryKey: ["programmes"],
-    queryFn: ({ signal }) => api<typeof academic.listProgrammes>("GET", "/programmes", { signal }),
-  });
-  const [semesterId, setSemesterId] = useState("");
-  const [programmeId, setProgrammeId] = useState("");
-  const list = useQuery({
-    queryKey: ["semester-results", semesterId],
-    enabled: semesterId !== "",
-    queryFn: ({ signal }) =>
-      api<typeof results.listSemesterResults>("GET", "/results/semesters", {
-        query: { semesterId },
+      api<typeof results.getCohortResults>("GET", "/results/cohorts/:id", {
+        params: { id: cohortId },
         signal,
       }),
   });
-  const { busy, problem, run } = useSubmit();
   const [message, setMessage] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ cohort: Cohort; action: "approve" | "publish" } | null>(
-    null,
-  );
-  const sessionCode = (id: string) => sessions.data?.items.find((x) => x.id === id)?.code ?? "";
-  const options = [...(semesters.data?.items ?? [])].sort((a, b) =>
-    b.startsOn.localeCompare(a.startsOn),
-  );
-  const semester = options.find((s) => s.id === semesterId);
-  const all = list.data?.items ?? [];
-  const programmeIdOf = (code: string) => programmes.data?.items.find((p) => p.code === code)?.id;
-  // The programme filter applies to everything on the page: cohorts, students, Compute, CSV.
-  const shown =
-    programmeId === "" ? all : all.filter((r) => programmeIdOf(r.programmeCode) === programmeId);
-  const cohorts: Cohort[] = [...new Set(shown.map((r) => r.programmeCode))].sort().map((code) => {
-    const rows = shown.filter((r) => r.programmeCode === code);
-    return {
-      code,
-      programmeId: programmeIdOf(code) ?? null,
-      courses: list.data?.courses.find((x) => x.programmeCode === code),
-      rows,
-      summary: summarize(rows),
-    };
-  });
-  const ready = cohorts.filter((c) => cohortState(c.summary).next === "approve").length;
-  const scope = { semesterId, ...(programmeId === "" ? {} : { programmeId }) };
-  const headers = () => ({ "idempotency-key": crypto.randomUUID() });
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["semester-results"] });
-  const broadsheet = `/api/v1/reports/results?${new URLSearchParams({ semesterId, ...(programmeId === "" ? {} : { programmeId }), format: "csv" }).toString()}`;
-
-  const compute = () => {
-    void run(async () => {
-      setMessage(null);
-      const r = await api<typeof results.computeSemesterResults>(
-        "POST",
-        "/results/semesters/compute",
-        { body: scope, headers: headers() },
-      );
-      setMessage(`Computed ${String(r.computed)}; ${String(r.changed)} changed.`);
-      await refresh();
-    });
-  };
+  const [confirm, setConfirm] = useState<
+    { scope: "cohort" } | { scope: "offering"; offering: CohortOffering } | null
+  >(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["cohort-results"] });
+  const broadsheet = `/api/v1/reports/results?${new URLSearchParams({ cohortId, format: "csv" }).toString()}`;
+  const data = view.data;
+  const ready = data?.offerings.filter((o) => o.finalized > o.approved) ?? [];
   return (
     <div className="space-y-5">
       <PageHeader
         overline="Registrar"
-        title="Semester results"
+        title="Cohort results"
         meta={
-          semester
-            ? `${sessionCode(semester.academicSessionId)} · ${semester.name} · best attempt counts`
-            : "Choose a semester to compute, approve and publish its results."
+          data
+            ? `${data.cohort.name} · best attempt counts`
+            : "Choose a cohort to approve its results."
         }
         actions={
-          semesterId === "" ? undefined : (
+          cohortId === "" ? undefined : (
             <a href={broadsheet} download className={buttonClass({ variant: "secondary" })}>
               Broadsheet (CSV)
             </a>
           )
         }
       />
-      <div className="grid gap-3 md:grid-cols-2">
-        <Select
-          label="Semester"
-          value={semesterId}
-          onChange={(e) => {
-            setSemesterId(e.target.value);
-            setMessage(null);
-          }}
-          hint={
-            semesters.isSuccess && options.length === 0 ? (
-              <SetupHint missing="No semesters yet." fix="add one" place="calendar" />
-            ) : undefined
-          }
-        >
-          <option value="">Choose…</option>
-          {options.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}, {sessionCode(s.academicSessionId)}
-            </option>
-          ))}
-        </Select>
-        <Select
-          label="Programme"
-          value={programmeId}
-          onChange={(e) => {
-            setProgrammeId(e.target.value);
-          }}
-        >
-          <option value="">All programmes</option>
-          {(programmes.data?.items ?? []).map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.code}
-            </option>
-          ))}
-        </Select>
-      </div>
-      {problem ? (
-        <Banner tone="danger" title={problem.title}>
-          {problem.body}
-        </Banner>
-      ) : null}
+      <Select
+        label="Cohort"
+        value={cohortId}
+        onChange={(e) => {
+          setChosen(e.target.value);
+          setMessage(null);
+        }}
+        hint={
+          cohortList.isSuccess && cohortList.data.items.length === 0
+            ? "A cohort appears once the first applicant of an intake accepts their offer."
+            : undefined
+        }
+      >
+        {(cohortList.data?.items ?? []).map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.code} · {c.name}
+          </option>
+        ))}
+      </Select>
       {message ? <Banner tone="success">{message}</Banner> : null}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          {semesterId === "" ? null : list.isPending ? (
-            <SkeletonGroup label="Loading semester results">
+          {cohortId === "" ? null : view.isPending ? (
+            <SkeletonGroup label="Loading the cohort's results">
               <Skeleton className="h-40" />
             </SkeletonGroup>
-          ) : list.isError ? (
-            <LoadFailed what="the semester results" onRetry={() => void list.refetch()} />
+          ) : view.isError ? (
+            <LoadFailed what="the cohort's results" onRetry={() => void view.refetch()} />
           ) : (
             <>
-              {ready > 0 ? (
+              {canApprove && ready.length > 0 ? (
                 <Banner
                   tone="warning"
-                  title={`${String(ready)} ${ready === 1 ? "cohort is" : "cohorts are"} ready to approve`}
+                  title={`${String(ready.length)} ${ready.length === 1 ? "course has" : "courses have"} results to approve`}
                 >
-                  Approving makes students' GPA and CGPA official, and official transcripts can
-                  include this semester.
+                  Approving makes them official: transcripts and awards can include them, and
+                  students' CGPA stops being provisional once all their results are approved.
                 </Banner>
               ) : null}
               <section className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-heading">Cohorts</h2>
-                  <Button variant="secondary" loading={busy} onClick={compute}>
-                    Compute
-                  </Button>
+                  <h2 className="text-heading">Courses</h2>
+                  {canApprove && ready.length > 0 ? (
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        setConfirm({ scope: "cohort" });
+                      }}
+                    >
+                      Approve all
+                    </Button>
+                  ) : null}
                 </div>
-                {cohorts.length === 0 ? (
-                  <EmptyState icon="award" title="No semester results yet">
-                    Compute them once course results are finalized.
+                {view.data.offerings.length === 0 ? (
+                  <EmptyState icon="award" title="No courses scheduled yet">
+                    Results appear here as each of the cohort's courses is finalized.
                   </EmptyState>
                 ) : (
-                  <DataTable caption="Cohorts" minWidth="min-w-160">
+                  <DataTable caption="Courses" minWidth="min-w-160">
                     <thead>
                       <tr>
                         <th scope="col" className={cn(headCell, stickyCell, "bg-surface-sunken")}>
-                          Programme
+                          Course
                         </th>
                         <th scope="col" className={cn(headCell, numericCell)}>
-                          Students
+                          Finalized
                         </th>
                         <th scope="col" className={cn(headCell, numericCell)}>
-                          Courses finalized
+                          Approved
                         </th>
                         <th scope="col" className={headCell}>
                           Status
                         </th>
-                        <th scope="col" className={headCell}>
-                          Action
-                        </th>
+                        {canApprove ? (
+                          <th scope="col" className={headCell}>
+                            <span className="sr-only">Actions</span>
+                          </th>
+                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {cohorts.map((c) => {
-                        const state = cohortState(c.summary);
+                      {view.data.offerings.map((o) => {
+                        const state = offeringState(o);
                         return (
-                          <tr key={c.code}>
+                          <tr key={o.offeringId}>
                             <th
                               scope="row"
-                              className={cn(
-                                bodyCell,
-                                stickyCell,
-                                "text-left font-mono font-semibold",
-                              )}
+                              className={cn(bodyCell, stickyCell, "text-left font-normal")}
                             >
-                              {cohortLabel(c.code, c.summary.levels)}
+                              <Link
+                                to="/course-results/$offeringId"
+                                params={{ offeringId: o.offeringId }}
+                                className="block text-subhead text-brand underline-offset-2 hover:underline"
+                              >
+                                <span className="font-mono">{o.courseCode}</span> {o.title}
+                              </Link>
+                              <span className="block text-meta text-ink-muted">
+                                ended {o.endsOn}
+                              </span>
                             </th>
-                            <td className={cn(bodyCell, numericCell)}>{c.summary.total}</td>
                             <td className={cn(bodyCell, numericCell)}>
-                              {c.courses === undefined
-                                ? "–"
-                                : `${String(c.courses.offeringsFinalized)} of ${String(c.courses.offerings)}`}
+                              {o.finalized} of {o.enrolled}
+                            </td>
+                            <td className={cn(bodyCell, numericCell)}>
+                              {o.approved} of {o.enrolled}
                             </td>
                             <td className={bodyCell}>
                               <Badge tone={state.tone}>{state.word}</Badge>
-                              {state.note ? (
-                                <span className="block pt-1 text-meta text-ink-muted">
-                                  {state.note}
-                                </span>
-                              ) : null}
                             </td>
-                            <td className={bodyCell}>
-                              {state.next !== null && c.programmeId !== null ? (
-                                <Button
-                                  size="sm"
-                                  variant="primary"
-                                  onClick={() => {
-                                    if (state.next !== null)
-                                      setConfirm({ cohort: c, action: state.next });
-                                  }}
-                                >
-                                  {state.next === "approve" ? "Approve and publish" : "Publish"}
-                                </Button>
-                              ) : null}
-                            </td>
+                            {canApprove ? (
+                              <td className={bodyCell}>
+                                {o.finalized > o.approved ? (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    aria-label={`Approve ${o.courseCode}`}
+                                    onClick={() => {
+                                      setConfirm({ scope: "offering", offering: o });
+                                    }}
+                                  >
+                                    Approve
+                                  </Button>
+                                ) : null}
+                              </td>
+                            ) : null}
                           </tr>
                         );
                       })}
@@ -603,20 +681,22 @@ export function SemesterResultsPage() {
                   </DataTable>
                 )}
               </section>
-              {shown.length > 0 ? (
+              {view.data.items.length > 0 ? (
                 <section className="space-y-3">
                   <h2 className="text-heading">Students</h2>
-                  <DataTable caption="Semester results" minWidth="min-w-205">
+                  <DataTable caption="Students' results" minWidth="min-w-205">
                     <thead>
                       <tr>
                         <th scope="col" className={cn(headCell, stickyCell, "bg-surface-sunken")}>
                           Student
                         </th>
+                        {view.data.offerings.map((o) => (
+                          <th key={o.offeringId} scope="col" className={cn(headCell, "font-mono")}>
+                            {o.courseCode}
+                          </th>
+                        ))}
                         <th scope="col" className={cn(headCell, numericCell)}>
                           Credits
-                        </th>
-                        <th scope="col" className={cn(headCell, numericCell)}>
-                          GPA
                         </th>
                         <th scope="col" className={cn(headCell, numericCell)}>
                           CGPA
@@ -624,38 +704,42 @@ export function SemesterResultsPage() {
                         <th scope="col" className={headCell}>
                           Standing
                         </th>
-                        <th scope="col" className={headCell}>
-                          Status
-                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {shown.map((x) => (
-                        <tr key={x.id}>
+                      {view.data.items.map((x) => (
+                        <tr key={x.programmeEnrollmentId}>
                           <th
                             scope="row"
                             className={cn(bodyCell, stickyCell, "text-left font-normal")}
                           >
                             <span className="block text-subhead">{x.studentName}</span>
                             <span className="block text-meta text-ink-muted">
-                              {x.matricNumber} · {x.programmeCode}
+                              {x.matricNumber}
                             </span>
                           </th>
+                          {view.data.offerings.map((o) => {
+                            const result = x.results[o.offeringId];
+                            return (
+                              <td key={o.offeringId} className={cn(bodyCell, "font-mono")}>
+                                {result === undefined
+                                  ? "–"
+                                  : (result.letter ?? KIND_LABELS[result.resultKind])}
+                              </td>
+                            );
+                          })}
                           <td className={cn(bodyCell, numericCell)}>
-                            {credits(x.creditsEarnedX10)}/{credits(x.creditsAttemptedX10)}
+                            {credits(x.summary.creditsEarnedX10)}/
+                            {credits(x.summary.creditsAttemptedX10)}
                           </td>
-                          <td className={cn(bodyCell, numericCell)}>{hundredths(x.gpaX100)}</td>
-                          <td className={cn(bodyCell, numericCell)}>{hundredths(x.cgpaX100)}</td>
-                          <td className={bodyCell}>{STANDING_LABELS[x.standing] || "–"}</td>
-                          <td className={bodyCell}>
-                            <Badge tone={STUDENT_STATUS[x.status].tone}>
-                              {STUDENT_STATUS[x.status].word}
-                            </Badge>
-                            {x.draftCourseResults > 0 ? (
-                              <span className="ml-2 text-meta text-ink-muted">
-                                a course result is reopened
-                              </span>
+                          <td className={cn(bodyCell, numericCell)}>
+                            {hundredths(x.summary.cgpaX100)}
+                            {x.summary.provisional && x.summary.cgpaX100 !== null ? (
+                              <span className="block text-meta text-ink-muted">Provisional</span>
                             ) : null}
+                          </td>
+                          <td className={bodyCell}>
+                            {STANDING_LABELS[x.summary.standing] || "–"}
                           </td>
                         </tr>
                       ))}
@@ -666,7 +750,7 @@ export function SemesterResultsPage() {
             </>
           )}
         </div>
-        {canTranscripts ? <TranscriptRequests /> : null}
+        {canApprove ? <TranscriptRequests /> : null}
       </div>
       <ConfirmDialog
         open={confirm !== null}
@@ -674,35 +758,26 @@ export function SemesterResultsPage() {
           if (!open) setConfirm(null);
         }}
         title={
-          confirm?.action === "publish"
-            ? `Publish ${confirm.cohort.code}?`
-            : `Approve ${confirm?.cohort.code ?? ""}?`
+          confirm?.scope === "offering"
+            ? `Approve ${confirm.offering.courseCode}'s results?`
+            : `Approve ${data?.cohort.code ?? "the cohort"}'s results?`
         }
-        confirmLabel={confirm?.action === "publish" ? "Publish" : "Approve and publish"}
+        confirmLabel="Approve"
         onConfirm={async () => {
-          if (confirm === null || confirm.cohort.programmeId === null) return;
-          const body = { semesterId, programmeId: confirm.cohort.programmeId };
-          const approved =
-            confirm.action === "approve"
-              ? await api<typeof results.approveSemesterResults>(
-                  "POST",
-                  "/results/semesters/approve",
-                  { body, headers: headers() },
-                )
-              : null;
-          const published = await api<typeof results.publishSemesterResults>(
-            "POST",
-            "/results/semesters/publish",
-            { body, headers: headers() },
-          );
+          if (confirm === null) return;
+          const body =
+            confirm.scope === "offering"
+              ? { offeringId: confirm.offering.offeringId }
+              : { cohortId };
+          const r = await api<typeof results.approveResults>("POST", "/results/approve", {
+            body,
+            headers: { "idempotency-key": crypto.randomUUID() },
+          });
           setConfirm(null);
           setMessage(
             [
-              approved ? `Approved ${String(approved.approved)} and published` : "Published",
-              `${String(published.published)}. Students have been told.`,
-              approved && approved.skipped > 0
-                ? `${String(approved.skipped)} wait for a reopened course result.`
-                : "",
+              `Approved ${String(r.approved)} ${r.approved === 1 ? "result" : "results"}. Students have been told.`,
+              r.skipped > 0 ? `${String(r.skipped)} reopened ones wait to be finalized again.` : "",
             ]
               .filter(Boolean)
               .join(" "),
@@ -710,7 +785,8 @@ export function SemesterResultsPage() {
           await refresh();
         }}
       >
-        {confirm ? confirmText(confirm.cohort.summary, confirm.action) : ""}
+        Finalized results become official: transcripts and awards can include them. Reopened
+        results are left until they're finalized again.
       </ConfirmDialog>
     </div>
   );

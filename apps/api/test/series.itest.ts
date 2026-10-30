@@ -113,8 +113,9 @@ describe("creating a weekly series", () => {
     }>();
     series = body.series;
     meetings = body.meetings;
+    // A series stops at its offering's last day (ADR-0005).
     expect(series).toMatchObject({
-      rrule: "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE",
+      rrule: "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE;UNTIL=20991231",
       timezone: "Africa/Lagos",
       startTime: "09:00",
       durationMinutes: 120,

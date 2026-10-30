@@ -1,6 +1,7 @@
 import type { Offering } from "@glim/contracts";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { CalendarDate } from "../time";
 import { cardClass } from "../ui/card";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -41,7 +42,7 @@ export function CourseCard({
       <div className="flex items-center justify-between gap-2 bg-brand-soft px-4 py-3">
         <span className="font-mono text-code font-semibold text-brand">
           {offering.courseCode}
-          {teaching ? ` · ${offering.sectionCode}` : ""}
+          {teaching ? ` · ${offering.cohortCode}` : ""}
         </span>
         {badge}
       </div>
@@ -53,7 +54,8 @@ export function CourseCard({
           </p>
         ) : null}
         <p className="text-body-sm text-ink-muted">
-          {offering.semesterName}, {offering.sessionCode} · {offering.credits} credits
+          <CalendarDate value={offering.startsOn} /> to <CalendarDate value={offering.endsOn} /> ·
+          exam <CalendarDate value={offering.examOn} /> · {offering.credits} credits
         </p>
       </div>
     </Link>

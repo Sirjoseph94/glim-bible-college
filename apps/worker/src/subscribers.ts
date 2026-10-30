@@ -30,13 +30,6 @@ export function createSubscribers(context: INestApplicationContext): SubscriberR
     "course.enrollment.ended": [resync],
     "lecturing.assignment.created": [resync],
     "lecturing.assignment.ended": [resync],
-    // Year 1 → Year 2 progression when an Academic Session is activated (§9.1, D-03).
-    "academic.session.activated": [
-      async (event) => {
-        const { sessionId } = event.payload as { sessionId: string };
-        await db.withTx(({ boss }) => boss.send("academic.progression", { sessionId }));
-      },
-    ],
     // A class that ended is finalized after the finalize delay (§12.6).
     "meeting.ended": [
       async (event) => {
@@ -50,25 +43,10 @@ export function createSubscribers(context: INestApplicationContext): SubscriberR
         const p = event.payload as {
           programmeEnrollmentId: string;
           courseCode: string;
-          sessionCode: string;
-          semesterName: string;
+          completedOn: string;
           reason: string;
         };
         await transcripts.supersedeFor({ ...p, reason: `Result reopened: ${p.reason}` });
-      },
-    ],
-    // Semester results are computed when the semester closes (§14.5).
-    "academic.semester.closed": [
-      async (event) => {
-        const { semesterId } = event.payload as { semesterId: string };
-        await db.withTx(({ boss }) => boss.send("results.compute-semester", { semesterId }));
-      },
-    ],
-    // Compulsory courses are registered when a semester opens registration (§9.3).
-    "academic.semester.registration-opened": [
-      async (event) => {
-        const { semesterId } = event.payload as { semesterId: string };
-        await db.withTx(({ boss }) => boss.send("semester.open-registration", { semesterId }));
       },
     ],
   };

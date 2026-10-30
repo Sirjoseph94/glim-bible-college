@@ -4,10 +4,6 @@ The school management system for GLIM Online Bible College (Gospel Light Interna
 
 ## Academic calendar
 
-**Academic Session**:
-One academic year (e.g. "2026/2027 Session"), divided into semesters.
-_Avoid_: Academic year, school year, session (unqualified)
-
 **Class Meeting**:
 One scheduled occurrence of a class for a course offering, held in a room, on Google Meet, or both at once.
 _Avoid_: Live session, lecture, session (unqualified)
@@ -23,32 +19,36 @@ _Avoid_: Register, sign-in sheet
 ## Programmes and awards
 
 **Programme**:
-A course of study leading to an award: the one-year Certificate or the two-year Diploma.
+The Diploma: the full set of courses a student takes, one after another, leading to the Certificate at the halfway point and the Diploma at the end.
 _Avoid_: Course (a course is one subject within a programme)
 
 **Award**:
-The Certificate or Diploma conferred on a student who completes a programme.
+What the college confers on a student: the Certificate once they have earned half the programme's credits, and the Diploma once they have completed every course.
 _Avoid_: Degree
 
 **Award Class**:
-The classification printed on an award, determined by final CGPA (e.g. Distinction, Credit, Pass).
+The classification printed on an award, determined by the student's CGPA when the award is conferred (e.g. Distinction, Credit, Pass).
 _Avoid_: Degree class, honours class
 
 **Course Offering**:
-A course taught in a particular semester, with its lecturers, Class Meetings and enrolled students.
-_Avoid_: Class, section (a section is one split of an offering)
+One run of a course between its own start and end dates, with its exam date, lecturers, Class Meetings and enrolled students. Courses are taught one after another, not side by side in a semester.
+_Avoid_: Class, section (a section is one split of an offering), module
 
-**Compulsory Course**:
-A course every student of a programme takes at their Level and semester; registered automatically.
-_Avoid_: Core course, required course
+**Curriculum**:
+The courses that make up the programme, with their credits and default order.
+_Avoid_: Syllabus, course list
 
-**Elective Course**:
-A course a student may choose from those offered to their Level and semester.
-_Avoid_: Optional course
+**Cohort Schedule**:
+One cohort's course offerings, in the order and on the dates the Academic Admin sets; it starts from the curriculum's order.
+_Avoid_: Timetable, semester plan
 
-**Level**:
-A student's year of study within a programme: Year 1 or Year 2.
-_Avoid_: 100L/200L, class, form
+**Makeup Exam**:
+A later exam date the Lecturer sets for one student who missed a course's exam.
+_Avoid_: Resit, retake
+
+**Retake**:
+Taking a failed course again, in a later offering.
+_Avoid_: Resit, repeat (unqualified)
 
 ## People
 
@@ -71,7 +71,7 @@ A staff member who reviews applications and decides admission.
 A staff member who approves and publishes results, issues transcripts and confers awards.
 
 **Academic Admin**:
-A staff member who sets up sessions, semesters, curricula, course offerings, lecturer assignments and enrollments.
+A staff member who sets up curricula, each cohort's course offerings and dates, lecturer assignments and enrollments.
 
 ## Admissions
 
@@ -88,8 +88,8 @@ The college's admission of an applicant, which the applicant must accept within 
 _Avoid_: Admission letter
 
 **Intake**:
-The college's single yearly admission cycle (applications open November, close June); everyone admitted in it starts together.
-_Avoid_: Admission batch, set
+An admission cycle with its own application dates and a start date; there may be several a year. Everyone admitted in it starts together as one cohort.
+_Avoid_: Admission batch, set, semester
 
 **Study Mode**:
 Whether a student is registered to study On-campus or Online; chosen on the application. How they attended a given Class Meeting is recorded separately.

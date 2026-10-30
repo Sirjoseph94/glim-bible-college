@@ -1,7 +1,7 @@
 import type { CurrentIntake } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { currentIntakeQuery, programmeLength } from "../api/intake";
+import { currentIntakeQuery, PROGRAMME_SHAPE } from "../api/intake";
 import { meQuery } from "../api/session";
 import { IntakeStatus } from "../components/app/intake-status";
 import { PageHeader } from "../components/app/page-header";
@@ -44,7 +44,7 @@ export function ApplyPage() {
               <li key={p.id}>
                 <Card className="h-full space-y-1">
                   <h2 className="text-heading text-ink">{p.name}</h2>
-                  <p className="text-body-sm text-ink-muted">{programmeLength(p)}</p>
+                  <p className="text-body-sm text-ink-muted">{PROGRAMME_SHAPE}</p>
                 </Card>
               </li>
             ))}

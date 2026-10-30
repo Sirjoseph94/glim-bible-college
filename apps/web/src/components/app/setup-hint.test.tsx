@@ -24,7 +24,7 @@ function render(staff: StaffRole[]) {
   return renderToStaticMarkup(
     <RouterContextProvider router={router}>
       <QueryClientProvider client={client}>
-        <SetupHint missing="No upcoming Academic Session yet." fix="create one" place="calendar" />
+        <SetupHint missing="No Rooms yet." fix="add one" place="rooms" />
       </QueryClientProvider>
     </RouterContextProvider>,
   );
@@ -33,14 +33,14 @@ function render(staff: StaffRole[]) {
 describe("SetupHint", () => {
   it("links to the page that fixes it when the viewer can open that page", () => {
     const html = render(["ACADEMIC_ADMIN"]);
-    expect(html).toContain("No upcoming Academic Session yet. Create one on the");
-    expect(html).toMatch(/<a[^>]*href="\/admin\/calendar"[^>]*>Academic calendar<\/a>/);
+    expect(html).toContain("No Rooms yet. Add one on the");
+    expect(html).toMatch(/<a[^>]*href="\/admin\/rooms"[^>]*>Rooms<\/a>/);
   });
 
   it("says who to ask, without a link, when the viewer can't open that page", () => {
     const html = render(["ADMISSIONS_OFFICER"]);
     expect(html).toContain(
-      "No upcoming Academic Session yet. Ask an Academic Admin to create one on the Academic calendar page.",
+      "No Rooms yet. Ask an Academic Admin to add one on the Rooms page.",
     );
     expect(html).not.toContain("<a");
   });

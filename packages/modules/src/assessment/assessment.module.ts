@@ -8,6 +8,7 @@ import { AssignmentsService } from "./assignments.service";
 import { ExamsService } from "./exams.service";
 import { GradebookService } from "./gradebook.service";
 import { GradesService } from "./grades.service";
+import { MakeupsService } from "./makeups.service";
 import { QuizAttemptsService } from "./quiz-attempts.service";
 import { QuizzesService } from "./quizzes.service";
 import { SubmissionsService } from "./submissions.service";
@@ -56,6 +57,7 @@ const services = [
   ExamsService,
   QuizzesService,
   QuizAttemptsService,
+  MakeupsService,
 ];
 
 /** Assessment (TRD §14.2): gradebook columns, assignments, submissions and grades. */

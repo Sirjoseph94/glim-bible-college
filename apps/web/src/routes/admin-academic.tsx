@@ -20,7 +20,7 @@ import {
 } from "../components/ui/data-table";
 import { Sheet } from "../components/ui/dialog";
 import { EmptyState } from "../components/ui/empty-state";
-import { Select, TextField } from "../components/ui/field";
+import { TextField } from "../components/ui/field";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 
@@ -124,8 +124,9 @@ function Programmes() {
                     {programme.code} · {programme.name}
                   </h3>
                   <p className="text-meta text-ink-muted">
-                    {programme.awardType === "DIPLOMA" ? "Diploma" : "Certificate"} ·{" "}
-                    {programme.levels} Level(s) · {programme.durationSemesters} semesters
+                    {programme.status === "ARCHIVED"
+                      ? "Archived"
+                      : "Courses one at a time · Certificate halfway, Diploma at the end"}
                   </p>
                 </div>
                 {curricula.isError ? (
@@ -210,9 +211,6 @@ function AddProgrammeSheet({
               body: {
                 code: formText(data, "code"),
                 name: formText(data, "name"),
-                awardType: formText(data, "awardType") as "CERTIFICATE" | "DIPLOMA",
-                levels: Number(formText(data, "levels")),
-                durationSemesters: Number(formText(data, "levels")) * 2,
               },
             });
             await queryClient.invalidateQueries({ queryKey: ["programmes"] });
@@ -227,21 +225,6 @@ function AddProgrammeSheet({
         ) : null}
         <TextField name="code" label="Code (e.g. DIP)" required error={fieldErrors.code} />
         <TextField name="name" label="Name" required error={fieldErrors.name} />
-        <Select name="awardType" label="Award" error={fieldErrors.awardType}>
-          <option value="CERTIFICATE">Certificate</option>
-          <option value="DIPLOMA">Diploma</option>
-        </Select>
-        <TextField
-          name="levels"
-          type="number"
-          min={1}
-          max={4}
-          label="Levels (years)"
-          hint="Two semesters per Level."
-          defaultValue={1}
-          required
-          error={fieldErrors.levels}
-        />
       </form>
     </Sheet>
   );

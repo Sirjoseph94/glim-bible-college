@@ -59,7 +59,7 @@ const AREAS: Area[] = [
     covers: ["/courses", "/registration", "/assignments", "/quizzes", "/recordings"],
     pages: [
       { label: "My courses", to: "/courses" },
-      { label: "Registration", to: "/registration" },
+      { label: "Course schedule", to: "/registration" },
     ],
   },
   { label: "Teaching", to: "/teach", icon: "book", shows: (r) => r.isLecturer, covers: ["/teach"] },
@@ -106,30 +106,32 @@ const AREAS: Area[] = [
     covers: [
       "/admin/academic",
       "/admin/curricula",
-      "/admin/calendar",
+      "/admin/cohorts",
+      "/admin/rooms",
       "/admin/offerings",
       "/admin/lecturers",
       "/admin/imports",
     ],
     pages: [
       { label: "Setup", to: "/admin/academic" },
-      { label: "Calendar", to: "/admin/calendar" },
+      { label: "Cohorts", to: "/admin/cohorts" },
       { label: "Offerings", to: "/admin/offerings" },
+      { label: "Rooms", to: "/admin/rooms" },
       { label: "Lecturers", to: "/admin/lecturers" },
       { label: "Imports", to: "/admin/imports" },
     ],
   },
   {
     label: "Results",
-    to: "/results/semesters",
+    to: "/results/cohorts",
     icon: "award",
     shows: staff("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
-    covers: ["/results/courses", "/results/semesters", "/results/awards", "/results/transcripts"],
+    covers: ["/results/courses", "/results/cohorts", "/results/awards", "/results/transcripts"],
     exactly: ["/admin/grading-schemes"],
     pages: [
       { label: "Course results", to: "/results/courses" },
-      // Transcript requests are on Semester results (decision UI-Q8).
-      { label: "Semester results", to: "/results/semesters" },
+      // Transcript requests are on Cohort results (decision UI-Q8).
+      { label: "Cohort results", to: "/results/cohorts" },
       { label: "Awards", to: "/results/awards", staff: ["SYSTEM_ADMIN", "REGISTRAR"] },
       {
         label: "Grading schemes",

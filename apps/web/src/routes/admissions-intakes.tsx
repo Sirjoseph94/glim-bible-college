@@ -1,10 +1,9 @@
-import type { admissions, calendar, Intake } from "@glim/contracts";
+import type { admissions, Intake } from "@glim/contracts";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api } from "../api/client";
 import { PageHeader } from "../components/app/page-header";
 import { LoadFailed } from "../components/app/page-states";
-import { SetupHint } from "../components/app/setup-hint";
 import { formText } from "../components/form";
 import { CalendarDate } from "../components/time";
 import { Badge, type Tone } from "../components/ui/badge";
@@ -13,18 +12,13 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConfirmDialog, Sheet } from "../components/ui/dialog";
 import { EmptyState } from "../components/ui/empty-state";
-import { Select, TextField } from "../components/ui/field";
+import { TextField } from "../components/ui/field";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 
 const intakesQuery = queryOptions({
   queryKey: ["intakes"],
   queryFn: ({ signal }) => api<typeof admissions.listIntakes>("GET", "/intakes", { signal }),
-});
-const sessionsQuery = queryOptions({
-  queryKey: ["academic-sessions"],
-  queryFn: ({ signal }) =>
-    api<typeof calendar.listAcademicSessions>("GET", "/academic-sessions", { signal }),
 });
 
 type Transition = typeof admissions.openIntake;
@@ -39,7 +33,7 @@ const INTAKE_STATUS: Record<Intake["status"], { tone: Tone; word: string }> = {
   CLOSED: { tone: "neutral", word: "Closed" },
 };
 
-/** The yearly intake for the Admissions Officer (TRD §10.1). */
+/** Intakes for the Admissions Officer (TRD §10.1, ADR-0005): as many a year as the college runs. */
 export function AdmissionsIntakesPage() {
   const intakes = useQuery(intakesQuery);
   const queryClient = useQueryClient();
@@ -61,7 +55,7 @@ export function AdmissionsIntakesPage() {
     <div className="space-y-5">
       <PageHeader
         title="Intakes"
-        meta="When applications open and close each year."
+        meta="When applications open and close, and when each intake's cohort starts."
         actions={
           <Button
             variant="primary"
@@ -98,7 +92,7 @@ export function AdmissionsIntakesPage() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-subhead text-ink">
-                  Intake {i.code} · {i.academicSessionName}
+                  Intake {i.code} · starts <CalendarDate value={i.startsOn} />
                 </p>
                 <Badge tone={INTAKE_STATUS[i.status].tone}>{INTAKE_STATUS[i.status].word}</Badge>
               </div>
@@ -185,8 +179,6 @@ function PlanIntake({
   onOpenChange: (open: boolean) => void;
   onPlanned: () => Promise<void>;
 }) {
-  const sessions = useQuery({ ...sessionsQuery, enabled: open });
-  const planned = sessions.data?.items.filter((s) => s.status === "PLANNED") ?? [];
   const formId = useId();
   const { busy, problem, fieldErrors, run } = useSubmit();
   return (
@@ -194,7 +186,7 @@ function PlanIntake({
       open={open}
       onOpenChange={onOpenChange}
       title="Plan an intake"
-      description="Applications open in November and close in June, before the Academic Session starts."
+      description="Intakes' application dates can't overlap. Everyone admitted starts together on the start date."
       footer={
         <Button type="submit" form={formId} variant="primary" block loading={busy}>
           Plan intake
@@ -212,9 +204,9 @@ function PlanIntake({
             await api<typeof admissions.createIntake>("POST", "/intakes", {
               body: {
                 code: formText(d, "code"),
-                academicSessionId: formText(d, "academicSessionId"),
                 opensOn: formText(d, "opensOn"),
                 closesOn: formText(d, "closesOn"),
+                startsOn: formText(d, "startsOn"),
               },
             });
             form.reset();
@@ -227,49 +219,33 @@ function PlanIntake({
             {problem.body}
           </Banner>
         ) : null}
-        {sessions.isError ? (
-          <LoadFailed what="the Academic Sessions" onRetry={() => void sessions.refetch()} />
-        ) : null}
         <TextField
           name="code"
-          label="Intake (year students start, e.g. 2027)"
+          label="Intake (start year, e.g. 2027 or 2027-JAN)"
           required
           error={fieldErrors.code}
         />
-        <Select
-          name="academicSessionId"
-          label="Academic Session students start in"
-          required
-          error={fieldErrors.academicSessionId}
-          hint={
-            sessions.isSuccess && planned.length === 0 ? (
-              <SetupHint
-                missing="No upcoming Academic Session yet."
-                fix="create one"
-                place="calendar"
-              />
-            ) : undefined
-          }
-        >
-          {planned.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
         <TextField
           name="opensOn"
           type="date"
-          label="Applications open (November)"
+          label="Applications open"
           required
           error={fieldErrors.opensOn}
         />
         <TextField
           name="closesOn"
           type="date"
-          label="Applications close (June)"
+          label="Applications close"
           required
           error={fieldErrors.closesOn}
+        />
+        <TextField
+          name="startsOn"
+          type="date"
+          label="Cohort starts"
+          hint="The first course can't start before this day."
+          required
+          error={fieldErrors.startsOn}
         />
       </form>
     </Sheet>

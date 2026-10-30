@@ -5,6 +5,7 @@ import * as attendance from "./attendance";
 import * as audit from "./audit";
 import * as auth from "./auth";
 import * as calendar from "./calendar";
+import * as cohorts from "./cohorts";
 import * as enrollment from "./enrollment";
 import * as files from "./files";
 import * as imports from "./imports";
@@ -32,6 +33,7 @@ export {
   audit,
   auth,
   calendar,
+  cohorts,
   enrollment,
   files,
   imports,
@@ -58,9 +60,6 @@ export const ENDPOINTS = [
   me.getMe,
   me.updateMe,
   enrollment.getMyRegistration,
-  enrollment.getSemesterRegistration,
-  enrollment.addElective,
-  enrollment.dropElective,
   enrollment.getRoster,
   enrollment.registerManually,
   enrollment.withdrawCourseEnrollment,
@@ -119,6 +118,9 @@ export const ENDPOINTS = [
   assessment.listOnlineGrants,
   assessment.grantOnline,
   assessment.revokeOnline,
+  assessment.listMakeupExams,
+  assessment.setMakeupExam,
+  assessment.removeMakeupExam,
   assessment.useOnlineScore,
   content.listMaterials,
   content.createMaterial,
@@ -179,17 +181,9 @@ export const ENDPOINTS = [
   academic.putPlacements,
   academic.activateCurriculum,
   academic.cloneCurriculum,
-  calendar.listAcademicSessions,
-  calendar.createAcademicSession,
-  calendar.updateAcademicSession,
-  calendar.activateAcademicSession,
-  calendar.closeAcademicSession,
-  calendar.listSemesters,
-  calendar.createSemester,
-  calendar.updateSemester,
-  calendar.openSemesterRegistration,
-  calendar.activateSemester,
-  calendar.closeSemester,
+  cohorts.listCohorts,
+  cohorts.getCohortSchedule,
+  cohorts.planCohortSchedule,
   calendar.listRooms,
   calendar.createRoom,
   calendar.updateRoom,
@@ -243,10 +237,8 @@ export const ENDPOINTS = [
   results.finalizeCourseResults,
   results.reopenCourseResult,
   results.getMyResults,
-  results.listSemesterResults,
-  results.computeSemesterResults,
-  results.approveSemesterResults,
-  results.publishSemesterResults,
+  results.getCohortResults,
+  results.approveResults,
   results.getResultsBroadsheet,
   results.listAwardCandidates,
   results.listAwards,
@@ -305,7 +297,8 @@ export type {
   RollCallMark,
 } from "./attendance";
 export type { AuditLogItem } from "./audit";
-export type { AcademicSession, Room, Semester } from "./calendar";
+export type { Room } from "./calendar";
+export type { Cohort, CohortSchedule } from "./cohorts";
 export {
   MULTIPART_PART_BYTES,
   MULTIPART_THRESHOLD_BYTES,
@@ -315,7 +308,7 @@ export {
   type UploadTarget,
 } from "./files";
 export { IMPORT_KINDS, type ImportJob, type ImportKind } from "./imports";
-export type { MyRegistration, RosterItem, SemesterRegistration } from "./enrollment";
+export type { MyRegistration, RosterItem } from "./enrollment";
 export type { Me } from "./me";
 export {
   MEET_LINK_PATTERN,
@@ -336,6 +329,7 @@ export type {
   GradebookColumn,
   GradebookRow,
   MyGrade,
+  MakeupExam,
   OnlineGrant,
   MyQuizAttempts,
   MySubmissions,
@@ -352,8 +346,10 @@ export type {
   CourseResultRow,
   CourseResults,
   GradingScheme,
+  CohortResultRow,
+  CohortResults,
   MyResults,
-  SemesterResultRow,
+  ResultSummary,
 } from "./results";
 export type { AdminVideo, PlaybackProgress, Video, VideoPlayback } from "./video";
 export type { Notification, NotificationPreference } from "./notifications";

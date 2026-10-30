@@ -30,18 +30,9 @@ describe("programmes", () => {
     diploma = await post<Programme>("/api/v1/programmes", {
       code: "DIP",
       name: "Diploma in Theology",
-      awardType: "DIPLOMA",
-      durationSemesters: 4,
-      levels: 2,
     });
-    expect(diploma).toMatchObject({ code: "DIP", levels: 2, status: "ACTIVE", version: 1 });
-    await post("/api/v1/programmes", {
-      code: "CERT",
-      name: "Certificate in Theology",
-      awardType: "CERTIFICATE",
-      durationSemesters: 2,
-      levels: 1,
-    });
+    expect(diploma).toMatchObject({ code: "DIP", status: "ACTIVE", version: 1 });
+    await post("/api/v1/programmes", { code: "CERT", name: "Certificate in Theology" });
 
     const list = await t.request({ url: "/api/v1/programmes", headers: p.registrar.headers });
     const codes = list.json<{ items: Programme[] }>().items.map((i) => i.code);
@@ -53,13 +44,7 @@ describe("programmes", () => {
       method: "POST",
       url: "/api/v1/programmes",
       headers: acad(),
-      payload: {
-        code: "dip",
-        name: "Again",
-        awardType: "DIPLOMA",
-        durationSemesters: 4,
-        levels: 2,
-      },
+      payload: { code: "dip", name: "Again" },
     });
     expect(dup.statusCode).toBe(409);
     const renamed = await t.request({
@@ -115,16 +100,15 @@ describe("courses", () => {
 describe("curricula", () => {
   let v1: CurriculumDetail;
 
-  it("start as a draft whose placements are edited as a whole, then activate", async () => {
+  it("start as a draft whose courses are edited as a whole, in order, then activate", async () => {
     v1 = await post<CurriculumDetail>("/api/v1/curricula", {
       programmeId: diploma.id,
       effectiveFrom: "2026-09-01",
-      minElectiveCredits: "2",
     });
     expect(v1).toMatchObject({
       curriculumVersion: 1,
       status: "DRAFT",
-      minElectiveCredits: "2.0",
+      totalCredits: "0.0",
       placements: [],
       locked: false,
     });
@@ -142,41 +126,52 @@ describe("curricula", () => {
       headers: { ...acad(), "if-match": `"${String(v1.version)}"` },
       payload: {
         placements: [
-          { courseId: courses.BIB101?.id, levelNo: 1, semesterNo: 1, courseType: "COMPULSORY" },
-          {
-            courseId: courses.THE101?.id,
-            levelNo: 1,
-            semesterNo: 2,
-            courseType: "COMPULSORY",
-            creditOverride: "3",
-          },
-          { courseId: courses.MIN201?.id, levelNo: 2, semesterNo: 1, courseType: "ELECTIVE" },
-          { courseId: courses.MIS201?.id, levelNo: 2, semesterNo: 1, courseType: "ELECTIVE" },
+          { courseId: courses.MIN201?.id },
+          { courseId: courses.BIB101?.id },
+          { courseId: courses.THE101?.id, creditOverride: "3" },
+          { courseId: courses.MIS201?.id },
         ],
       },
     });
     expect(placed.statusCode).toBe(200);
     v1 = placed.json<CurriculumDetail>();
-    expect(
-      v1.placements.map((pl) => [
-        pl.courseCode,
-        pl.levelNo,
-        pl.semesterNo,
-        pl.courseType,
-        pl.credits,
-      ]),
-    ).toEqual([
-      ["BIB101", 1, 1, "COMPULSORY", "3.0"],
-      ["THE101", 1, 2, "COMPULSORY", "3.0"],
-      ["MIN201", 2, 1, "ELECTIVE", "2.0"],
-      ["MIS201", 2, 1, "ELECTIVE", "2.0"],
+    // The order given is the default order (ADR-0005); credits add up exactly.
+    expect(v1.placements.map((pl) => [pl.position, pl.courseCode, pl.credits])).toEqual([
+      [1, "MIN201", "2.0"],
+      [2, "BIB101", "3.0"],
+      [3, "THE101", "3.0"],
+      [4, "MIS201", "2.0"],
+    ]);
+    expect(v1.totalCredits).toBe("10.0");
+
+    // Reordering swaps positions in one go (the unique position is deferred).
+    const reordered = await t.request({
+      method: "PUT",
+      url: `/api/v1/curricula/${v1.id}/courses`,
+      headers: { ...acad(), "if-match": `"${String(v1.version)}"` },
+      payload: {
+        placements: [
+          { courseId: courses.BIB101?.id },
+          { courseId: courses.THE101?.id, creditOverride: "3" },
+          { courseId: courses.MIN201?.id },
+          { courseId: courses.MIS201?.id },
+        ],
+      },
+    });
+    expect(reordered.statusCode, reordered.body).toBe(200);
+    v1 = reordered.json<CurriculumDetail>();
+    expect(v1.placements.map((pl) => pl.courseCode)).toEqual([
+      "BIB101",
+      "THE101",
+      "MIN201",
+      "MIS201",
     ]);
 
     const active = await post<CurriculumDetail>(`/api/v1/curricula/${v1.id}/activate`, undefined);
     expect(active.status).toBe("ACTIVE");
   });
 
-  it("reject placements that don't fit the programme", async () => {
+  it("reject a course placed twice or one that doesn't exist", async () => {
     const draft = await post<CurriculumDetail>(`/api/v1/curricula/${v1.id}/clone`, {
       effectiveFrom: "2027-09-01",
     });
@@ -186,14 +181,9 @@ describe("curricula", () => {
       headers: { ...acad(), "if-match": `"${String(draft.version)}"` },
       payload: {
         placements: [
-          { courseId: courses.BIB101?.id, levelNo: 3, semesterNo: 1, courseType: "COMPULSORY" },
-          { courseId: courses.BIB101?.id, levelNo: 1, semesterNo: 2, courseType: "COMPULSORY" },
-          {
-            courseId: "0199b8a2-7c1e-7d3a-9f00-123456789abc",
-            levelNo: 1,
-            semesterNo: 1,
-            courseType: "ELECTIVE",
-          },
+          { courseId: courses.BIB101?.id },
+          { courseId: courses.BIB101?.id },
+          { courseId: "0199b8a2-7c1e-7d3a-9f00-123456789abc" },
         ],
       },
     });
@@ -203,7 +193,6 @@ describe("curricula", () => {
         .json<{ error: { fieldErrors: { path: string; code: string }[] } }>()
         .error.fieldErrors.map((f) => [f.path, f.code]),
     ).toEqual([
-      ["body.placements.0.levelNo", "too_high"],
       ["body.placements.1.courseId", "duplicate"],
       ["body.placements.2.courseId", "not_found"],
     ]);
@@ -214,7 +203,7 @@ describe("curricula", () => {
       await t.request({ url: `/api/v1/curricula?programmeId=${diploma.id}`, headers: acad() })
     ).json<{ items: CurriculumDetail[] }>();
     const v2 = list.items.find((c) => c.curriculumVersion === 2);
-    expect(v2).toMatchObject({ status: "DRAFT", placementCount: 4, minElectiveCredits: "2.0" });
+    expect(v2).toMatchObject({ status: "DRAFT", placementCount: 4, totalCredits: "10.0" });
 
     const activated = await post<CurriculumDetail>(
       `/api/v1/curricula/${v2?.id ?? ""}/activate`,
@@ -230,7 +219,7 @@ describe("curricula", () => {
       method: "PATCH",
       url: `/api/v1/curricula/${v1.id}`,
       headers: { ...acad(), "if-match": `"${String(old.version)}"` },
-      payload: { minElectiveCredits: "4" },
+      payload: { effectiveFrom: "2028-09-01" },
     });
     expect(edit.statusCode).toBe(409);
     expect(edit.json()).toMatchObject({ error: { code: "CURRICULUM_LOCKED" } });

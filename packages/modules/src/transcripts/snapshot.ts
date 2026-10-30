@@ -1,39 +1,17 @@
 import type { TranscriptSnapshot } from "@glim/contracts";
 import { schema, type Database } from "@glim/db";
-import {
-  cumulativeGpa,
-  rulesOf,
-  semesterGpa,
-  standingFor,
-  type ResultKind,
-  type ResultLine,
-} from "@glim/modules/results";
+import { rulesOf, summarize, type ResultKind } from "@glim/modules/results";
 import { domainError, err, ok, type DomainResult } from "@glim/shared";
 import { and, asc, eq, ne } from "drizzle-orm";
 
-type ResultRow = typeof schema.courseResults.$inferSelect;
-
 const notIssuable = (message: string) => err(domainError("TRANSCRIPT_NOT_ISSUABLE", message));
-
-function lineOf(row: ResultRow): ResultLine {
-  return {
-    courseId: row.courseId,
-    attemptOrder: row.attemptNo,
-    creditsX10: row.creditsX10,
-    pointsX100: row.pointsX100,
-    qualityPointsX1000: row.qualityPointsX1000 ?? 0,
-    resultKind: row.resultKind as ResultKind,
-    countsInGpa: row.countsInGpa,
-    passed: row.passed,
-  };
-}
 
 /**
  * Builds a transcript's snapshot (TRD §14.7) from the programme enrollment's records as they are
- * now. An OFFICIAL transcript needs every semester with results approved or published
- * (`TRANSCRIPT_NOT_ISSUABLE` otherwise); an UNOFFICIAL one shows finalized results and marks
- * unapproved semesters Provisional. Figures are recomputed with the pure functions, so they match
- * the semester results exactly.
+ * now: its courses in the order completed (ADR-0005). An OFFICIAL transcript needs every result
+ * approved by the Registrar (`TRANSCRIPT_NOT_ISSUABLE` otherwise); an UNOFFICIAL one shows
+ * finalized results and marks unapproved ones Provisional. Figures are recomputed with the pure
+ * functions, so they match what students and the Registrar see.
  */
 export async function buildSnapshot(
   db: Database,
@@ -49,7 +27,6 @@ export async function buildSnapshot(
       matricNumber: pe.matricNumber,
       programmeCode: p.code,
       programmeName: p.name,
-      awardType: p.awardType,
       schemeId: p.gradingSchemeId,
       given: st.givenName,
       middle: st.middleName,
@@ -71,39 +48,22 @@ export async function buildSnapshot(
 
   const r = schema.courseResults;
   const c = schema.courses;
-  const s = schema.semesters;
-  const ses = schema.academicSessions;
   const rows = await db
-    .select({
-      result: r,
-      code: c.code,
-      title: c.title,
-      semesterName: s.name,
-      sessionCode: ses.code,
-    })
+    .select({ result: r, code: c.code, title: c.title })
     .from(r)
     .innerJoin(c, eq(c.id, r.courseId))
-    .innerJoin(s, eq(s.id, r.semesterId))
-    .innerJoin(ses, eq(ses.id, s.academicSessionId))
     .where(and(eq(r.programmeEnrollmentId, programmeEnrollmentId), ne(r.status, "DRAFT")))
-    .orderBy(asc(ses.startsOn), asc(s.sequence), asc(c.code), asc(r.attemptNo));
-  const sr = schema.semesterResults;
-  const semesterStatuses = await db
-    .select({ semesterId: sr.semesterId, status: sr.status })
-    .from(sr)
-    .where(eq(sr.programmeEnrollmentId, programmeEnrollmentId));
-  const approved = (semesterId: string) =>
-    ["APPROVED", "PUBLISHED"].includes(
-      semesterStatuses.find((x) => x.semesterId === semesterId)?.status ?? "",
-    );
-
-  const semesterIds = [...new Set(rows.map((x) => x.result.semesterId))];
+    .orderBy(asc(r.completedOn), asc(c.code), asc(r.attemptNo));
   if (kind === "OFFICIAL") {
-    if (semesterIds.length === 0) return notIssuable("There are no results to put on it yet.");
-    const pending = semesterIds.filter((id) => !approved(id));
-    if (pending.length > 0)
+    if (rows.length === 0) return notIssuable("There are no results to put on it yet.");
+    // Every result the CGPA counts must be approved (the same rule as awards, ADR-0005).
+    const pending = rows.filter(
+      (x) =>
+        x.result.resultKind === "GRADED" && x.result.countsInGpa && x.result.status !== "APPROVED",
+    ).length;
+    if (pending > 0)
       return notIssuable(
-        `An official transcript needs every semester approved by the Registrar; ${String(pending.length)} isn't yet.`,
+        `An official transcript needs every result approved by the Registrar; ${String(pending)} isn't yet.`,
       );
   }
 
@@ -114,55 +74,26 @@ export async function buildSnapshot(
       result.courseId,
       Math.max(latestAttempt.get(result.courseId) ?? 0, result.attemptNo),
     );
-
-  const sofar: ResultLine[] = [];
-  const semesters: TranscriptSnapshot["semesters"] = semesterIds.map((semesterId) => {
-    const inSemester = rows.filter((x) => x.result.semesterId === semesterId);
-    const lines = inSemester.map((x) => lineOf(x.result));
-    sofar.push(...lines);
-    const term = semesterGpa(lines);
-    const cum = cumulativeGpa(sofar, rules.repeatPolicy);
-    const first = inSemester[0];
-    return {
-      sessionCode: first?.sessionCode ?? "",
-      semesterName: first?.semesterName ?? "",
-      provisional: !approved(semesterId),
-      courses: inSemester.map((x) => ({
-        code: x.code,
-        title: x.title,
-        creditsX10: x.result.creditsX10,
-        finalPctX100: x.result.finalPctX100,
-        letter: x.result.letter,
-        pointsX100: x.result.pointsX100,
-        resultKind: x.result.resultKind as ResultKind,
-        attemptNo: x.result.attemptNo,
-        repeated: (latestAttempt.get(x.result.courseId) ?? 0) > x.result.attemptNo,
-        imported: x.result.source === "IMPORT",
-      })),
-      creditsAttemptedX10: term.creditsAttemptedX10,
-      creditsEarnedX10: term.creditsEarnedX10,
-      gpaX100: term.gpaX100,
-      cgpaX100: cum.gpaX100,
-      standing: standingFor(cum.gpaX100, rules),
-    };
-  });
-  const total = cumulativeGpa(sofar, rules.repeatPolicy);
+  const total = summarize(
+    rows.map((x) => x.result),
+    rules,
+  );
 
   const a = schema.awards;
-  const [award] = await db
+  const awards = await db
     .select()
     .from(a)
-    .where(and(eq(a.programmeEnrollmentId, programmeEnrollmentId), eq(a.status, "CONFERRED")));
+    .where(and(eq(a.programmeEnrollmentId, programmeEnrollmentId), eq(a.status, "CONFERRED")))
+    .orderBy(asc(a.awardType));
 
   return ok({
-    version: 1,
+    version: 2,
     kind,
     asOf,
     institution: { name: settings?.name ?? "GLIM Online Bible College" },
     programme: {
       code: enrollment.programmeCode,
       name: enrollment.programmeName,
-      awardType: enrollment.awardType as TranscriptSnapshot["programme"]["awardType"],
     },
     student: {
       legalName: [enrollment.given, enrollment.middle, enrollment.family]
@@ -170,21 +101,38 @@ export async function buildSnapshot(
         .join(" "),
       matricNumber: enrollment.matricNumber,
     },
-    semesters,
+    courses: rows.map((x) => ({
+      code: x.code,
+      title: x.title,
+      completedOn: x.result.completedOn,
+      creditsX10: x.result.creditsX10,
+      finalPctX100: x.result.finalPctX100,
+      letter: x.result.letter,
+      pointsX100: x.result.pointsX100,
+      resultKind: x.result.resultKind as ResultKind,
+      attemptNo: x.result.attemptNo,
+      repeated: (latestAttempt.get(x.result.courseId) ?? 0) > x.result.attemptNo,
+      imported: x.result.source === "IMPORT",
+      provisional: x.result.status !== "APPROVED",
+    })),
     totals: {
       creditsAttemptedX10: total.creditsAttemptedX10,
       creditsEarnedX10: total.creditsEarnedX10,
-      cgpaX100: total.gpaX100,
-      standing: standingFor(total.gpaX100, rules),
+      cgpaX100: total.cgpaX100,
+      standing: total.standing,
     },
-    award:
-      award?.awardClass != null && award.certificateNo !== null && award.awardedOn !== null
-        ? {
-            awardClass: award.awardClass,
-            certificateNo: award.certificateNo,
-            awardedOn: award.awardedOn,
-          }
-        : null,
+    awards: awards.flatMap((x) =>
+      x.awardClass !== null && x.certificateNo !== null && x.awardedOn !== null
+        ? [
+            {
+              awardType: x.awardType as TranscriptSnapshot["awards"][number]["awardType"],
+              awardClass: x.awardClass,
+              certificateNo: x.certificateNo,
+              awardedOn: x.awardedOn,
+            },
+          ]
+        : [],
+    ),
     legend: {
       bands: rules.bands,
       classBands: rules.classBands,

@@ -43,7 +43,9 @@ export function DataTable({
       aria-label={caption}
       // Focusable, so the table can be scrolled sideways from the keyboard (axe: scrollable-region).
       tabIndex={0}
-      className="scroll-pl-44 overflow-x-auto rounded-md border border-line bg-surface-raised"
+      // Relative, so visually hidden (absolute) labels in wide tables stay inside the scroller
+      // instead of widening the page on phones.
+      className="relative scroll-pl-44 overflow-x-auto rounded-md border border-line bg-surface-raised"
     >
       <table
         className={cn(

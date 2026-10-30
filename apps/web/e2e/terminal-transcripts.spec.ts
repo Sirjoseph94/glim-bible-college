@@ -45,7 +45,7 @@ test("a graduate gets transcripts, the Registrar issues the official one, anyone
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Semester results", exact: true }).click();
+  await page.getByRole("link", { name: "Cohort results", exact: true }).click();
   // Each step lands (the request leaves the list it was in) before the filter changes.
   const waiting = page.getByRole("listitem", { name: "Bola Online" });
   await waiting.getByRole("button", { name: "Approve" }).click();

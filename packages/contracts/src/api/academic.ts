@@ -23,9 +23,6 @@ export const programmeSchema = z.object({
   id: z.uuid(),
   code: z.string(),
   name: z.string(),
-  awardType: z.enum(ENUMS["programmes.award_type"]),
-  durationSemesters: z.number().int(),
-  levels: z.number().int(),
   status: z.enum(ENUMS["programmes.status"]),
   /** The grading scheme its results use (§14.4), set by the Registrar. */
   gradingSchemeId: z.uuid().nullable(),
@@ -37,9 +34,6 @@ export type Programme = z.infer<typeof programmeSchema>;
 const programmeFields = {
   code,
   name: z.string().trim().min(1).max(200),
-  awardType: z.enum(ENUMS["programmes.award_type"]),
-  durationSemesters: z.number().int().min(1).max(12),
-  levels: z.number().int().min(1).max(4),
 };
 
 export const listProgrammes = endpoint({
@@ -76,8 +70,6 @@ export const updateProgramme = endpoint({
   body: z
     .object({
       name: programmeFields.name.optional(),
-      durationSemesters: programmeFields.durationSemesters.optional(),
-      levels: programmeFields.levels.optional(),
       status: z.enum(ENUMS["programmes.status"]).optional(),
     })
     .strict(),
@@ -157,9 +149,8 @@ export const placementSchema = z.object({
   courseId: z.uuid(),
   courseCode: z.string(),
   courseTitle: z.string(),
-  levelNo: z.number().int(),
-  semesterNo: z.number().int(),
-  courseType: z.enum(ENUMS["curriculum_courses.course_type"]),
+  /** Its place in the default order, from 1 (ADR-0005). */
+  position: z.number().int(),
   /** The credits this placement counts for: the override, or the course's own. */
   credits: z.string(),
   creditOverride: z.string().nullable(),
@@ -170,8 +161,9 @@ export const curriculumSchema = z.object({
   programmeId: z.uuid(),
   curriculumVersion: z.number().int(),
   effectiveFrom: z.iso.date(),
-  minElectiveCredits: z.string(),
   status: z.enum(ENUMS["curricula.status"]),
+  /** The credits of all its courses; the Certificate needs half of them passed. */
+  totalCredits: z.string(),
   version: z.number().int(),
   placementCount: z.number().int(),
 });
@@ -219,7 +211,6 @@ export const createCurriculum = endpoint({
     .object({
       programmeId: z.uuid(),
       effectiveFrom: z.iso.date(),
-      minElectiveCredits: credits.default("0.0"),
     })
     .strict(),
   response: curriculumDetailSchema,
@@ -228,7 +219,7 @@ export const createCurriculum = endpoint({
 export const updateCurriculum = endpoint({
   method: "PATCH",
   path: "/curricula/:id",
-  summary: "Change a curriculum's start date or elective-credit requirement",
+  summary: "Change a curriculum's start date",
   tag: "Academic",
   auth: "session",
   permission: "academic:structure:manage",
@@ -236,15 +227,14 @@ export const updateCurriculum = endpoint({
   ifMatch: true,
   params: idParams,
   body: z
-    .object({ effectiveFrom: z.iso.date().optional(), minElectiveCredits: credits.optional() })
-    .strict(),
+    .object({ effectiveFrom: z.iso.date().optional() }).strict(),
   response: curriculumDetailSchema,
 });
 
 export const putPlacements = endpoint({
   method: "PUT",
   path: "/curricula/:id/courses",
-  summary: "Replace the curriculum's course placements",
+  summary: "Replace the curriculum's courses, in their default order",
   tag: "Academic",
   auth: "session",
   permission: "academic:structure:manage",
@@ -253,14 +243,12 @@ export const putPlacements = endpoint({
   params: idParams,
   body: z
     .object({
+      /** In the default order: the first is position 1. */
       placements: z
         .array(
           z
             .object({
               courseId: z.uuid(),
-              levelNo: z.number().int().min(1).max(4),
-              semesterNo: z.union([z.literal(1), z.literal(2)]),
-              courseType: z.enum(ENUMS["curriculum_courses.course_type"]),
               creditOverride: credits.nullable().default(null),
             })
             .strict(),

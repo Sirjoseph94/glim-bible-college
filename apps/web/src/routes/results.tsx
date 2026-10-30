@@ -1,13 +1,11 @@
 import type { CourseResultRow, MyResults, results } from "@glim/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { hundredths } from "../design/format";
 import { PageHeader } from "../components/app/page-header";
 import { LoadFailed } from "../components/app/page-states";
 import { GpaSummary, ResultRow } from "../components/app/results";
 import { Banner } from "../components/ui/banner";
 import { Card } from "../components/ui/card";
-import { Disclosure } from "../components/ui/disclosure";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { TranscriptsSection } from "./transcripts";
@@ -21,9 +19,8 @@ const KIND_LABELS: Record<CourseResultRow["resultKind"], string> = {
 };
 
 /**
- * A student's (or graduate's) results (docs/ui-design-handoff.md §11.6): the latest semester's
- * GPA and CGPA first, its course results, earlier semesters folded away, then transcripts
- * (decision UI-Q8).
+ * A student's (or graduate's) results (docs/ui-design-handoff.md §11.6, ADR-0005): the CGPA first,
+ * then every course result in the order completed, then transcripts (decision UI-Q8).
  */
 export function MyResultsPage() {
   const mine = useQuery({
@@ -49,7 +46,7 @@ export function MyResultsPage() {
           matric ? <span className="font-mono text-code text-ink-muted">{matric}</span> : undefined
         }
       />
-      {programmes.every((p) => p.semesters.length === 0) ? (
+      {programmes.every((p) => p.results.length === 0) ? (
         <EmptyState icon="award" title="No results yet">
           Results appear here as soon as your Lecturers finalize them.
         </EmptyState>
@@ -74,33 +71,6 @@ const STANDING_LABELS: Record<string, string> = {
   UNKNOWN: "",
 };
 
-type MySemester = MyResults["programmes"][number]["semesters"][number];
-
-function SemesterRows({ semester }: { semester: MySemester }) {
-  return (
-    <Card list>
-      {semester.results.map((c) => (
-        <ResultRow
-          key={c.id}
-          code={c.courseCode}
-          title={c.courseTitle}
-          creditsX10={c.creditsX10}
-          letter={c.letter}
-          pctX100={c.finalPctX100}
-          pending={c.resultKind === "GRADED" && c.letter === null && c.finalPctX100 === null}
-          note={
-            c.attemptNo > 1
-              ? "Repeat · your best attempt counts"
-              : KIND_LABELS[c.resultKind] === ""
-                ? undefined
-                : KIND_LABELS[c.resultKind]
-          }
-        />
-      ))}
-    </Card>
-  );
-}
-
 function ProgrammeResults({
   programme: p,
   showName,
@@ -108,10 +78,8 @@ function ProgrammeResults({
   programme: MyResults["programmes"][number];
   showName: boolean;
 }) {
-  const latest = p.semesters.at(-1);
-  if (latest === undefined) return null;
-  const earlier = p.semesters.slice(0, -1).reverse();
-  const standing = STANDING_LABELS[latest.standing] ?? "";
+  if (p.results.length === 0) return null;
+  const standing = STANDING_LABELS[p.summary.standing] ?? "";
   return (
     <div className="space-y-4">
       {showName ? (
@@ -121,34 +89,40 @@ function ProgrammeResults({
         </h2>
       ) : null}
       <GpaSummary
-        gpaX100={latest.gpaX100}
-        cgpaX100={latest.cgpaX100}
-        provisional={latest.provisional}
-        earnedX10={latest.creditsEarnedX10}
-        attemptedX10={latest.creditsAttemptedX10}
+        cgpaX100={p.summary.cgpaX100}
+        provisional={p.summary.provisional}
+        earnedX10={p.summary.creditsEarnedX10}
+        attemptedX10={p.summary.creditsAttemptedX10}
       />
-      {latest.provisional ? (
-        <Banner tone="info" title="These results are provisional">
-          They become official when the Registrar approves and publishes the semester.
+      {p.summary.provisional ? (
+        <Banner tone="info" title="Your CGPA is provisional">
+          It becomes official once the Registrar has approved every result it counts.
         </Banner>
       ) : null}
-      <section className="space-y-2" aria-label={`${latest.semesterName} ${latest.sessionCode}`}>
-        <h2 className="text-heading">
-          This semester · {latest.semesterName}, {latest.sessionCode}
-        </h2>
-        <SemesterRows semester={latest} />
+      <section className="space-y-2" aria-label="Course results">
+        <h2 className="text-heading">Courses, latest first</h2>
+        <Card list>
+          {[...p.results].reverse().map((c) => (
+            <ResultRow
+              key={c.id}
+              code={c.courseCode}
+              title={c.courseTitle}
+              creditsX10={c.creditsX10}
+              letter={c.letter}
+              pctX100={c.finalPctX100}
+              pending={c.resultKind === "GRADED" && c.letter === null && c.finalPctX100 === null}
+              note={[
+                `Completed ${c.completedOn}`,
+                c.attemptNo > 1 ? "Repeat · your best attempt counts" : null,
+                KIND_LABELS[c.resultKind] === "" ? null : KIND_LABELS[c.resultKind],
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+          ))}
+        </Card>
         {standing === "" ? null : <p className="text-body-sm text-ink-muted">{standing}</p>}
       </section>
-      {earlier.map((s) => (
-        <Disclosure
-          key={s.semesterId}
-          summary={`${s.semesterName}, ${s.sessionCode} · GPA ${hundredths(s.gpaX100)}`}
-        >
-          <div aria-label={`${s.semesterName} ${s.sessionCode}`}>
-            <SemesterRows semester={s} />
-          </div>
-        </Disclosure>
-      ))}
     </div>
   );
 }

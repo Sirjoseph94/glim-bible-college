@@ -254,7 +254,7 @@ export function ScheduleMeetingSheet({
                 <SetupHint
                   missing="No Rooms yet, so Class Meetings are online only."
                   fix="add Rooms"
-                  place="calendar"
+                  place="rooms"
                 />
               ) : undefined
             }

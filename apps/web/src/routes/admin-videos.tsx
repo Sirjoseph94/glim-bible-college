@@ -75,7 +75,7 @@ export function AdminVideosPage() {
             <option value="">All offerings</option>
             {(offeringList.data?.items ?? []).map((o) => (
               <option key={o.id} value={o.id}>
-                {o.courseCode} {o.title} ({o.semesterName}, {o.sessionCode})
+                {o.courseCode} {o.title} ({o.cohortCode})
               </option>
             ))}
           </Select>
@@ -181,7 +181,7 @@ function VideoRow({ video: v }: { video: AdminVideo }) {
         </p>
       </div>
       <p className="text-meta text-ink-muted">
-        {v.courseCode} {v.courseTitle} · {v.semesterName}, {v.sessionCode}
+        {v.courseCode} {v.courseTitle} · {v.cohortCode}
         {v.lastCheckedAt === null ? null : (
           <>
             {" "}

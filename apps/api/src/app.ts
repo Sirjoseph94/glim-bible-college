@@ -53,6 +53,7 @@ import { VideosController } from "./http/video/videos.controller";
 import { MaterialsController } from "./http/content/materials.controller";
 import { AssignmentsController } from "./http/assessment/assignments.controller";
 import { GradebookController } from "./http/assessment/gradebook.controller";
+import { MakeupsController } from "./http/assessment/makeups.controller";
 import { AwardsController } from "./http/results/awards.controller";
 import { NotificationsController } from "./http/notifications/notifications.controller";
 import { OpsController } from "./http/ops/ops.controller";
@@ -65,6 +66,7 @@ import { IntakesController } from "./http/admissions/intakes.controller";
 import { AdmissionsReportsController } from "./http/admissions/reports.controller";
 import { ReviewController } from "./http/admissions/review.controller";
 import { CalendarController } from "./http/academic/calendar.controller";
+import { CohortsController } from "./http/academic/cohorts.controller";
 import { LecturersController } from "./http/lecturing/lecturers.controller";
 import { OfferingsController } from "./http/lecturing/offerings.controller";
 import { AuditController } from "./http/audit/audit.controller";
@@ -120,6 +122,7 @@ export class AppModule {
         SettingsController,
         AcademicController,
         CalendarController,
+        CohortsController,
         OfferingsController,
         LecturersController,
         IntakesController,
@@ -138,6 +141,7 @@ export class AppModule {
         AssignmentsController,
         QuizzesController,
         GradebookController,
+        MakeupsController,
         GradingSchemesController,
         CourseResultsController,
         AwardsController,

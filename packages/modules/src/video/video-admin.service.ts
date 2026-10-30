@@ -330,15 +330,13 @@ export class VideoAdminService {
     const v = schema.videos;
     const o = schema.courseOfferings;
     const c = schema.courses;
-    const s = schema.semesters;
-    const a = schema.academicSessions;
+    const cohort = schema.cohorts;
     return this.db.read
       .select({
         video: v,
         courseCode: c.code,
         courseTitle: sql<string>`coalesce(${o.titleOverride}, ${c.title})`,
-        semesterName: s.name,
-        sessionCode: a.code,
+        cohortCode: cohort.code,
         ingest: {
           status: schema.recordings.status,
           errorCode: schema.recordings.lastErrorCode,
@@ -350,8 +348,7 @@ export class VideoAdminService {
       .leftJoin(schema.recordings, eq(schema.recordings.id, v.recordingId))
       .innerJoin(o, eq(o.id, v.courseOfferingId))
       .innerJoin(c, eq(c.id, o.courseId))
-      .innerJoin(s, eq(s.id, o.semesterId))
-      .innerJoin(a, eq(a.id, s.academicSessionId));
+      .innerJoin(cohort, eq(cohort.id, o.cohortId));
   }
 
   async adminView(id: string): Promise<AdminVideo> {
@@ -371,8 +368,7 @@ function toAdminView(row: {
   video: VideoRow;
   courseCode: string;
   courseTitle: string;
-  semesterName: string;
-  sessionCode: string;
+  cohortCode: string;
   ingest: {
     status: string | null;
     errorCode: string | null;
@@ -387,8 +383,7 @@ function toAdminView(row: {
     origin: v.origin as AdminVideo["origin"],
     courseCode: row.courseCode,
     courseTitle: row.courseTitle,
-    semesterName: row.semesterName,
-    sessionCode: row.sessionCode,
+    cohortCode: row.cohortCode,
     unavailableReason: v.unavailableReason,
     lastCheckedAt: v.lastCheckedAt?.toISOString() ?? null,
     studioUrl: studioUrl(v.youtubeVideoId),

@@ -23,22 +23,19 @@ const curriculumQuery = (id: string) =>
       api<typeof academic.getCurriculum>("GET", "/curricula/:id", { signal, params: { id } }),
   });
 
-type Row = {
-  courseId: string;
-  levelNo: number;
-  semesterNo: 1 | 2;
-  courseType: "COMPULSORY" | "ELECTIVE";
-  creditOverride: string | null;
-};
+/** A course in the editor; its place in the order is its place in the list (ADR-0005). */
+type Row = { courseId: string; creditOverride: string | null };
 
 const toRows = (c: CurriculumDetail): Row[] =>
-  c.placements.map((p) => ({
-    courseId: p.courseId,
-    levelNo: p.levelNo,
-    semesterNo: p.semesterNo === 2 ? 2 : 1,
-    courseType: p.courseType,
-    creditOverride: p.creditOverride,
-  }));
+  c.placements.map((p) => ({ courseId: p.courseId, creditOverride: p.creditOverride }));
+
+/** The list with the row at `from` moved to `to`. */
+function moved(rows: Row[], from: number, to: number): Row[] {
+  const next = [...rows];
+  const [row] = next.splice(from, 1);
+  if (row !== undefined) next.splice(to, 0, row);
+  return next;
+}
 
 /** A compact control for a table cell; its label is the cell's `aria-label`. */
 const CELL_CONTROL =
@@ -119,8 +116,9 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
           <span className="inline-flex flex-wrap items-center gap-2">
             <Badge tone={status.tone}>{status.word}</Badge>
             <span>
-              Effective from <CalendarDate value={curriculum.effectiveFrom} />. Students need{" "}
-              {curriculum.minElectiveCredits} elective credits for the award.
+              Effective from <CalendarDate value={curriculum.effectiveFrom} />.{" "}
+              {curriculum.totalCredits} credits in all: the Certificate needs half of them passed,
+              the Diploma every course.
             </span>
           </span>
         }
@@ -164,9 +162,9 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
         }}
       >
         {rows.length === 0 ? (
-          <EmptyState icon="book" title="No courses placed yet">
+          <EmptyState icon="book" title="No courses yet">
             {editable
-              ? "Add a course, choose its Level and semester, then save."
+              ? "Add the courses in the order cohorts usually take them, then save."
               : "This version has no courses."}
           </EmptyState>
         ) : (
@@ -174,16 +172,10 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
             <thead>
               <tr>
                 <th scope="col" className={headCell}>
+                  Order
+                </th>
+                <th scope="col" className={headCell}>
                   Course
-                </th>
-                <th scope="col" className={headCell}>
-                  Level
-                </th>
-                <th scope="col" className={headCell}>
-                  Semester
-                </th>
-                <th scope="col" className={headCell}>
-                  Type
                 </th>
                 <th scope="col" className={headCell}>
                   Credit override
@@ -199,6 +191,7 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
                 const courseError = fieldErrors[`placements.${String(i)}.courseId`];
                 return (
                   <tr key={`${row.courseId}-${String(i)}`}>
+                    <td className={`${bodyCell} tabular-nums`}>{n}</td>
                     <td className={`${bodyCell} whitespace-normal`}>
                       <select
                         aria-label={`Course ${n}`}
@@ -224,50 +217,6 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
                     </td>
                     <td className={bodyCell}>
                       <input
-                        aria-label={`Level ${n}`}
-                        type="number"
-                        min={1}
-                        max={4}
-                        disabled={!editable}
-                        value={row.levelNo}
-                        onChange={(e) => {
-                          update(i, { levelNo: Number(e.target.value) });
-                        }}
-                        className={`${CELL_CONTROL} w-16`}
-                      />
-                    </td>
-                    <td className={bodyCell}>
-                      <select
-                        aria-label={`Semester ${n}`}
-                        disabled={!editable}
-                        value={row.semesterNo}
-                        onChange={(e) => {
-                          update(i, { semesterNo: e.target.value === "2" ? 2 : 1 });
-                        }}
-                        className={CELL_CONTROL}
-                      >
-                        <option value={1}>1 (Sept–Jan)</option>
-                        <option value={2}>2 (Feb–June)</option>
-                      </select>
-                    </td>
-                    <td className={bodyCell}>
-                      <select
-                        aria-label={`Type ${n}`}
-                        disabled={!editable}
-                        value={row.courseType}
-                        onChange={(e) => {
-                          update(i, {
-                            courseType: e.target.value === "ELECTIVE" ? "ELECTIVE" : "COMPULSORY",
-                          });
-                        }}
-                        className={CELL_CONTROL}
-                      >
-                        <option value="COMPULSORY">Compulsory</option>
-                        <option value="ELECTIVE">Elective</option>
-                      </select>
-                    </td>
-                    <td className={bodyCell}>
-                      <input
                         aria-label={`Credit override ${n}`}
                         disabled={!editable}
                         inputMode="decimal"
@@ -282,17 +231,41 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
                     </td>
                     <td className={bodyCell}>
                       {editable ? (
-                        // Not saved until "Save placements", so no confirmation is needed.
-                        <Button
-                          size="sm"
-                          variant="quiet"
-                          aria-label={`Remove course ${n}`}
-                          onClick={() => {
-                            setRows(rows.filter((_, j) => j !== i));
-                          }}
-                        >
-                          Remove
-                        </Button>
+                        // Not saved until "Save courses", so no confirmation is needed.
+                        <span className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="quiet"
+                            aria-label={`Move course ${n} earlier`}
+                            disabled={i === 0}
+                            onClick={() => {
+                              setRows(moved(rows, i, i - 1));
+                            }}
+                          >
+                            Up
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="quiet"
+                            aria-label={`Move course ${n} later`}
+                            disabled={i === rows.length - 1}
+                            onClick={() => {
+                              setRows(moved(rows, i, i + 1));
+                            }}
+                          >
+                            Down
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="quiet"
+                            aria-label={`Remove course ${n}`}
+                            onClick={() => {
+                              setRows(rows.filter((_, j) => j !== i));
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </span>
                       ) : null}
                     </td>
                   </tr>
@@ -311,20 +284,14 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
                 if (first)
                   setRows([
                     ...rows,
-                    {
-                      courseId: first.id,
-                      levelNo: 1,
-                      semesterNo: 1,
-                      courseType: "COMPULSORY",
-                      creditOverride: null,
-                    },
+                    { courseId: first.id, creditOverride: null },
                   ]);
               }}
             >
               Add a course
             </Button>
             <Button type="submit" variant="primary" loading={loading("save")}>
-              Save placements
+              Save courses
             </Button>
           </div>
         ) : null}

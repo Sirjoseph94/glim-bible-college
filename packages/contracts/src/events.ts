@@ -11,9 +11,7 @@ export const DOMAIN_EVENTS = [
   "admissions.application.withdrawn",
   "admissions.application.accepted",
   // Academic
-  "academic.session.activated",
-  "academic.semester.registration-opened",
-  "academic.semester.closed",
+  "academic.offering.completed",
   // Offerings
   "course.offering.created",
   "course.offering.published",
@@ -47,8 +45,7 @@ export const DOMAIN_EVENTS = [
   // Results
   "results.course.finalized",
   "results.course.reopened",
-  "results.semester.approved",
-  "results.semester.published",
+  "results.course.approved",
   "results.award.conferred",
   // Transcripts
   "transcript.issued",

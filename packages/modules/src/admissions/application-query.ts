@@ -6,7 +6,6 @@ import { eq, sql, type SQL } from "drizzle-orm";
 export function selectApplications(where: SQL | undefined, db: Database, order: SQL[] = []) {
   const a = schema.applications;
   const i = schema.intakes;
-  const s = schema.academicSessions;
   const pr = schema.programmes;
   return db
     .select({
@@ -14,8 +13,7 @@ export function selectApplications(where: SQL | undefined, db: Database, order: 
       intake: {
         id: i.id,
         code: i.code,
-        academicSessionName: s.name,
-        startsOn: s.startsOn,
+        startsOn: i.startsOn,
         closesOn: i.closesOn,
         status: sql<Application["intake"]["status"]>`${i.status}`,
       },
@@ -23,12 +21,10 @@ export function selectApplications(where: SQL | undefined, db: Database, order: 
         id: pr.id,
         code: pr.code,
         name: pr.name,
-        awardType: sql<Application["programme"]["awardType"]>`${pr.awardType}`,
       },
     })
     .from(a)
     .innerJoin(i, eq(i.id, a.intakeId))
-    .innerJoin(s, eq(s.id, i.academicSessionId))
     .innerJoin(pr, eq(pr.id, a.programmeId))
     .where(where)
     .orderBy(...order);

@@ -18,16 +18,12 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   courseOutcome,
-  cumulativeGpa,
   finalPercentX100,
-  semesterGpa,
-  standingFor,
   type ResultKind,
-  type ResultLine,
   type RoundBeforeBanding,
 } from "./domain/grading";
 import { GradingSchemesService, rulesOf } from "./grading-schemes.service";
-import { lineOf, SemesterResultsService } from "./semester-results.service";
+import { summarize } from "./summary";
 
 type ResultRow = typeof schema.courseResults.$inferSelect;
 type SchemeRow = typeof schema.gradingSchemes.$inferSelect;
@@ -51,6 +47,10 @@ interface Computed {
   countsInGpa: boolean;
   passed: boolean | null;
   attemptNo: number;
+  /** Their makeup exam date, if the Lecturer set one. */
+  makeupOn: string | null;
+  /** A makeup is set and an exam column has no grade yet: finalizing leaves them out. */
+  awaitingMakeup: boolean;
 }
 
 interface Plan {
@@ -63,13 +63,13 @@ interface Plan {
 }
 
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
-const FINAL = ["FINALIZED", "APPROVED", "PUBLISHED"];
+const FINAL = ["FINALIZED", "APPROVED"];
 
 /**
  * Course results (owner: results, TRD §14.3): the PRIMARY Lecturer (or an Academic Admin)
  * finalizes a course, which freezes each student's result and locks their grades; the Registrar
- * can reopen one with a reason. Students see results as soon as they're finalized, with GPA and
- * CGPA Provisional until the semester is published.
+ * can reopen one with a reason. Students see results as soon as they're finalized, with their CGPA
+ * Provisional until the Registrar approves every result it counts (ADR-0005).
  */
 @Injectable()
 export class CourseResultsService {
@@ -81,7 +81,6 @@ export class CourseResultsService {
     @Inject(GradebookService) private readonly gradebook: GradebookService,
     @Inject(GradingSchemesService) private readonly schemes: GradingSchemesService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
-    @Inject(SemesterResultsService) private readonly semesters: SemesterResultsService,
   ) {}
 
   /** Each student's result, or a preview of what finalizing would record for them. */
@@ -94,8 +93,9 @@ export class CourseResultsService {
   /**
    * Finalizes every result not finalized yet: the published and closed columns' weights must
    * total exactly 100; a missing grade counts 0 (GRADING_DEFAULTS `missingGradeAsZero`); excused
-   * columns drop out and the weights renormalise. Finalizing again only picks up results that
-   * were reopened or students who joined since.
+   * columns drop out and the weights renormalise. Students awaiting a makeup exam are left out,
+   * their grades unlocked. Finalizing again only picks up results that were reopened, students
+   * who joined since, and makeup exams now graded.
    */
   async finalize(offeringId: string, actor: Actor): Promise<DomainResult<CourseResults>> {
     const result = await this.db.withTxResult<null, DomainError>(async (tx) => {
@@ -118,9 +118,10 @@ export class CourseResultsService {
       for (const c of plan.computed) {
         const before = plan.existing.find((e) => e.courseEnrollmentId === c.courseEnrollmentId);
         if (before !== undefined && FINAL.includes(before.status)) continue;
+        if (c.awaitingMakeup) continue;
         const fields = {
           programmeEnrollmentId: c.programmeEnrollmentId,
-          semesterId: plan.offering.semesterId,
+          completedOn: plan.offering.endsOn,
           courseOfferingId: offeringId,
           courseId: plan.offering.courseId,
           studentId: c.studentId,
@@ -223,7 +224,6 @@ export class CourseResultsService {
           status: "DRAFT",
           approvedBy: null,
           approvedAt: null,
-          publishedAt: null,
           reopenedCount: sql`${r.reopenedCount} + 1`,
           updatedAt: now,
           version: sql`${r.version} + 1`,
@@ -241,31 +241,18 @@ export class CourseResultsService {
         createdAt: now,
       });
       await unlockStudents(db, row.courseOfferingId, [row.studentId]);
-      // The semester's GPA (and every later CGPA) depend on it: back to DRAFT until recomputed.
-      await this.semesters.reopenFrom(db, row.programmeEnrollmentId, row.semesterId);
       // Transcripts that show it are superseded by the transcripts module (an event: §17.3).
-      const [where] = await db
-        .select({
-          sessionCode: schema.academicSessions.code,
-          semesterName: schema.semesters.name,
-          courseCode: schema.courses.code,
-        })
-        .from(schema.semesters)
-        .innerJoin(
-          schema.academicSessions,
-          eq(schema.academicSessions.id, schema.semesters.academicSessionId),
-        )
-        .innerJoin(schema.courses, eq(schema.courses.id, row.courseId))
-        .where(eq(schema.semesters.id, row.semesterId));
+      const [course] = await db
+        .select({ code: schema.courses.code })
+        .from(schema.courses)
+        .where(eq(schema.courses.id, row.courseId));
       await tx.boss.publish(
         "results.course.reopened",
         {
           courseResultId: resultId,
           programmeEnrollmentId: row.programmeEnrollmentId,
-          semesterId: row.semesterId,
-          courseCode: where?.courseCode ?? "",
-          sessionCode: where?.sessionCode ?? "",
-          semesterName: where?.semesterName ?? "",
+          courseCode: course?.code ?? "",
+          completedOn: row.completedOn,
           reason,
         },
         { occurredAt: now, actorUserId: actor.userId },
@@ -274,10 +261,6 @@ export class CourseResultsService {
         .select({ userId: schema.students.userId })
         .from(schema.students)
         .where(eq(schema.students.id, row.studentId));
-      const [course] = await db
-        .select({ code: schema.courses.code })
-        .from(schema.courses)
-        .where(eq(schema.courses.id, row.courseId));
       if (student !== undefined)
         await this.notifications.notify(tx, {
           userId: student.userId,
@@ -303,8 +286,8 @@ export class CourseResultsService {
   }
 
   /**
-   * The caller's finalized results by programme and semester, with semester GPA and CGPA worked
-   * out on the fly from the programme's scheme, Provisional until the semester is published.
+   * The caller's finalized results per programme in the order completed, with credits, CGPA and
+   * standing worked out on the fly from the programme's scheme, Provisional until approved.
    */
   async mine(userId: string): Promise<MyResults> {
     const st = schema.students;
@@ -325,22 +308,10 @@ export class CourseResultsService {
     if (enrollments.length === 0) return { programmes: [] };
     const r = schema.courseResults;
     const c = schema.courses;
-    const s = schema.semesters;
-    const ses = schema.academicSessions;
     const rows = await this.db.read
-      .select({
-        result: r,
-        courseCode: c.code,
-        courseTitle: c.title,
-        semesterName: s.name,
-        sequence: s.sequence,
-        sessionCode: ses.code,
-        sessionStarts: ses.startsOn,
-      })
+      .select({ result: r, courseCode: c.code, courseTitle: c.title })
       .from(r)
       .innerJoin(c, eq(c.id, r.courseId))
-      .innerJoin(s, eq(s.id, r.semesterId))
-      .innerJoin(ses, eq(ses.id, s.academicSessionId))
       .where(
         and(
           inArray(
@@ -350,22 +321,7 @@ export class CourseResultsService {
           ne(r.status, "DRAFT"),
         ),
       )
-      .orderBy(asc(ses.startsOn), asc(s.sequence), asc(c.code));
-    const published = await this.db.read
-      .select({
-        programmeEnrollmentId: schema.semesterResults.programmeEnrollmentId,
-        semesterId: schema.semesterResults.semesterId,
-      })
-      .from(schema.semesterResults)
-      .where(
-        and(
-          inArray(
-            schema.semesterResults.programmeEnrollmentId,
-            enrollments.map((e) => e.id),
-          ),
-          eq(schema.semesterResults.status, "PUBLISHED"),
-        ),
-      );
+      .orderBy(asc(r.completedOn), asc(c.code));
     const schemeIds = enrollments.flatMap((e) => (e.schemeId === null ? [] : [e.schemeId]));
     const schemes: SchemeRow[] =
       schemeIds.length === 0
@@ -377,50 +333,30 @@ export class CourseResultsService {
     return {
       programmes: enrollments.map((e) => {
         const scheme = schemes.find((x) => x.id === e.schemeId);
-        const rules = scheme === undefined ? null : rulesOf(scheme);
         const mineRows = rows.filter((x) => x.result.programmeEnrollmentId === e.id);
-        const semesterIds = [...new Set(mineRows.map((x) => x.result.semesterId))];
-        const sofar: ResultLine[] = [];
         return {
           programmeEnrollmentId: e.id,
           programmeName: e.programmeName,
           matricNumber: e.matricNumber,
-          semesters: semesterIds.map((semesterId) => {
-            const inSemester = mineRows.filter((x) => x.result.semesterId === semesterId);
-            const lines = inSemester.map((x) => lineOf(x.result));
-            sofar.push(...lines);
-            const term = semesterGpa(lines);
-            const cumulative = cumulativeGpa(sofar, rules?.repeatPolicy ?? "BEST");
-            const first = inSemester[0];
-            return {
-              semesterId,
-              semesterName: first?.semesterName ?? "",
-              sessionCode: first?.sessionCode ?? "",
-              results: inSemester.map((x) => ({
-                id: x.result.id,
-                courseCode: x.courseCode,
-                courseTitle: x.courseTitle,
-                creditsX10: x.result.creditsX10,
-                finalPctX100: x.result.finalPctX100,
-                letter: x.result.letter,
-                pointsX100: x.result.pointsX100,
-                resultKind: x.result.resultKind as ResultKind,
-                countsInGpa: x.result.countsInGpa,
-                passed: x.result.passed,
-                attemptNo: x.result.attemptNo,
-                status: x.result.status as CourseResultRow["status"] & string,
-              })),
-              creditsAttemptedX10: term.creditsAttemptedX10,
-              creditsEarnedX10: term.creditsEarnedX10,
-              gpaX100: term.gpaX100,
-              cgpaX100: cumulative.gpaX100,
-              standing: rules === null ? "UNKNOWN" : standingFor(cumulative.gpaX100, rules),
-              // Provisional until the Registrar publishes the semester result.
-              provisional: !published.some(
-                (x) => x.programmeEnrollmentId === e.id && x.semesterId === semesterId,
-              ),
-            };
-          }),
+          results: mineRows.map((x) => ({
+            id: x.result.id,
+            courseCode: x.courseCode,
+            courseTitle: x.courseTitle,
+            completedOn: x.result.completedOn,
+            creditsX10: x.result.creditsX10,
+            finalPctX100: x.result.finalPctX100,
+            letter: x.result.letter,
+            pointsX100: x.result.pointsX100,
+            resultKind: x.result.resultKind as ResultKind,
+            countsInGpa: x.result.countsInGpa,
+            passed: x.result.passed,
+            attemptNo: x.result.attemptNo,
+            status: x.result.status as CourseResultRow["status"] & string,
+          })),
+          summary: summarize(
+            mineRows.map((x) => x.result),
+            scheme === undefined ? null : rulesOf(scheme),
+          ),
         };
       }),
     };
@@ -481,6 +417,12 @@ export class CourseResultsService {
     const existing = await db.select().from(r).where(eq(r.courseOfferingId, offeringId));
     const g = schema.grades;
     const grades = await db.select().from(g).where(eq(g.courseOfferingId, offeringId));
+    const m = schema.examMakeups;
+    const makeups = await db
+      .select({ studentId: m.studentId, makeupOn: m.makeupOn })
+      .from(m)
+      .where(eq(m.courseOfferingId, offeringId));
+    const exams = columns.filter((col) => col.kind === "EXAM");
     const schemeIds = [
       ...new Set(roster.flatMap((x) => (x.schemeId === null ? [] : [x.schemeId]))),
     ];
@@ -519,9 +461,18 @@ export class CourseResultsService {
         blocker ??= `The ${s.programmeCode} programme has no grading scheme yet. Ask the Registrar to choose one.`;
         continue;
       }
+      const makeupOn = makeups.find((x) => x.studentId === s.studentId)?.makeupOn ?? null;
+      const examUngraded =
+        exams.length === 0 ||
+        exams.some((col) => {
+          const grade = grades.find((x) => x.assessmentId === col.id && x.studentId === s.studentId);
+          return grade?.score == null && grade?.status !== "EXCUSED";
+        });
+      // Waiting on a makeup exam (or on an exam column not set up yet): left out, not missing.
+      const awaitingMakeup = makeupOn !== null && examUngraded;
       const items = columns.map((col) => {
         const grade = grades.find((x) => x.assessmentId === col.id && x.studentId === s.studentId);
-        if (grade?.score == null && grade?.status !== "EXCUSED") missing++;
+        if (!awaitingMakeup && grade?.score == null && grade?.status !== "EXCUSED") missing++;
         return {
           scoreX100:
             grade?.score != null
@@ -559,6 +510,8 @@ export class CourseResultsService {
           earlier.filter(
             (x) => x.studentId === s.studentId && x.courseEnrollmentId !== s.courseEnrollmentId,
           ).length + 1,
+        makeupOn,
+        awaitingMakeup,
       });
     }
     if (!config.missingGradeAsZero && missing > 0)
@@ -595,6 +548,8 @@ export class CourseResultsService {
           passed: row.passed,
           attemptNo: row.attemptNo,
           finalizedAt: row.finalizedAt?.toISOString() ?? null,
+          approvedAt: row.approvedAt?.toISOString() ?? null,
+          makeupOn: c.makeupOn,
           reopenedCount: row.reopenedCount,
           version: row.version,
         };
@@ -615,6 +570,8 @@ export class CourseResultsService {
         passed: c.passed,
         attemptNo: c.attemptNo,
         finalizedAt: null,
+        approvedAt: null,
+        makeupOn: c.makeupOn,
         reopenedCount: row?.reopenedCount ?? 0,
         version: row?.version ?? 0,
       };
@@ -622,6 +579,10 @@ export class CourseResultsService {
     return {
       blocker: plan.blocker,
       finalized: items.filter((i) => i.status !== null && FINAL.includes(i.status)).length,
+      awaitingMakeup: plan.computed.filter((c) => {
+        const row = plan.existing.find((e) => e.courseEnrollmentId === c.courseEnrollmentId);
+        return c.awaitingMakeup && !(row !== undefined && FINAL.includes(row.status));
+      }).length,
       items,
     };
   }

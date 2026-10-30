@@ -1,5 +1,6 @@
 export { AssessmentModule } from "./assessment.module";
 export { ExamsService } from "./exams.service";
+export { MakeupsService } from "./makeups.service";
 export { scaleToMax } from "./domain/quiz";
 export {
   AssignmentsService,

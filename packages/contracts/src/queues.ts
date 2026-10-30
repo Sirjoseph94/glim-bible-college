@@ -87,17 +87,8 @@ export const QUEUES = {
     retryLimit: 3,
     expireInSeconds: 10 * MIN,
   },
-  "semester.open-registration": {
-    role: "general",
-    retryLimit: 3,
-    expireInSeconds: 30 * MIN,
-  },
-  "academic.progression": {
-    role: "general",
-    retryLimit: 3,
-    expireInSeconds: 30 * MIN,
-  },
-  "results.compute-semester": {
+  /** Daily: offerings start and complete on their dates (ADR-0005). */
+  "academic.offering-lifecycle": {
     role: "general",
     retryLimit: 3,
     expireInSeconds: 30 * MIN,
@@ -175,6 +166,11 @@ export const CRON_SCHEDULES = {
   "class-meeting.series-extend": {
     queue: "class-meeting.series-extend",
     cron: "15 0 * * *",
+    tz: "Africa/Lagos",
+  },
+  "academic.offering-lifecycle": {
+    queue: "academic.offering-lifecycle",
+    cron: "10 0 * * *",
     tz: "Africa/Lagos",
   },
   "video.purge-deleted": { queue: "video.purge-deleted", cron: "30 3 * * *", tz: "UTC" },

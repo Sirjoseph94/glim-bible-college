@@ -1,4 +1,4 @@
-import type { admissions, CurrentIntake } from "@glim/contracts";
+import type { admissions } from "@glim/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { api } from "./client";
 
@@ -10,14 +10,9 @@ export const currentIntakeQuery = queryOptions({
   staleTime: 10 * 60 * 1000,
 });
 
-type Programme = CurrentIntake["programmes"][number];
-
-const LENGTH: Record<Programme["awardType"], string> = {
-  CERTIFICATE: "1 year · Year 1",
-  DIPLOMA: "2 years · Years 1 and 2",
-};
-
-/** How long a Programme takes, as the public pages say it. */
-export function programmeLength(programme: Programme): string {
-  return LENGTH[programme.awardType];
-}
+/**
+ * How the Programme runs, as the public pages say it (ADR-0005): one course at a time, the
+ * Certificate halfway and the Diploma at the end.
+ */
+export const PROGRAMME_SHAPE =
+  "One course at a time · the Certificate halfway, the Diploma when you finish";

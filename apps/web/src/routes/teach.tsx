@@ -439,9 +439,11 @@ export function TeachCoursePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        overline={`${o.courseCode} · ${o.sectionCode}`}
+        overline={`${o.courseCode} · ${o.cohortCode}`}
         title={o.title}
-        meta={[`${o.semesterName}, ${o.sessionCode}`, lecturers].filter(Boolean).join(" · ")}
+        meta={[`${o.startsOn} to ${o.endsOn}, exam ${o.examOn}`, lecturers]
+          .filter(Boolean)
+          .join(" · ")}
       />
       <Tabs
         label="Course sections"

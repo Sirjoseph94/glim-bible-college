@@ -46,7 +46,7 @@ describe("worker", () => {
       handlers: createHandlers({
         context,
         subscribers: {
-          "academic.session.activated": [(e) => Promise.resolve(void received.push(e))],
+          "academic.offering.completed": [(e) => Promise.resolve(void received.push(e))],
         },
       }),
       logger,
@@ -56,8 +56,8 @@ describe("worker", () => {
 
     await db.withTx(({ boss }) =>
       boss.publish(
-        "academic.session.activated",
-        { sessionId: "2027/2028" },
+        "academic.offering.completed",
+        { offeringId: "00000000-0000-7000-8000-000000000003" },
         { occurredAt: new Date() },
       ),
     );
@@ -68,47 +68,38 @@ describe("worker", () => {
       },
       { timeout: 10_000, interval: 100 },
     );
-    expect(received[0]?.payload).toEqual({ sessionId: "2027/2028" });
+    expect(received[0]?.payload).toEqual({ offeringId: "00000000-0000-7000-8000-000000000003" });
   });
 
-  it("hands a semester's opened registration to the semester.open-registration queue", async () => {
-    await db.withTx(({ boss }) =>
-      boss.publish(
-        "academic.semester.registration-opened",
-        { semesterId: "00000000-0000-7000-8000-000000000001", sessionId: "x" },
-        { occurredAt: new Date() },
-      ),
+  it("completes offerings past their last day on the daily academic.offering-lifecycle job", async () => {
+    const one = async (text: string, values: unknown[] = []) =>
+      (await db.pool.query<{ id: string }>(text, values)).rows[0]?.id;
+    const programme = await one("INSERT INTO programmes (code, name) VALUES ('WDIP', 'W') RETURNING id");
+    const course = await one(
+      "INSERT INTO courses (code, title, credits) VALUES ('W101', 'W', 3) RETURNING id",
     );
-    const seen: unknown[] = [];
-    const dispatch = createHandlers({ context, subscribers: createSubscribers(context) })[
-      "domain-event"
-    ];
-    if (dispatch === undefined) throw new Error("no domain-event handler");
-    await drainQueues(sendBoss, {
-      "domain-event": dispatch,
-      "semester.open-registration": (job) => Promise.resolve(void seen.push(job.data)),
-    });
-    expect(seen).toEqual([{ semesterId: "00000000-0000-7000-8000-000000000001" }]);
-  });
-
-  it("hands an activated Academic Session to the academic.progression queue", async () => {
-    await db.withTx(({ boss }) =>
-      boss.publish(
-        "academic.session.activated",
-        { sessionId: "00000000-0000-7000-8000-000000000002" },
-        { occurredAt: new Date() },
-      ),
+    const intake = await one(
+      `INSERT INTO intakes (code, opens_on, closes_on, starts_on, status)
+       VALUES ('2026-W', '2025-01-01', '2025-02-01', '2026-01-01', 'CLOSED') RETURNING id`,
     );
-    const seen: unknown[] = [];
-    const dispatch = createHandlers({ context, subscribers: createSubscribers(context) })[
-      "domain-event"
-    ];
-    if (dispatch === undefined) throw new Error("no domain-event handler");
-    await drainQueues(sendBoss, {
-      "domain-event": dispatch,
-      "academic.progression": (job) => Promise.resolve(void seen.push(job.data)),
-    });
-    expect(seen).toEqual([{ sessionId: "00000000-0000-7000-8000-000000000002" }]);
+    const cohort = await one(
+      "INSERT INTO cohorts (programme_id, intake_id, code, name) VALUES ($1, $2, 'WDIP-2026', 'W') RETURNING id",
+      [programme, intake],
+    );
+    const offering = await one(
+      `INSERT INTO course_offerings (course_id, cohort_id, starts_on, ends_on, exam_on, status)
+       VALUES ($1, $2, '2026-10-01', '2026-10-31', '2026-10-31', 'ACTIVE') RETURNING id`,
+      [course, cohort],
+    );
+    await db.withTx(({ boss }) => boss.send("academic.offering-lifecycle", {}));
+    const handlers = createHandlers({ context, subscribers: createSubscribers(context) });
+    await drainQueues(sendBoss, handlers);
+    const { rows } = await db.pool.query<{ status: string }>(
+      "SELECT status FROM course_offerings WHERE id = $1",
+      [offering],
+    );
+    // The clock reads 2 November 2026 in Lagos.
+    expect(rows[0]?.status).toBe("COMPLETED");
   });
 
   it("redelivers a job to another worker when the first dies mid-job", async () => {

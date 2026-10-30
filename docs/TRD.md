@@ -1,11 +1,11 @@
 # GLIM Online Bible College — School Management System: Agent Build Specification
 
-**Version:** 3.0 (GLIM edition) · **Date:** October 2026 · **Supersedes:** Build Spec v2.1 (archived at `docs/archive/TRD-v2.1.md`) and TRD v1.0 · **Audience:** Claude Code agents, and the people reviewing their work.
+**Version:** 3.1 (GLIM edition; block teaching, ADR-0005, 30 October 2026) · **Date:** October 2026 · **Supersedes:** Build Spec v2.1 (archived at `docs/archive/TRD-v2.1.md`) and TRD v1.0 · **Audience:** Claude Code agents, and the people reviewing their work.
 
 **Product:** The school management system for **GLIM Online Bible College** (Gospel Light International Ministries). It serves **one institution** and covers:
 
 - **Admissions:** online application form, review, offer and acceptance.
-- **Academic records:** programmes, curricula, enrollment and electives.
+- **Academic records:** the Diploma, its curriculum, cohorts taking its courses one at a time (ADR-0005), and enrollment.
 - **Hybrid teaching:** classes are held in a room and on **Google Meet** at the same time.
 - **Attendance:** taken from Meet for online students and by roll call for students in the room.
 - **Recordings:** held indefinitely in a **managed video service** and played back in a low-bandwidth player.
@@ -15,7 +15,7 @@ It runs on a **Hostinger VPS** with **Neon** PostgreSQL and **Cloudflare R2** (A
 
 > **This file is the single source of truth.** Owner answers are recorded in `docs/decisions.md` and the domain language in `GLOSSARY.md`. Architecture decisions are in `docs/adr/` and §2.2. If something here is ambiguous or contradicts itself, **stop and raise it** (§0.4). Vendor facts that could not be verified are listed as **spikes** (Appendix B): build against the ports and fakes, and don't hard-wire them.
 
-> **Language:** use the terms in `GLOSSARY.md` in code, UI copy, issues and tests. In particular: **Academic Session** means the academic year, **Class Meeting** means a scheduled class, **Lecturer** (not Teacher), **Matric Number** (not student number), and **Level** is Year 1 or Year 2. The word "session" is never used unqualified.
+> **Language:** use the terms in `GLOSSARY.md` in code, UI copy, issues and tests. In particular: **Class Meeting** means a scheduled class, **Cohort Schedule** means a cohort's offerings in order, **Lecturer** (not Teacher), **Matric Number** (not student number), and **Makeup Exam** (not resit) is a later exam date for one student. There are no Academic Sessions, semesters or Levels (ADR-0005). The word "session" is never used unqualified.
 
 ---
 
@@ -122,8 +122,8 @@ v2.1 was a multi-school LMS sized for 25,000 users. v3.0 is for GLIM alone, size
 | Δ3-04 | **App Platform hosting.** Replaced droplets/Compose/Caddy, the ffmpeg ladder, Cloudflare R2 and the `media-edge` Worker with App Platform components, DO Spaces for files, and SendGrid for email. Grafana/OTel stack and sops/age removed. Video is hosted on **YouTube, unlisted** (C-43, ADR-0003). | ADR-0002, ADR-0003, §4, §13, §22 |
 | Δ3-05 | **Recordings kept indefinitely** on GLIM's YouTube channel as unlisted videos (C-43). The 180-day purge is removed. The System Admin can add, edit, replace and delete videos (YouTube Studio for upload and download). The app shows students the recordings of courses they took **until their programme enrollment ends**. | §13 |
 | Δ3-06 | **Six roles**, institution-wide (no scopes): System Admin, Admissions Officer, Registrar, Academic Admin, and the derived Lecturer and Student, plus the derived Applicant. Removed Auditor, org units/departments, scoped role assignments and offering audiences. | §7 |
-| Δ3-07 | **Programmes.** A 1-year Certificate and a 2-year Diploma, which are separate programmes. Compulsory courses are auto-registered, and students choose electives available to their Level and semester. NUC 5-point grade points with **award classes** Distinction / Credit / Pass. | §9, §14.4 |
-| Δ3-08 | **Calendar.** The Academic Session starts in September with two semesters (Sept–Jan, Feb–June) and exams at the end of each. One intake a year: applications open in November and close in June. | §9.1, §10.1 |
+| Δ3-07 | **Superseded by ADR-0005 (BT-2, BT-4).** ~~**Programmes.** A 1-year Certificate and a 2-year Diploma, which are separate programmes. Compulsory courses are auto-registered, and students choose electives available to their Level and semester. NUC 5-point grade points with **award classes** Distinction / Credit / Pass.~~ | §9, §14.4 |
+| Δ3-08 | **Superseded by ADR-0005 (BT-1, BT-5).** ~~**Calendar.** The Academic Session starts in September with two semesters (Sept–Jan, Feb–June) and exams at the end of each. One intake a year: applications open in November and close in June.~~ | §9.1, §10.1 |
 | Δ3-09 | **Exams.** In-room students write on paper and Lecturers enter the scores; online students take a timed online exam. Both feed the same gradebook column. No proctoring. | §14.2 |
 | Δ3-10 | **Viewer timezone.** Class Meetings are scheduled in Africa/Lagos; every time is shown in the viewer's own timezone, with Lagos time alongside when they differ. | §5.1, §18 |
 | Δ3-11 | **Vocabulary.** Renamed tables and permissions to match `GLOSSARY.md`: `live_sessions` → `class_meetings`, `teachers` → `lecturers`, `teaching_assignments` → `lecturer_assignments`, `student_number` → `matric_number`, `degree_awards` → `awards`. | everywhere |
@@ -148,7 +148,7 @@ IDs C-01…C-17 come from v2.1; C-18 onward were added in the October 2026 vetti
 | C-05 | **Institution host accounts own Meet spaces** | HOST_POOL of **2** host accounts (§11.2). |
 | C-07 | **Low bandwidth** | YouTube's adaptive player with a click-to-load facade and a 144p data-saver tip (no audio-only in v1, D-09), Meet dial-in shown, web budgets. |
 | C-10 | **Students use personal Gmail** | `RESTRICTED` Meet spaces with student member sync. A Google account is required to apply, and therefore before the first live join. |
-| C-11 | **NUC 5-point; repeat policy BEST; results visible on Lecturer finalization** | Semester GPA/CGPA shown as *Provisional* until the Registrar approves. Official transcripts require approved semesters. |
+| C-11 | **NUC 5-point; repeat policy BEST; results visible on Lecturer finalization** | The CGPA is shown as *Provisional* until the Registrar approves every result it counts. Official transcripts require approved results (ADR-0005). |
 | C-12 | **Transcripts: serial + QR + hash** | No PAdES/e-signatures. |
 | C-15 | **Cross-border legal review done** (for DigitalOcean hosting, before ADR-0004) | Hostinger, Neon and Cloudflare are new processors and, like SendGrid and YouTube under Google's terms, need DPAs or terms review before launch (C-41). |
 | C-16 | **Drive cleanup: yes** (decided before YouTube hosting) | **Under review (D-07):** with YouTube hosting, the recommendation is to keep Drive originals. `DRIVE_CLEANUP_MODE` defaults to `NONE` until the owner reconfirms. Integration slice only. |
@@ -165,9 +165,9 @@ IDs C-01…C-17 come from v2.1; C-18 onward were added in the October 2026 vetti
 | C-27 | **Times shown in the viewer's timezone**, with Lagos time alongside | §5.1. |
 | C-28 | **Six roles**, institution-wide | §7. |
 | C-29 | **Application handling:** Google sign-in to apply with saved drafts; typed-name signature + checkbox + timestamp; Statement of Faith linked; passport photo uploaded and reused as the student photo; spiritual background visible only to Admissions Officers and the System Admin and never copied to the student record; rejected applications deleted after 12 months; personal referral codes for students, alumni and staff, with a referral report | §10. |
-| C-30 | **Programmes:** a 1-year Certificate and a 2-year Diploma, separate. Compulsory courses auto-registered; students choose electives available to them. | §9. |
+| C-30 | **Superseded by ADR-0005.** ~~**Programmes:** a 1-year Certificate and a 2-year Diploma, separate. Compulsory courses auto-registered; students choose electives available to them.~~ | §9. |
 | C-31 | **Grading:** NUC 5-point letter bands for every course. Award classes from final CGPA: **Distinction 4.50–5.00, Credit 3.00–4.49, Pass 1.00–2.99, no award below 1.00**, configured per programme. | §14.4. |
-| C-32 | **Calendar:** the Academic Session starts in September; two semesters (Sept–Jan, Feb–June); exams at the end of each; Levels "Year 1"/"Year 2". | §9.1. |
+| C-32 | **Superseded by ADR-0005.** ~~**Calendar:** the Academic Session starts in September; two semesters (Sept–Jan, Feb–June); exams at the end of each; Levels "Year 1"/"Year 2".~~ | §9.1. |
 | C-33 | **Admissions:** one intake per year (applications November → June), reviewed on a rolling basis. The offer must be accepted within **21 days** or it lapses; an Admissions Officer can reopen it. | §10. |
 | C-34 | **Exams:** paper exams for in-room students (scores entered by the Lecturer) and timed online exams for online students | §14.2. |
 | C-35 | **Study Mode** (On-campus/Online) chosen on the application. Actual attendance mode is recorded per Class Meeting. Room capacity is not enforced. | §10, §12. |
@@ -216,7 +216,7 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 | Q-02 | Spike S-01 (external Gmail participant ids) | **OPEN**, assigned to the System Admin (Appendix B.1). Until it passes, attendance runs in review mode. | WP-ATT-1 final behaviour |
 | D-01 | Matric Number scope | **DEFAULT — confirm:** a new Matric Number per programme admission (`GLIM/{PROG}/{YYYY}/{NNNN}`). A Certificate graduate admitted to the Diploma receives a second one. | WP-ADM-2 |
 | D-02 | Good-standing threshold | **DEFAULT — confirm:** CGPA ≥ 1.00 = GOOD; no probation band | WP-RES-1 |
-| D-03 | Year 1 → Year 2 progression (Diploma) | **DEFAULT — confirm:** every ACTIVE Diploma enrollment advances to Year 2 when the next Academic Session opens; the Academic Admin handles exceptions manually. Failed compulsory courses are re-registered manually by the Academic Admin. | WP-11 |
+| D-03 | Year 1 → Year 2 progression (Diploma) | **Superseded by ADR-0005: no Levels; retakes are manual registrations (§9.3).** ~~**DEFAULT — confirm:** every ACTIVE Diploma enrollment advances to Year 2 when the next Academic Session opens; the Academic Admin handles exceptions manually. Failed compulsory courses are re-registered manually by the Academic Admin.~~ | WP-11 |
 | D-04 | Existing students already mid-programme | **DEFAULT — confirm:** a CSV import of students and their past course results (`COURSE_RESULTS`), so CGPA and transcripts are complete | WP-13 |
 | D-05 | Lecturer vs System Admin video rights | **DEFAULT — confirm:** Lecturers (PRIMARY/CO_LECTURER) can add YouTube links, publish/unpublish and edit metadata for their own offerings. Delete, restore and replace are System Admin only. | WP-VIDEO-3 |
 | D-06 | Draft applications never submitted | **DEFAULT — confirm:** deleted 12 months after last edit (same as rejected) | WP-ADM-3 |
@@ -231,17 +231,17 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 
 ### 3.1 In scope (v1)
 
-- Institution settings and academic structure: programmes (Certificate, Diploma), versioned curricula, courses, Academic Sessions, semesters and Rooms.
+- Institution settings and academic structure: the programme (the Diploma), versioned ordered curricula, courses, cohorts and their Cohort Schedules, and Rooms.
 - Admissions: intakes, the online application form, review, decisions, offers, acceptance, referral codes and the referral report.
 - Students, Lecturers and staff; CSV import (including past results).
-- Enrollment: programme → semester → course, with compulsory auto-registration and elective selection.
+- Enrollment: programme → course, registered with the cohort when each offering is published, plus manual registration for retakes.
 - Lecturer assignments and co-lecturing.
 - Class Meetings, single and recurring, on Google Meet with an optional Room.
 - Join authorization; attendance from Meet plus in-room roll call; attendance overrides and reports.
 - Recordings: hosted on GLIM's YouTube channel as unlisted videos, linked into the app, embedded only for entitled viewers, with resume progress and a low-data tip.
 - Video management: upload, edit, replace, download and delete.
 - Learning: materials, announcements, assignments, quizzes, exams and the gradebook.
-- Results: course results, semester GPA/CGPA, standing, award classes and awards, and verifiable transcripts.
+- Results: course results with Registrar approval, CGPA, standing, award classes, the Certificate and Diploma awards, and verifiable transcripts.
 - Platform: notifications (in-app + email), roles and permissions, audit, ops visibility, and data-subject tooling.
 
 ### 3.2 Out of scope (v1)
@@ -266,11 +266,11 @@ Agents may build on these defaults, but must not lock them in irreversibly. Conf
 | Persona | Journeys |
 | ------- | -------- |
 | Applicant | Sign in with Google → fill in the application (autosaved) → upload photo → declare and consent → submit → track status → accept offer (gets a Matric Number) |
-| Student | See this week's Class Meetings in their own timezone → join online, or attend in the room → choose electives at registration → rewatch recordings (resume, 144p data-saver) → submit assignments, take quizzes and online exams → see grades, results and transcripts |
+| Student | See this week's Class Meetings in their own timezone → join online, or attend in the room → follow their course schedule (one course at a time) → rewatch recordings (resume, 144p data-saver) → submit assignments, take quizzes and online exams → see grades, results and transcripts |
 | Lecturer | See assigned offerings → schedule Class Meetings (with a Room) → start the class (room laptop joins Meet) → take roll call → review Meet attendance and resolve unmatched participants → publish materials and assignments → enter paper exam scores → grade → finalize results |
 | Admissions Officer | Manage intakes → review applications (including sensitive answers) → admit or reject → reopen lapsed offers → referral and intake reports |
-| Academic Admin | Set up sessions, semesters, curricula, courses, Rooms and offerings → assign Lecturers → open registration (auto-registers compulsory courses) → manage enrollments and progression → import data → attendance reports |
-| Registrar | Approve and publish semester results → issue and revoke transcripts → confirm awards → manage grading schemes and award classes |
+| Academic Admin | Set up curricula, courses and Rooms → plan each cohort's schedule and date its offerings → assign Lecturers → publish offerings (registers the cohort) → manage manual registrations and withdrawals → import data → attendance reports |
+| Registrar | Approve course results by offering or cohort → issue and revoke transcripts → confirm the Certificate and Diploma → manage grading schemes and award classes |
 | System Admin | Users and roles; policies and settings; Google integration; video management (upload, edit, replace, download, delete); ops failures and replay; audit log. Holds every permission except those reserved to students and applicants. |
 
 ---
@@ -577,32 +577,18 @@ CREATE TABLE provider_subscriptions (  -- owner: class-meeting. Workspace Events
 ### 6.3 M02 — Academic core
 
 ```sql
-CREATE TABLE programmes (              -- owner: academic. GLIM: CERT (1 year) and DIP (2 years).
+CREATE TABLE programmes (              -- owner: academic. GLIM: the Diploma (ADR-0005); the Certificate is an award within it.
   @std, code citext NOT NULL UNIQUE, name text NOT NULL,
-  award_type text NOT NULL CHECK (award_type IN ('CERTIFICATE','DIPLOMA')),
-  duration_semesters smallint NOT NULL CHECK (duration_semesters > 0),    -- CERT 2, DIP 4
-  levels smallint NOT NULL CHECK (levels BETWEEN 1 AND 4),                -- CERT 1 (Year 1), DIP 2 (Year 1–2)
   grading_scheme_id uuid,                                                 -- FK added in M07
   status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','ARCHIVED')));
 
-CREATE TABLE academic_sessions (       -- owner: academic. One academic year, e.g. code '2027/2028'.
-  @std, code citext NOT NULL UNIQUE, name text NOT NULL, starts_on date NOT NULL, ends_on date NOT NULL,
-  status text NOT NULL DEFAULT 'PLANNED' CHECK (status IN ('PLANNED','ACTIVE','CLOSED')), CHECK (ends_on > starts_on));
-
-CREATE TABLE semesters (               -- owner: academic. GLIM: sequence 1 = Sept–Jan, 2 = Feb–June.
-  @std, academic_session_id uuid NOT NULL, code citext NOT NULL, name text NOT NULL, sequence smallint NOT NULL,
-  starts_on date NOT NULL, ends_on date NOT NULL, registration_opens_on date, registration_closes_on date, add_drop_deadline_on date,
-  exams_start_on date, exams_end_on date,
-  status text NOT NULL DEFAULT 'PLANNED' CHECK (status IN ('PLANNED','REGISTRATION','ACTIVE','CLOSED')),
-  UNIQUE (academic_session_id, sequence), UNIQUE (academic_session_id, code), CHECK (ends_on > starts_on),
-  @fk(academic_session_id → academic_sessions));
-
-CREATE TABLE intakes (                 -- owner: admissions. One per year: applications open Nov, close June; students start in academic_session.
-  @std, code citext NOT NULL UNIQUE,                  -- e.g. '2027' (applications Nov 2026 – Jun 2027, starting the 2027/2028 session)
-  academic_session_id uuid NOT NULL UNIQUE, opens_on date NOT NULL, closes_on date NOT NULL,
+CREATE TABLE intakes (                 -- owner: admissions. An application window and the date its cohort starts (ADR-0005).
+  @std, code citext NOT NULL UNIQUE,                  -- e.g. '2027' or '2027-JAN'
+  opens_on date NOT NULL, closes_on date NOT NULL, starts_on date NOT NULL,
   offer_acceptance_days int NOT NULL DEFAULT 21 CHECK (offer_acceptance_days > 0),
   status text NOT NULL DEFAULT 'PLANNED' CHECK (status IN ('PLANNED','OPEN','CLOSED')),
-  CHECK (closes_on > opens_on), @fk(academic_session_id → academic_sessions));
+  CHECK (closes_on > opens_on), CHECK (starts_on >= opens_on),
+  EXCLUDE USING gist (daterange(opens_on, closes_on, '[]') WITH &&));   -- intakes_no_overlap (custom SQL)
 
 CREATE TABLE cohorts (                 -- owner: academic. Students of one programme starting in one intake (created on first acceptance).
   @std, programme_id uuid NOT NULL, intake_id uuid NOT NULL, code citext NOT NULL, name text NOT NULL,
@@ -611,7 +597,6 @@ CREATE TABLE cohorts (                 -- owner: academic. Students of one progr
 
 CREATE TABLE curricula (               -- owner: academic. Versioned; enrollments keep the version they started on.
   @std, programme_id uuid NOT NULL, curriculum_version int NOT NULL, effective_from date NOT NULL,
-  min_elective_credits numeric(4,1) NOT NULL DEFAULT 0,  -- award requirement (§14.6)
   status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','ACTIVE','RETIRED')),
   UNIQUE (programme_id, curriculum_version), @fk(programme_id → programmes));
 CREATE UNIQUE INDEX one_active_curriculum ON curricula (programme_id) WHERE status = 'ACTIVE';
@@ -620,10 +605,11 @@ CREATE TABLE courses (                 -- owner: academic. Reusable subject defi
   @std, code citext NOT NULL UNIQUE, title text NOT NULL, description text, credits numeric(4,1) NOT NULL DEFAULT 0,
   status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','ARCHIVED')));
 
-CREATE TABLE curriculum_courses (      -- owner: academic. Compulsory/elective placement per Level and semester.
-  @std, curriculum_id uuid NOT NULL, course_id uuid NOT NULL, level_no smallint NOT NULL, semester_no smallint NOT NULL CHECK (semester_no IN (1,2)),
-  course_type text NOT NULL CHECK (course_type IN ('COMPULSORY','ELECTIVE')), credit_override numeric(4,1),
+CREATE TABLE curriculum_courses (      -- owner: academic. A course at its place in the default order (ADR-0005).
+  @std, curriculum_id uuid NOT NULL, course_id uuid NOT NULL, position smallint NOT NULL CHECK (position > 0),
+  credit_override numeric(4,1),
   UNIQUE (curriculum_id, course_id), @fk(curriculum_id → curricula), @fk(course_id → courses));
+-- curriculum_courses_position_unique: UNIQUE (curriculum_id, position) DEFERRABLE INITIALLY DEFERRED (custom SQL).
 
 CREATE TABLE rooms (                   -- owner: academic
   @std, code citext NOT NULL UNIQUE, name text NOT NULL, capacity int CHECK (capacity IS NULL OR capacity > 0),  -- informational (C-35)
@@ -650,42 +636,39 @@ CREATE TABLE matric_sequences (        -- owner: enrollment. Gap-free per progra
   @fk(programme_id → programmes));
 
 CREATE TABLE programme_enrollments (   -- owner: enrollment. One per admission to a programme.
-  @std, student_id uuid NOT NULL, programme_id uuid NOT NULL, curriculum_id uuid NOT NULL, intake_id uuid, cohort_id uuid,
-  entry_session_id uuid NOT NULL, application_id uuid UNIQUE,          -- NULL only for imported legacy students (D-04)
+  @std, student_id uuid NOT NULL, programme_id uuid NOT NULL, curriculum_id uuid NOT NULL, intake_id uuid, cohort_id uuid NOT NULL,
+  application_id uuid UNIQUE,                                          -- NULL only for imported legacy students (D-04)
   matric_number text NOT NULL UNIQUE,                                  -- 'GLIM/DIP/2027/0001' (D-01)
   study_mode text NOT NULL CHECK (study_mode IN ('ON_CAMPUS','ONLINE')),
-  current_level smallint NOT NULL DEFAULT 1,
   status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','DEFERRED','WITHDRAWN','COMPLETED')),
   started_on date NOT NULL, ended_on date,
   @fk(student_id → students), @fk(programme_id → programmes), @fk(curriculum_id → curricula), @fk(intake_id → intakes),
-  @fk(cohort_id → cohorts), @fk(entry_session_id → academic_sessions));   -- application_id FK added in M08
+  @fk(cohort_id → cohorts));             -- application_id FK added in M08
 CREATE UNIQUE INDEX one_active_programme_enrollment ON programme_enrollments (student_id, programme_id) WHERE status = 'ACTIVE';
 
-CREATE TABLE semester_enrollments (    -- owner: enrollment. Created when a semester opens registration (§9.3).
-  @std, programme_enrollment_id uuid NOT NULL, semester_id uuid NOT NULL, level_no smallint NOT NULL,
-  status text NOT NULL DEFAULT 'REGISTERED' CHECK (status IN ('REGISTERED','WITHDRAWN','COMPLETED')),
-  UNIQUE (programme_enrollment_id, semester_id), @fk(programme_enrollment_id → programme_enrollments), @fk(semester_id → semesters));
-
-CREATE TABLE course_offerings (        -- owner: academic. A course taught in a semester.
-  @std, course_id uuid NOT NULL, semester_id uuid NOT NULL, section_code text NOT NULL DEFAULT '01', title_override text,
-  capacity int CHECK (capacity IS NULL OR capacity > 0),
+CREATE TABLE course_offerings (        -- owner: academic. One run of a course for one cohort, on its own dates (ADR-0005).
+  @std, course_id uuid NOT NULL, cohort_id uuid NOT NULL, starts_on date NOT NULL, ends_on date NOT NULL, exam_on date NOT NULL,
+  title_override text, capacity int CHECK (capacity IS NULL OR capacity > 0),
   status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','PUBLISHED','ACTIVE','COMPLETED','CANCELLED')),
   completed_at timestamptz, policy_overrides jsonb NOT NULL DEFAULT '{}',
-  UNIQUE (course_id, semester_id, section_code), @fk(course_id → courses), @fk(semester_id → semesters));
+  CHECK (starts_on <= exam_on AND exam_on <= ends_on), @fk(course_id → courses), @fk(cohort_id → cohorts),
+  EXCLUDE USING gist (cohort_id WITH =, daterange(starts_on, ends_on, '[]') WITH &&) WHERE (status <> 'CANCELLED'));
+  -- course_offerings_no_cohort_overlap (custom SQL)
+CREATE UNIQUE INDEX course_offerings_one_live_per_cohort ON course_offerings (course_id, cohort_id) WHERE status <> 'CANCELLED';
 
 CREATE TABLE course_enrollments (      -- owner: enrollment. THE entitlement source for students.
-  @std, semester_enrollment_id uuid NOT NULL, programme_enrollment_id uuid NOT NULL, course_offering_id uuid NOT NULL,
+  @std, programme_enrollment_id uuid NOT NULL, course_offering_id uuid NOT NULL,
   student_id uuid NOT NULL,                                        -- denormalised; trigger enforces consistency (custom SQL)
-  selection text NOT NULL CHECK (selection IN ('COMPULSORY','ELECTIVE','MANUAL')),   -- how it was registered (§9.3)
+  selection text NOT NULL CHECK (selection IN ('COHORT','MANUAL')),   -- how it was registered (§9.3)
   enrollment_type text NOT NULL DEFAULT 'CREDIT' CHECK (enrollment_type IN ('CREDIT','AUDIT')),
-  status text NOT NULL DEFAULT 'ENROLLED' CHECK (status IN ('ENROLLED','DROPPED','WITHDRAWN','COMPLETED')),
+  status text NOT NULL DEFAULT 'ENROLLED' CHECK (status IN ('ENROLLED','WITHDRAWN','COMPLETED')),
   enrolled_at timestamptz NOT NULL DEFAULT now(), dropped_at timestamptz,
-  @fk(semester_enrollment_id → semester_enrollments), @fk(programme_enrollment_id → programme_enrollments),
+  @fk(programme_enrollment_id → programme_enrollments),
   @fk(course_offering_id → course_offerings), @fk(student_id → students));
 CREATE UNIQUE INDEX one_live_course_enrollment ON course_enrollments (student_id, course_offering_id) WHERE status IN ('ENROLLED','COMPLETED');
 CREATE INDEX ON course_enrollments (course_offering_id, status);
 CREATE INDEX ON course_enrollments (student_id, status);
--- Trigger: student_id and programme_enrollment_id MUST match the semester_enrollment's programme enrollment.
+-- Trigger: student_id MUST be the programme enrollment's student.
 
 CREATE TABLE course_enrollment_events ( -- owner: enrollment. Status history.
   @std_ro, course_enrollment_id uuid NOT NULL, from_status text, to_status text NOT NULL, actor_user_id uuid, reason text,
@@ -917,6 +900,10 @@ CREATE TABLE quiz_attempts (           -- owner: assessment. question_snapshot F
 CREATE TABLE quiz_responses ( @std, attempt_id uuid NOT NULL, question_id uuid NOT NULL, response jsonb, is_correct boolean, points_awarded numeric(6,2), grader_comment text,
   UNIQUE (attempt_id, question_id), @fk(attempt_id → quiz_attempts)); -- owner: assessment
 
+CREATE TABLE exam_makeups (            -- owner: assessment. A later exam date for one student who missed the offering's exam (ADR-0005).
+  @std, course_offering_id uuid NOT NULL, student_id uuid NOT NULL, makeup_on date NOT NULL, reason text NOT NULL, set_by uuid NOT NULL,
+  UNIQUE (course_offering_id, student_id), @fk(course_offering_id → course_offerings), @fk(student_id → students), @fk(set_by → users));
+
 CREATE TABLE grades (                  -- owner: assessment. One row per (assessment, student).
   @std, course_offering_id uuid NOT NULL, assessment_id uuid NOT NULL, student_id uuid NOT NULL, score numeric(7,2),
   source text NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('MANUAL','QUIZ','SUBMISSION','IMPORT')),   -- paper exam scores = MANUAL
@@ -989,41 +976,35 @@ CREATE TABLE grading_schemes (         -- owner: results. IMMUTABLE once used (l
 -- M07 also adds: programmes.grading_scheme_id → grading_schemes(id) NOT VALID then VALIDATE; seeds 'GLIM Certificate' and 'GLIM Diploma' schemes (§14.4).
 
 CREATE TABLE course_results (          -- owner: results. One per course enrollment (or per imported legacy result). Frozen when FINALIZED.
-  @std, course_enrollment_id uuid UNIQUE, programme_enrollment_id uuid NOT NULL, semester_id uuid NOT NULL,
+  @std, course_enrollment_id uuid UNIQUE, programme_enrollment_id uuid NOT NULL,
+  completed_on date NOT NULL,                                  -- the offering's ends_on, or the imported date (ADR-0005)
   course_offering_id uuid, course_id uuid NOT NULL, student_id uuid NOT NULL, grading_scheme_id uuid NOT NULL,
   source text NOT NULL DEFAULT 'GRADEBOOK' CHECK (source IN ('GRADEBOOK','IMPORT')),
   attempt_no int NOT NULL DEFAULT 1, credits_x10 int NOT NULL,
   final_pct_x100 int, letter text, points_x100 int, quality_points_x1000 bigint,
   result_kind text NOT NULL DEFAULT 'GRADED' CHECK (result_kind IN ('GRADED','INCOMPLETE','WITHDRAWN','EXEMPT','AUDIT')),
   counts_in_gpa boolean NOT NULL DEFAULT true, passed boolean,
-  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','FINALIZED','APPROVED','PUBLISHED')),
-  finalized_by uuid, finalized_at timestamptz, approved_by uuid, approved_at timestamptz, published_at timestamptz, reopened_count int NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','FINALIZED','APPROVED')),
+  finalized_by uuid, finalized_at timestamptz, approved_by uuid, approved_at timestamptz, reopened_count int NOT NULL DEFAULT 0,
   CHECK ((source = 'IMPORT') OR (course_enrollment_id IS NOT NULL AND course_offering_id IS NOT NULL)),
-  @fk(course_enrollment_id → course_enrollments), @fk(programme_enrollment_id → programme_enrollments), @fk(semester_id → semesters),
+  @fk(course_enrollment_id → course_enrollments), @fk(programme_enrollment_id → programme_enrollments),
   @fk(course_offering_id → course_offerings), @fk(course_id → courses), @fk(student_id → students), @fk(grading_scheme_id → grading_schemes));
-CREATE INDEX ON course_results (programme_enrollment_id, semester_id);
+CREATE INDEX ON course_results (programme_enrollment_id, completed_on);
+CREATE UNIQUE INDEX course_results_import_once ON course_results (programme_enrollment_id, course_id, completed_on) WHERE source = 'IMPORT';
 CREATE INDEX ON course_results (student_id, course_id);
 
 CREATE TABLE course_result_revisions ( -- owner: results. Append-only.
   @std_ro, course_result_id uuid NOT NULL, change_kind text NOT NULL, old_value jsonb, new_value jsonb, changed_by uuid NOT NULL, reason text NOT NULL,
   @fk(course_result_id → course_results));
 
-CREATE TABLE semester_results (        -- owner: results. Per programme enrollment per semester; recomputed deterministically.
-  @std, programme_enrollment_id uuid NOT NULL, semester_id uuid NOT NULL,
-  credits_attempted_x10 int NOT NULL, credits_earned_x10 int NOT NULL, quality_points_x1000 bigint NOT NULL, gpa_x100 int,
-  cum_credits_attempted_x10 int NOT NULL, cum_credits_earned_x10 int NOT NULL, cum_quality_points_x1000 bigint NOT NULL, cgpa_x100 int,
-  standing text NOT NULL DEFAULT 'UNKNOWN' CHECK (standing IN ('GOOD','PROBATION','WITHDRAW_REQUIRED','UNKNOWN')),
-  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','APPROVED','PUBLISHED')),
-  computed_at timestamptz NOT NULL, calc_version int NOT NULL DEFAULT 1, approved_by uuid, approved_at timestamptz, published_at timestamptz,
-  UNIQUE (programme_enrollment_id, semester_id), @fk(programme_enrollment_id → programme_enrollments), @fk(semester_id → semesters));
-
 CREATE TABLE award_sequences ( award_type text NOT NULL, year int NOT NULL, next_value int NOT NULL DEFAULT 1, PRIMARY KEY (award_type, year) ); -- owner: results
 
-CREATE TABLE awards (                  -- owner: results. The Certificate or Diploma conferred on completing a programme.
-  @std, programme_enrollment_id uuid NOT NULL UNIQUE, cgpa_x100 int NOT NULL, award_class text,   -- 'Distinction' | 'Credit' | 'Pass'
+CREATE TABLE awards (                  -- owner: results. The Certificate (halfway) or the Diploma (every course) of a programme enrollment.
+  @std, programme_enrollment_id uuid NOT NULL, award_type text NOT NULL CHECK (award_type IN ('CERTIFICATE','DIPLOMA')),
+  cgpa_x100 int NOT NULL, award_class text,                                                       -- 'Distinction' | 'Credit' | 'Pass'
   credits_earned_x10 int NOT NULL, awarded_on date, certificate_no text UNIQUE,                     -- 'GLIM/DIP/AWD/2029/0001'
   status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','APPROVED','CONFERRED')), approved_by uuid, approved_at timestamptz,
-  @fk(programme_enrollment_id → programme_enrollments));
+  UNIQUE (programme_enrollment_id, award_type), @fk(programme_enrollment_id → programme_enrollments));
 
 CREATE TABLE transcript_sequences ( year int PRIMARY KEY, next_value int NOT NULL DEFAULT 1 ); -- owner: transcripts
 
@@ -1045,7 +1026,7 @@ CREATE TABLE transcripts (             -- owner: transcripts. IMMUTABLE issued d
 -- {valid, status, issued_at, programme_name, student_initials, as_of, snapshot_sha256}.
 ```
 
-**Results pipeline:** gradebook (§14.2) → `course_results` (finalize) → `semester_results` (approve → publish) → `awards` → `transcripts` snapshot.
+**Results pipeline:** gradebook (§14.2) → `course_results` (finalize → approve; CGPA worked out on the fly) → `awards` → `transcripts` snapshot.
 
 ### 6.9 M08 — Admissions
 
@@ -1154,7 +1135,7 @@ Legend:
 | `admissions:application:own-accept` | – | – | – | – | – | – | A |
 | `admissions:report:read` | ● | ● | – | – | – | – | – |
 | `academic:structure:read` | ● | ● | ● | ● | ● | ● | – |
-| `academic:structure:manage` (programmes, curricula, courses, sessions, semesters, rooms) | ● | – | – | ● | – | – | – |
+| `academic:structure:manage` (programmes, curricula, courses, rooms) | ● | – | – | ● | – | – | – |
 | `academic:course-offering:read` | ● | – | ● | ● | T | S E/C | – |
 | `academic:course-offering:manage` | ● | – | – | ● | – | – | – |
 | `lecturing:assignment:read` | ● | – | ● | ● | T | S E/C | – |
@@ -1163,7 +1144,6 @@ Legend:
 | `enrollment:student:manage` | ● | – | – | ● | – | – | – |
 | `enrollment:course-enrollment:read` | ● | – | ● | ● | T (roster) | S own | – |
 | `enrollment:course-enrollment:manage` | ● | – | – | ● | – | – | – |
-| `enrollment:elective:select` | – | – | – | – | – | S own, window open | – |
 | `meeting:class-meeting:read` | ● | – | ● | ● | T | S E | – |
 | `meeting:class-meeting:manage` (create/reschedule/cancel) | ● | – | – | ● | T | – | – |
 | `meeting:class-meeting:start` / `:end` | ● | – | – | ● | T | – | – |
@@ -1186,8 +1166,7 @@ Legend:
 | `assessment:grade:update` / `:release` | ● | – | – | ● | T | – | – |
 | `results:course-result:finalize` | ● | – | – | ● | T (PRIMARY) | – | – |
 | `results:course-result:reopen` | ● | – | ● | – | – | – | – |
-| `results:semester:compute` | ● | – | ● | ● | – | – | – |
-| `results:semester:approve` / `:publish` | ● | – | ● | – | – | – | – |
+| `results:course-result:approve` | ● | – | ● | – | – | – | – |
 | `results:record:read` | ● | – | ● | ● | T (own offerings) | S own, finalized (C-11) | – |
 | `results:award:confirm` | ● | – | ● | – | – | – | – |
 | `results:scheme:manage` | ● | – | ● | – | – | – | – |
@@ -1287,41 +1266,34 @@ The UI uses it for navigation only; every action is re-authorized on the server 
 
 ## 9. Academic core
 
-### 9.1 Calendar and lifecycle rules (C-32)
+### 9.1 Calendar and lifecycle rules (ADR-0005, BT-1)
 
-- An **Academic Session** runs from September to the following June, and its code looks like `2027/2028`. It has **two semesters**: sequence 1 (Sept–Jan) and sequence 2 (Feb–June). Each semester has an exam period (`exams_start_on`/`exams_end_on`) at its end.
-- **Levels:** the Certificate has Year 1 only; the Diploma has Year 1 and Year 2.
+- **Block teaching.** Courses are taught **one after another**, not side by side in semesters. There are no Academic Sessions, semesters or Levels. Each Course Offering has its own `starts_on`, `ends_on` and `exam_on` (`starts_on ≤ exam_on ≤ ends_on`; the exam is a date only, Lagos).
+- **One programme**, the Diploma. Its **curriculum** lists the courses, their credits and their default order (`curriculum_courses.position`, unique per curriculum and deferrable so a reorder is one change).
+- **Cohort Schedule.** Each cohort (one intake's students) has its own offerings, dated by the Academic Admin. A cohort's live (non-`CANCELLED`) offerings **never overlap** (exclusion constraint `course_offerings_no_cohort_overlap`), it has at most one live offering per course, and none may start before its intake's `starts_on` (`BEFORE_INTAKE_START`).
 
 | Aggregate | Allowed transitions | Invariants |
 | --------- | ------------------- | ---------- |
-| AcademicSession | `PLANNED → ACTIVE → CLOSED` | At most one `ACTIVE`. Semesters lie within the session and don't overlap. Activating a session runs **progression** (D-03): every ACTIVE Diploma enrollment at Year 1 that started in an earlier session advances to Year 2 (`current_level=2`), audited. |
-| Semester | `PLANNED → REGISTRATION → ACTIVE → CLOSED` | **Opening registration** enqueues `semester.open-registration` (§9.3). **Closing** marks the semester's offerings `COMPLETED` (sets `completed_at`), moves `ENROLLED` course enrollments to `COMPLETED`, and emits `academic.semester.closed`, which enqueues `results.compute-semester`. |
-| Curriculum | `DRAFT → ACTIVE → RETIRED` | Activation requires at least one placement, and only one ACTIVE curriculum per programme is allowed. An ACTIVE curriculum that has enrollments can't be edited; **clone it to a new version** instead. |
-| CourseOffering | `DRAFT → PUBLISHED → ACTIVE → COMPLETED`; `* → CANCELLED` | Publishing requires at least one active `PRIMARY` Lecturer. Cancelling cancels future Class Meetings and notifies enrollees. |
+| Curriculum | `DRAFT → ACTIVE → RETIRED` | Activation requires at least one course, and only one ACTIVE curriculum per programme is allowed. An ACTIVE curriculum that has enrollments can't be edited; **clone it to a new version** instead. |
+| CourseOffering | `DRAFT → PUBLISHED → ACTIVE → COMPLETED`; `* → CANCELLED` | Publishing requires at least one active `PRIMARY` Lecturer and registers the cohort (§9.3). The daily `academic.offering-lifecycle` job (00:10 Lagos) moves PUBLISHED offerings to ACTIVE on `starts_on`, and PUBLISHED/ACTIVE ones to COMPLETED the day after `ends_on`: `completed_at` is set, ENROLLED course enrollments become COMPLETED, and `academic.offering.completed` is emitted. Dates can move until it completes, but not away from its Class Meetings (`OUTSIDE_OFFERING_DATES`) or onto another of the cohort's offerings (`OFFERING_OVERLAP`). Cancelling cancels future Class Meetings and notifies enrollees. |
 
 ### 9.2 Offering creation (one transaction)
 
-1. Validate course/semester/section uniqueness.
-2. Insert the offering.
+1. Validate the course (ACTIVE), the cohort (ACTIVE) and the dates (exam within the offering, not before the cohort's intake starts).
+2. Insert the offering; the database refuses a second live offering of the course for the cohort (409) and an overlap (409 `OFFERING_OVERLAP`).
 3. Insert lecturer assignments (at least one PRIMARY before publishing).
 4. Write the audit row and enqueue `course.offering.created`.
 
-### 9.3 Registration and enrollment (C-30)
+**Planning a schedule** (`POST /cohorts/:id/schedule`, Academic Admin): creates DRAFT offerings for every course of the programme's ACTIVE curriculum the cohort has no live offering of, end to end in curriculum order from a start date, each `weeksPerCourse` long with its exam on its last day. All or nothing. The Academic Admin then adjusts each offering's dates.
 
-- **Chain:** `ProgrammeEnrollment → SemesterEnrollment → CourseEnrollment`. A course enrollment requires an `ACTIVE` programme enrollment and a `REGISTERED` semester enrollment for the offering's semester.
-- **`semester.open-registration`** is idempotent and runs per programme enrollment. For every ACTIVE programme enrollment whose programme has placements in this semester, it:
-  1. creates the semester enrollment (`level_no = current_level`)
-  2. **auto-registers every `COMPULSORY` placement** for that Level and semester that has a published offering (`selection='COMPULSORY'`)
-  3. returns a per-course outcome; a missing offering produces an ops warning and a notification to the Academic Admin
+### 9.3 Registration and enrollment (ADR-0005, BT-4)
 
-  Students accepted after registration opens are processed the same way during acceptance (§10.4).
-- **Elective selection** (`enrollment:elective:select`): while the semester is `REGISTRATION` or `ACTIVE` and before `add_drop_deadline_on`, a student may add or drop `ELECTIVE` placements for their Level and semester that have a published offering (`selection='ELECTIVE'`). There are no other self-service registrations.
-- **Manual registration** (`selection='MANUAL'`, Academic Admin, `reason` required) covers retakes of failed compulsory courses (D-03) and exceptions.
-- **Capacity:** if `capacity` is set, lock the offering (`SELECT … FOR UPDATE`), count `ENROLLED`, and reject with `OFFERING_FULL` (422). The partial unique index blocks duplicates (409 `ALREADY_ENROLLED`).
-- **Drop/withdraw:**
-  - Electives may be dropped until `add_drop_deadline_on` → `DROPPED` (student or admin).
-  - After the deadline, or for compulsory courses, the change is `WITHDRAWN` (Academic Admin, with reason).
-  - Both write `course_enrollment_events` and emit `course.enrollment.ended`, which triggers Meet member removal and a notification. Attendance and grades are retained.
+- **Chain:** `ProgrammeEnrollment → CourseEnrollment`. Every programme enrollment belongs to a cohort (`programme_enrollments.cohort_id`). There are no electives and no add/drop window.
+- **Publishing an offering** registers every ACTIVE programme enrollment of its cohort (`selection='COHORT'`), in the publishing transaction, each with a `course_enrollment_events` row and `course.enrollment.activated`.
+- **Accepting an offer** (§10.4) registers the new student for the cohort's PUBLISHED and ACTIVE offerings in the same transaction. Courses the cohort already finished are taken later by manual registration.
+- **Manual registration** (`selection='MANUAL'`, Academic Admin, `reason` required) puts a student into any open offering, whatever its cohort: a **Retake** of a failed course, a course a late joiner missed, or a transfer.
+- **Capacity:** if `capacity` is set, lock the offering (`SELECT … FOR UPDATE`), count `ENROLLED`, and reject with `OFFERING_FULL` (409). The partial unique index blocks duplicates (409 `ALREADY_ENROLLED`).
+- **Withdraw** (Academic Admin, with reason) → `WITHDRAWN`. It writes `course_enrollment_events` and emits `course.enrollment.ended`, which triggers Meet member removal and a notification. Attendance and grades are retained.
 - **Credit-load limits:** none in v1.
 
 ### 9.4 Lecturer assignments
@@ -1343,9 +1315,9 @@ On Class Meeting create, reschedule or series generation, **in the same transact
 
 ## 10. Admissions
 
-### 10.1 Intakes (C-33)
+### 10.1 Intakes (C-33, ADR-0005 BT-5)
 
-- There is one intake per year. Intake `2027` takes applications from November 2026 to June 2027 (`opens_on`/`closes_on`), and its students start in the `2027/2028` Academic Session. The Admissions Officer creates it, linked to its Academic Session.
+- An intake has its own application window (`opens_on`/`closes_on`) and the date its cohort starts (`starts_on ≥ opens_on`). There may be several a year (codes like `2027` or `2027-JAN`), but their application windows **never overlap** (exclusion constraint `intakes_no_overlap`, 409 `INTAKE_OVERLAP`). The Admissions Officer creates them. Moving `starts_on` later is refused while any of its cohort's offerings starts before the new date (`BEFORE_INTAKE_START`).
 - The intake status is `PLANNED → OPEN → CLOSED`. A daily cron opens and closes it from its dates, and an officer can also do this manually.
 - **Applicants can start or submit an application only while the intake is `OPEN`** (`INTAKE_CLOSED`). Review, decisions and acceptance may continue after the intake closes.
 
@@ -1354,12 +1326,12 @@ On Class Meeting create, reschedule or series generation, **in the same transact
 Applicants start at `/apply`:
 
 1. They sign in with Google. A Google account is required, and the page links to Google's account sign-up.
-2. They choose the **programme** (Certificate or Diploma) and **study mode** (On-campus or Online).
+2. They choose their **study mode** (On-campus or Online). There is one programme, the Diploma (ADR-0005), so it isn't chosen: the application is for the ACTIVE programme.
 3. They fill in a section wizard that is autosaved every 5–10 s and works on flaky connections.
 
 | § | Section | Fields (required unless marked) |
 | - | ------- | ------------------------------- |
-| 1 | Personal information | first name, middle name (optional), last name; title (Mr/Mrs/Pastor/Rev/Dr/Other + text); gender (Male/Female); date of birth (age ≥ 18 at intake start, Q-15); marital status (Single/Married/Single Parent/Widowed/Separated/Divorced); nationality; present occupation |
+| 1 | Personal information | first name, middle name (optional), last name; title (Mr/Mrs/Pastor/Rev/Dr/Other + text); gender (Male/Female); date of birth (age ≥ 18 on the intake's `starts_on`, Q-15); marital status (Single/Married/Single Parent/Widowed/Separated/Divorced); nationality; present occupation |
 | 2 | Contact information | email (prefilled from Google, editable for correspondence); mobile phone (WhatsApp); alternative phone (WhatsApp, optional) |
 | 3 | Address information | country of residence; state/province; city; post code (optional); address |
 | 4 | Church information | church name; church address; pastor's name; pastor's phone |
@@ -1398,16 +1370,16 @@ Applicants start at `/apply`:
 1. Lock the application `FOR UPDATE`. Require `ADMITTED` and `now ≤ offer_expires_at` (`OFFER_EXPIRED`).
 2. **Student record:**
    - If the user has no `students` row, create one, copying **name, title, gender, date of birth, nationality, phone numbers, address, church details and the passport photo** from the application.
-   - If they already have one (e.g. a Certificate graduate admitted to the Diploma), update those fields and set the status to `ACTIVE`.
+   - If they already have one (e.g. a former student admitted again), update those fields and set the status to `ACTIVE`.
    - **Never copy** spiritual background, marital status or occupation (INV-15).
-3. **Matric Number:** lock `matric_sequences(programme, intake year)` and allocate `GLIM/{programme.code}/{YYYY}/{NNNN}` (D-01).
+3. **Matric Number:** lock `matric_sequences(programme, year of the intake's starts_on)` and allocate `GLIM/{programme.code}/{YYYY}/{NNNN}` (D-01).
 4. Get or create the **cohort** for (programme, intake). Insert the `programme_enrollments` row with:
    - the active curriculum
-   - `entry_session_id` = the intake's session
+   - `intake_id`, `cohort_id`, and `started_on` = the intake's `starts_on`
    - `study_mode` from the application
-   - `current_level=1`, `status=ACTIVE`
+   - `status=ACTIVE`
    - `application_id`
-5. If the entry session's semester 1 is already `REGISTRATION`/`ACTIVE`, run the open-registration logic (§9.3) for this enrollment inside the same transaction.
+5. Register the student for the cohort's PUBLISHED and ACTIVE offerings (§9.3) inside the same transaction.
 6. Ensure the user has a `referral_code`.
 7. Set the application to `ACCEPTED` (`accepted_at`), audit, and emit `admissions.application.accepted`. That event triggers a welcome email with the Matric Number and first steps, and a notification to Academic Admins.
 
@@ -1896,6 +1868,7 @@ YouTube hosting and delivery cost **$0**, kept indefinitely. The trade-offs acce
   - **Online students** take a timed online exam: a `quizzes` row backing the EXAM assessment, with `eligible_study_mode='ONLINE'`. Their attempt score is scaled to `max_score` and written as `source='QUIZ'`.
   - If both exist for a student, the Lecturer chooses; changing the source requires a `reason` (audited).
   - Eligibility follows the student's **Study Mode**. The Lecturer can make individual exceptions (e.g. an On-campus student who must sit online) by granting an attempt.
+- **Exam date and makeup exams (ADR-0005, BT-6):** each offering has one `exam_on`; the online exam is open for that whole Lagos day. A Lecturer on the offering (or an Academic Admin) can give a student who missed it a **makeup exam** (`exam_makeups`: one per student and offering, `makeup_on ≥ exam_on`, a reason, audited; the student is emailed). The online exam is then open to that student on the makeup day instead. While the student has no grade in an EXAM column, finalizing (§14.3) leaves them out and their grades stay unlocked; finalizing again picks them up. A finalized student's makeup can't change without reopening the result (`GRADEBOOK_LOCKED`).
 - **Grades:**
   - `PUT /assessments/:id/grades/:studentId {score, feedbackMd}` with `If-Match`.
   - Every change writes `grade_changes` + `audit_logs` in the same transaction.
@@ -1906,7 +1879,7 @@ YouTube hosting and delivery cost **$0**, kept indefinitely. The trade-offs acce
 
 `POST /course-offerings/:id/results/finalize` (PRIMARY Lecturer or Academic Admin; Idempotency-Key):
 
-- It computes the final percentage for every `ENROLLED/COMPLETED` student, upserts `course_results` as `FINALIZED`, and locks the gradebook (`GRADEBOOK_LOCKED`).
+- It computes the final percentage for every `ENROLLED/COMPLETED` student (except those awaiting a makeup exam, §14.2), upserts `course_results` as `FINALIZED`, and locks their grades (`GRADEBOOK_LOCKED`).
 - **Included:** `PUBLISHED/CLOSED` assessments. A missing grade counts as **0** once the assessment is `CLOSED` (`missingGradeAsZero`, default true). `EXCUSED` grades are removed and the remaining weights renormalised.
 - **Exact arithmetic:** `final_pct_x100 = roundHalfUp( Σ score_x100 × weight_x100 / max_x100 × 10000 / Σ weight_x100 )`. `roundBeforeBanding` ∈ `NONE | INTEGER` (default `INTEGER`).
 - **Frozen at finalization:**
@@ -1917,11 +1890,10 @@ YouTube hosting and delivery cost **$0**, kept indefinitely. The trade-offs acce
   - `passed`
   - `counts_in_gpa`
   - `result_kind` (`AUDIT` ⇒ not counted)
-  - `programme_enrollment_id` and `semester_id`
+  - `programme_enrollment_id` and `completed_on` (the offering's `ends_on`; the imported date for legacy results)
 - `attempt_no` = the number of earlier results for the same (student, course) + 1.
 - **Reopen** (Registrar/System Admin, `reason`):
   - writes `course_result_revisions` and sets the status back to `DRAFT`
-  - moves dependent `semester_results` back to `DRAFT`
   - marks issued transcripts that include the result `SUPERSEDED`
   - notifies the student
 
@@ -1939,41 +1911,38 @@ YouTube hosting and delivery cost **$0**, kept indefinitely. The trade-offs acce
 
   The repeat policy is **BEST**, and good standing is CGPA ≥ 1.00 (D-02).
 - A scheme becomes **immutable once used** (`locked_at`). Edits create a new scheme row.
-- **Semester GPA:** `gpa_x100 = roundHalfUp( Σ quality_points_x1000 / Σ credits_x10 )` over results where `result_kind='GRADED' AND counts_in_gpa`, with `roundHalfUp(n, d) = floor((2n + d) / (2d))`.
-- **CGPA:** over the programme enrollment's results up to and including the semester, applying the **repeat policy**:
+- **CGPA** (`gpa_x100 = roundHalfUp( Σ quality_points_x1000 / Σ credits_x10 )` with `roundHalfUp(n, d) = floor((2n + d) / (2d))`) over the programme enrollment's non-draft results where `result_kind='GRADED' AND counts_in_gpa`, applying the **repeat policy**:
   - `KEEP_ALL`: every attempt counts
   - `REPLACE_LATEST`: only the latest attempt per course counts
   - `BEST`: only the highest-points attempt counts
 
-  Earlier attempts stay visible on transcripts, marked "repeated". Historic semester GPAs are **never rewritten**.
-- **CGPA belongs to a programme enrollment.** A student's Certificate results don't count toward their Diploma CGPA, because the programmes are separate (C-30).
+  Earlier attempts stay visible on transcripts, marked "repeated". There is no semester GPA (ADR-0005); the CGPA, credits and standing are worked out on the fly, never stored.
+- **CGPA belongs to a programme enrollment.** Results on one programme enrollment never count toward another.
 - **Credits earned:** `Σ credits_x10` of counting results with `passed=true`, plus `EXEMPT` credits. `INCOMPLETE`/`WITHDRAWN` results earn nothing.
 - **Standing:** `GOOD` if CGPA ≥ good standing; else `PROBATION` if a probation band is configured and met; else `WITHDRAW_REQUIRED`. With no counting credits, `UNKNOWN`. Standing is advisory only.
 - These are implemented as pure functions in `modules/results/domain`, with property tests and the Appendix C vectors.
 
-### 14.5 Semester results workflow
+### 14.5 Approving results (ADR-0005, BT-7)
 
-1. **Compute** (`results.compute-semester`, run on `academic.semester.closed` and on demand) upserts `semester_results` (`DRAFT`). It's idempotent.
-2. **Approve** (Registrar; Idempotency-Key) runs in bulk by programme, cohort or semester. It sets `semester_results` and its course results to `APPROVED`, and is audited.
-3. **Release (C-11, `ON_FINALIZE`):**
+1. **Approve** (Registrar; Idempotency-Key): `POST /results/approve {offeringId}` or `{cohortId}` sets that offering's (or every one of the cohort's offerings') `FINALIZED` course results to `APPROVED`, audited. Reopened (`DRAFT`) results are skipped and counted. Each student with a newly approved result is told once (`results.course-approved`, in-app); `results.course.approved` is emitted.
+2. **Release (C-11, `ON_FINALIZE`):**
    - Students see each **course result** as soon as the Lecturer finalizes it.
-   - Semester GPA/CGPA are labelled **Provisional** until the Registrar approves and **publishes** them.
-   - Publishing is required for official transcripts and awards.
-4. Changes after publication follow §14.3 *Reopen*.
+   - A CGPA is labelled **Provisional** while any result it counts isn't `APPROVED`.
+   - Approval is required for official transcripts and awards.
+3. Changes after approval follow §14.3 *Reopen*.
 
-The broadsheet export is `GET /reports/results?semesterId=&programmeId=&format=csv|json`.
+`GET /results/cohorts/:id` shows each of the cohort's offerings (enrolled, finalized, approved) and each student's results and CGPA. The broadsheet export is `GET /reports/results?cohortId=&format=csv|json`: one row per student, each offering's letter in date order, then credits, CGPA, standing and whether it's provisional.
 
-### 14.6 Awards
+### 14.6 Awards (ADR-0005, BT-2)
 
-`POST /programme-enrollments/:id/award/propose` computes:
-- the final CGPA
-- credits earned against the requirement: all `COMPULSORY` placements earned, plus `curricula.min_elective_credits`
-- the **award class** from the programme's scheme
+A Diploma student earns two awards, each proposed and conferred separately (`awards` is unique per programme enrollment and `award_type`):
 
-The Registrar then **confirms** (`results:award:confirm`). Confirmation sets:
+- the **Certificate** once the curriculum courses they've passed carry **at least half** the curriculum's total credits;
+- the **Diploma** once they've passed **every** curriculum course.
+
+A course counts as passed when the attempt the repeat policy keeps passed, or it was exempted; results outside the curriculum don't count. `POST /programme-enrollments/:id/award/propose {awardType}` computes the CGPA, the award class from the programme's scheme, and a checklist: the credits (Certificate) or every course (Diploma) passed, **every counted result approved and none reopened**, and a grading scheme. The Registrar then **confirms** (`results:award:confirm`). Confirmation sets:
 - `awards.status='CONFERRED'`, `awarded_on`, and `certificate_no = GLIM/{CERT|DIP}/AWD/{YYYY}/{NNNN}`
-- the programme enrollment to `COMPLETED`
-- the student to `GRADUATED`, unless they have another ACTIVE programme enrollment
+- for the **Diploma** only: the programme enrollment to `COMPLETED`, and the student to `GRADUATED` unless they have another ACTIVE programme enrollment. The Certificate leaves the student studying.
 
 The student keeps a `referral_code`, as an alumnus. Missing requirements come back as a checklist (`REQUIREMENTS_NOT_MET`); they don't block the *proposal*. A CGPA below `min_award_cgpa_x100` ⇒ `NO_AWARD` (the Registrar is informed).
 
@@ -1981,12 +1950,12 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
 
 - **Request:** a student creates `transcript_requests`. An OFFICIAL request needs a purpose and recipient. UNOFFICIAL requests are auto-issued (policy, default true) and rate-limited to 5 a day. OFFICIAL requests need Registrar approval.
 - **Issue** (Registrar; Idempotency-Key), in one transaction:
-  1. Build the **snapshot JSON**: institution, programme, student legal name + **Matric Number**, per-semester course lines, GPA/CGPA/standing, totals, award + award class if conferred, the grading legend and award-class table, and `as_of`.
+  1. Build the **snapshot JSON** (version 2): institution, programme, student legal name + **Matric Number**, course lines **in the order completed** (each with `completed_on` and whether it's provisional), totals (credits, CGPA, standing), every conferred award with its class, the grading legend and award-class table, and `as_of`.
   2. Canonicalise it and compute `snapshot_sha256`.
   3. Allocate `serial_no = GLIM/TR/{YYYY}/{NNNNN}` and a 16-character base32 `verification_code`.
   4. Insert `transcripts` and enqueue `transcript.generate`.
 
-  OFFICIAL transcripts include only `APPROVED/PUBLISHED` semesters (`TRANSCRIPT_NOT_ISSUABLE` otherwise). UNOFFICIAL transcripts include `FINALIZED` results and print *Provisional* beside unapproved semesters (C-39).
+  OFFICIAL transcripts need every result on them `APPROVED` (`TRANSCRIPT_NOT_ISSUABLE` otherwise). UNOFFICIAL transcripts include `FINALIZED` results and print *Provisional* beside unapproved ones (C-39).
 - **PDF** (`@react-pdf/renderer`): rendered **from the snapshot only**.
   - A4, with a header and footer on every page and "page n of N"
   - embedded Unicode fonts (test Yoruba/Igbo tonal marks)
@@ -2009,7 +1978,7 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
   - invite, password reset
   - application receipt, decision, offer reminder, offer lapse, acceptance welcome (with Matric Number)
   - Class Meeting cancelled or rescheduled
-  - results published
+  - makeup exam date
   - transcript issued or revoked
   - ops alerts to the System Admin
 
@@ -2028,15 +1997,14 @@ The student keeps a `referral_code`, as an alumnus. Missing requirements come ba
 
   | Kind | Contents | Notes |
   |---|---|---|
-  | `STUDENTS` | user + student + programme enrollment, with an existing Matric Number, Study Mode and Level | creates an invite |
+  | `STUDENTS` | user + student + programme enrollment, with an existing Matric Number, Study Mode and cohort code | creates an invite; the cohort must exist |
   | `LECTURERS` | | |
   | `COURSE_ENROLLMENTS` | | |
-  | `COURSE_RESULTS` | legacy results: Matric Number, course code, semester code, credits, percentage or letter | creates `course_results(source='IMPORT', status='APPROVED')`; requires the historical sessions/semesters to exist (create them `CLOSED`) |
+  | `COURSE_RESULTS` | legacy results: Matric Number, course code, completion date, credits, percentage or result kind | creates `course_results(source='IMPORT', status='APPROVED', completed_on)`; attempts are numbered by completion date |
 
   Templates are served from `/imports/templates/:kind.csv`.
 - A **dry run** is the default. The commit run requires the file hash to be unchanged (`IMPORT_FILE_CHANGED`).
-- **Idempotent upsert** by natural key: `email`, `matric_number`, `staff_code`, `(matric_number, offering)`, `(matric_number, course code, semester code)`. Row-level errors go to an error CSV, and runs are resumable by row offset.
-- After a `COURSE_RESULTS` import, `results.compute-semester` is enqueued for the affected enrollments.
+- **Idempotent upsert** by natural key: `email`, `matric_number`, `staff_code`, `(matric_number, offering)`, `(matric_number, course code, completed_on)`. Row-level errors go to an error CSV, and runs are resumable by row offset.
 
 ### 15.3 Admin operations (System Admin)
 
@@ -2072,11 +2040,12 @@ Base `/api/v1`. Auth is the session cookie plus the CSRF header unless noted. **
 | Admissions reports | `GET /reports/admissions` · `GET /reports/referrals` | `admissions:report:read` | – |
 | Academic | `GET/POST /programmes` · `PATCH /programmes/:id` · `GET/POST /courses` · `PATCH /courses/:id` · `GET/POST /rooms` · `PATCH /rooms/:id` | `academic:structure:*` | – |
 | Academic | `GET/POST /curricula` · `POST /curricula/:id/activate` · `POST /curricula/:id/clone` · `PUT /curricula/:id/courses` | `academic:structure:manage` | – |
-| Calendar | `GET/POST /academic-sessions` · `POST /academic-sessions/:id/activate` · `POST /academic-sessions/:id/close` · `GET /semesters?sessionId=` · `POST /semesters` · `PATCH /semesters/:id` · `POST /semesters/:id/open-registration` · `POST /semesters/:id/activate` · `POST /semesters/:id/close` | `academic:structure:*` | – |
+| Calendar | `GET/POST /rooms` · `PATCH /rooms/:id` | `academic:structure:*` | – |
+| Cohorts | `GET /cohorts` · `GET /cohorts/:id/schedule` · `POST /cohorts/:id/schedule` (plan from the curriculum, §9.2) | `academic:structure:read`, `academic:course-offering:manage` | – |
 | Offerings | `GET/POST /course-offerings` · `GET/PATCH /course-offerings/:id` · `POST …/publish` · `POST …/cancel` | `academic:course-offering:*` | – |
 | Lecturing | `GET/POST /course-offerings/:id/lecturers` · `DELETE /course-offerings/:id/lecturers/:assignmentId` | `lecturing:assignment:*` | – |
 | People | `GET/POST /students` · `GET/PATCH /students/:id` · `GET/POST /lecturers` · `GET/PATCH /lecturers/:id` | `enrollment:student:*`, `identity:user:manage` | – |
-| Enrollment | `GET /programme-enrollments?studentId=` · `PATCH /programme-enrollments/:id` (status, level) · `GET /semester-enrollments/:id/registration` (compulsory + available electives) · `POST /semester-enrollments/:id/electives` · `DELETE /semester-enrollments/:id/electives/:courseEnrollmentId` | `enrollment:*`, `enrollment:elective:select` | – |
+| Enrollment | `GET /me/registration` (the student's courses in date order, with exam and makeup dates) | session | – |
 | Enrollment | `GET/POST /course-offerings/:id/enrollments` (manual/bulk) · `PATCH /course-enrollments/:id` | `enrollment:course-enrollment:*` | ✔ (bulk) |
 | Class Meetings | `GET/POST /course-offerings/:id/class-meetings` · `POST /course-offerings/:id/class-meeting-series` | `meeting:class-meeting:read\|manage` | ✔ |
 | Class Meetings | `GET/PATCH /class-meetings/:id` · `POST /class-meetings/:id/cancel` · `…/reprovision` · `…/start` · `…/join` · `…/end` | per §7 | – |
@@ -2090,7 +2059,8 @@ Base `/api/v1`. Auth is the session cookie plus the CSRF header unless noted. **
 | Assessment | `GET/POST /courses/:id/questions` · `GET/POST /course-offerings/:id/quizzes` (incl. online exams) · `PATCH /quizzes/:id` · `POST /quizzes/:id/publish` · `POST /quizzes/:id/attempts` · `PATCH /quiz-attempts/:id` · `POST /quiz-attempts/:id/submit` | `assessment:quiz:*` | ✔ (submit) |
 | Gradebook | `GET /course-offerings/:id/gradebook` · `PUT /assessments/:id/grades/:studentId` · `POST /assessments/:id/release` · `POST /course-offerings/:id/grades/import` | `assessment:grade:*` | ✔ (release) |
 | Results | `POST /course-offerings/:id/results/finalize` · `POST /course-results/:id/reopen` · `GET /course-offerings/:id/results` | `results:course-result:*` | ✔ (finalize) |
-| Results | `POST /results/semesters/compute` · `POST /results/semesters/approve` · `POST /results/semesters/publish` · `GET /results/semesters` · `GET /reports/results` | `results:semester:*` | ✔ |
+| Results | `GET /results/cohorts/:id` · `POST /results/approve` (`{offeringId}` or `{cohortId}`) · `GET /reports/results?cohortId=` | `results:record:read`, `results:course-result:approve` | ✔ (approve) |
+| Assessment | `GET /course-offerings/:id/makeup-exams` · `PUT/DELETE /course-offerings/:id/makeup-exams/:studentId` | `assessment:grade:read`, `assessment:grade:update` | – |
 | Results | `GET/POST /grading-schemes` · `POST /programme-enrollments/:id/award/propose` · `POST /awards/:id/confirm` | `results:scheme:manage`, `results:award:confirm` | – |
 | Transcripts | `POST /transcript-requests` · `GET /transcript-requests` · `POST /transcript-requests/:id/approve\|reject\|issue` · `GET /transcripts/:id` · `GET /transcripts/:id/download` · `POST /transcripts/:id/revoke` | `transcript:*` | ✔ (issue) |
 | Public | `GET /public/transcripts/:code` | none (rate-limited) | – |
@@ -2123,9 +2093,7 @@ Defaults: `retryBackoff:true`, DLQ `<queue>.dlq`, archive after 7 days, delete a
 | `video.purge-deleted` | general | cron daily | 3 / 30 min | after the 7-day undo: finalize deletion, remind the System Admin to delete in YouTube Studio (v1) or delete via API (integration slice) |
 | `quiz.expire` | general | attempt start (`startAfter`) | 3 / 2 min | per attempt |
 | `import.run` | general | `POST /imports` | 2 / 1 h | resumable by offset |
-| `semester.open-registration` | general | semester → REGISTRATION; acceptance | 3 / 30 min | per programme enrollment batch |
-| `academic.progression` | general | session activation | 3 / 30 min | idempotent |
-| `results.compute-semester` | general | semester closed, import, manual | 3 / 30 min | per programme enrollment batch |
+| `academic.offering-lifecycle` | general | daily 00:10 Lagos | 3 / 30 min | idempotent: offerings start and complete on their dates (§9.1) |
 | `transcript.generate` · `transcript.send` | general | issue | 3 / 10 min | |
 | `admissions.offer-sweep` | general | cron hourly | 3 / 10 min | reminders + lapse |
 | `admissions.intake-status` | general | cron daily | 3 / 5 min | open/close by dates |
@@ -2162,7 +2130,7 @@ Defaults: `retryBackoff:true`, DLQ `<queue>.dlq`, archive after 7 days, delete a
 | Area | Events |
 |---|---|
 | Admissions | `admissions.application.submitted`, `.admitted`, `.rejected`, `.lapsed`, `.withdrawn`, `.accepted` |
-| Academic | `academic.session.activated`, `academic.semester.registration-opened`, `academic.semester.closed` |
+| Academic | `academic.offering.completed` |
 | Offerings | `course.offering.created`, `.published`, `.cancelled` |
 | Enrollment | `course.enrollment.activated`, `course.enrollment.ended` |
 | Lecturing | `lecturing.assignment.created`, `lecturing.assignment.ended` |
@@ -2170,7 +2138,7 @@ Defaults: `retryBackoff:true`, DLQ `<queue>.dlq`, archive after 7 days, delete a
 | Attendance | `attendance.roll-call.updated`, `attendance.finalized` |
 | Recordings and video | `recording.discovered`, `video.added`, `video.published`, `video.unpublished`, `video.unavailable`, `video.deleted` |
 | Assessment | `assessment.grade.released` |
-| Results | `results.course.finalized`, `results.course.reopened`, `results.semester.approved`, `results.semester.published`, `results.award.conferred` |
+| Results | `results.course.finalized`, `results.course.reopened`, `results.course.approved`, `results.award.conferred` |
 | Transcripts | `transcript.issued`, `transcript.revoked`, `transcript.superseded` |
 
 Subscribers are idempotent and registered in `apps/worker/src/subscribers.ts`.
@@ -2196,10 +2164,10 @@ Subscribers are idempotent and registered in `apps/worker/src/subscribers.ts`.
 | ---- | ------ |
 | Public | `/login` · `/apply` (programme info, intake dates, "Continue with Google") · `/invite/:token` · `/forgot` · `/reset/:token` · `/verify/:code` |
 | Applicant | `/application` (status, view, withdraw) · `/application/edit` (section wizard 1–8 + photo, autosave, review & submit) · `/application/offer` (accept before the expiry countdown) |
-| Student | `/` (today: next Class Meetings with Room and join, continue watching) · `/registration` (compulsory courses + elective choice) · `/courses` · `/courses/:offeringId` (Overview, Schedule, Materials, Recordings, Assignments, Quizzes & Exams, Grades, Announcements) · `/watch/:videoId` · `/results` · `/transcripts` · `/profile` (Google link, timezone, notification prefs, referral code) |
+| Student | `/` (today: next Class Meetings with Room and join, continue watching) · `/registration` (Course schedule: courses in date order, with exam and makeup dates) · `/courses` · `/courses/:offeringId` (Overview, Schedule, Materials, Recordings, Assignments, Quizzes & Exams, Grades, Announcements) · `/watch/:videoId` · `/results` · `/transcripts` · `/profile` (Google link, timezone, notification prefs, referral code) |
 | Lecturer | `/teach` · `/teach/:offeringId` (Schedule, Roster, Attendance, Recordings, Materials, Assignments, Quizzes & Exams, Gradebook, Results) · `/teach/meetings/:id` (start/join, room instructions, participants timeline, unresolved participants) · `/teach/meetings/:id/roll-call` |
 | Admissions Officer | `/admissions` (queue) · `/admissions/applications/:id` (all sections; sensitive section gated) · `/admissions/intakes` · `/admissions/reports` (intake, referrals) |
-| Academic Admin | `/admin/academic` (sessions, semesters, programmes, curricula, courses, rooms, offerings) · `/admin/enrollment` · `/admin/people` · `/admin/imports` |
+| Academic Admin | `/admin/academic` (programmes, curricula, courses) · `/admin/cohorts` (Cohort Schedules) · `/admin/offerings` · `/admin/rooms` · `/admin/lecturers` · `/admin/imports` |
 | Registrar | `/registrar/results` · `/registrar/transcripts` · `/registrar/awards` · `/registrar/schemes` |
 | System Admin | `/admin/users` · `/admin/settings` (incl. policies, YouTube channel URLs) · `/admin/videos` · `/admin/integrations/google` · `/admin/integrations/youtube` · `/admin/ops` · `/admin/audit` · `/admin/jobs` |
 
@@ -2238,7 +2206,7 @@ Practices:
   - A phone-first list (on-campus students first, with photos), with Present / Late / Absent toggles and a bulk "mark all on-campus present".
   - Queued locally and retried; works on flaky Wi-Fi.
   - Editable until the attendance lock.
-- **Registration:** compulsory courses are shown as already registered. Available electives are listed with credits; add or drop until the deadline.
+- **Course schedule:** the student's courses one after another, each with its dates, exam date and any makeup exam. There is nothing to choose (ADR-0005).
 - **Player (`/watch/:id`):** §13.4 rules. Thumbnail facade → tap to load the YouTube player; resume prompt; the data-saver tip (144p ≈ 40 MB/hour); "Can't reach YouTube" message. The YouTube player is third-party and excluded from the bundle budget, but its download size is measured in S-11 and shown in the tip.
 - **Forms:** assignment and quiz drafts autosave with retry. Error codes map to friendly copy, with the `requestId` shown on unexpected errors.
 
@@ -2286,7 +2254,7 @@ All inbound events are deduplicated by id in the inbox.
 | Applications: accepted | Personal + **sensitive** (religious belief) | With the student file: programme end + 10 years |
 | Applications: rejected/lapsed/withdrawn/stale drafts | Personal + **sensitive** | **12 months** after decision/withdrawal/last edit, then hard-deleted (C-29) |
 | Student profile, passport photo | Personal | Programme end + 10 years |
-| Attendance, grades, course/semester results, awards | Academic record | 10 years after programme end (configurable) |
+| Attendance, grades, course results, awards | Academic record | 10 years after programme end (configurable) |
 | Issued transcripts (snapshots) | Academic record, tamper-evident | 10 years; PDFs can be regenerated from the snapshot |
 | Recordings and videos | Confidential (student voice/video), **but hosted as unlisted YouTube videos**: anyone with a link can view (ADR-0003) | **Indefinite** (C-24); deleted only by the System Admin (in the app and in YouTube Studio) |
 | Audit logs | Security | 7 years |
@@ -2391,8 +2359,8 @@ Everything runs in CI except the real-service smoke tests (manual, Appendix B).
   - the purge sweep deletes rejected applications at 12 months, together with their photo files
 - **Academic:**
   - open-registration auto-registers compulsory courses idempotently
-  - elective add/drop within the window only, and only from the student's own Level/semester placements
-  - progression Year 1 → Year 2
+  - publishing an offering registers its cohort; acceptance registers into the cohort's running offerings; manual registration and withdrawal need a reason (ADR-0005)
+  - the daily offering lifecycle starts and completes offerings on their dates, idempotently
   - manual retake registration
 - **Class Meetings and attendance:**
   - duplicate/out-of-order events converge
@@ -2429,7 +2397,7 @@ Everything runs in CI except the real-service smoke tests (manual, Appendix B).
 - **Security:** CSRF; session fixation/rotation; login lockout; upload MIME/size enforcement; markdown XSS corpus; gitleaks.
 - **Frontend:**
   - budget check and Lighthouse CI; axe
-  - Playwright flows: apply (Google fake) → submit → admit → accept; sign in; registration with electives; join (fake provider); roll call on a mobile viewport with offline retry; watch (thumbnail facade → stubbed YouTube player → resume) on a mobile viewport; assignment submit; online exam timer expiry; results; transcript request → issue → verify
+  - Playwright flows: apply (Google fake) → submit → admit → accept; sign in; course schedule; join (fake provider); roll call on a mobile viewport with offline retry; watch (thumbnail facade → stubbed YouTube player → resume) on a mobile viewport; assignment submit; online exam timer expiry; results; transcript request → issue → verify
   - viewer-timezone rendering (Lagos and London viewers)
 
 ### 21.3 Fakes
@@ -2638,7 +2606,7 @@ Each WP is a branch (`wp-NN-name`), owns paths, lists its dependencies and has a
 | Area | Done when |
 | ---- | --------- |
 | Admissions | Apply → submit → review → admit/reject → accept/lapse → student with a Matric Number; sensitive data protected; purge; referrals (AC-16, AC-17) |
-| Academic | Sessions/semesters/programmes/curricula/offerings/Rooms; registration with compulsory auto-registration and electives; progression; imports (AC-01–03) |
+| Academic | Programmes, ordered curricula, Cohort Schedules, offerings and Rooms; registration with the cohort on publish; the offering lifecycle; imports (AC-01–03; ADR-0005) |
 | Class Meetings | Lecturers schedule hybrid meetings with Rooms (no double-booking); students join when entitled and linked; DB-only join; reconciliation proven (AC-04, AC-05) |
 | Attendance | Meet evidence + roll call converge to attendance per policy with mode; unresolved review; audited overrides; reports (AC-06, AC-11, AC-18) |
 | Video | YouTube-hosted recordings linked, checked and embedded for entitled viewers with resume; unavailable videos detected; System Admin management (AC-07–10, AC-19) |
@@ -2859,6 +2827,8 @@ Assessments: Quiz (max 20, weight 20, score 15); Assignment (max 50, weight 30, 
 
 ### C.3 GPA / CGPA and award class (GLIM Diploma scheme, credits ×10, points ×100)
 
+> Since ADR-0005 there are no semesters: read each "semester" below as a block of courses completed one after another. Only the CGPA is reported; the per-block GPA is still a useful check of the arithmetic.
+
 **Semester 1:**
 
 | Course | Credits | % | Letter | Quality points |
@@ -2920,8 +2890,8 @@ Assessments: Quiz (max 20, weight 20, score 15); Assignment (max 50, weight 30, 
 | General | `UNAUTHENTICATED` · `FORBIDDEN` · `NOT_FOUND` · `VALIDATION_FAILED` · `RATE_LIMITED` · `VERSION_MISMATCH` |
 | Idempotency and CSRF | `IDEMPOTENCY_IN_PROGRESS` · `IDEMPOTENCY_KEY_REUSED` · `CSRF_INVALID` |
 | Sign-in | `INVALID_CREDENTIALS` · `ACCOUNT_LOCKED` · `ACCOUNT_NOT_FOUND` · `GOOGLE_ACCOUNT_REQUIRED` |
-| Admissions | `INTAKE_CLOSED` · `APPLICATION_ALREADY_OPEN` · `APPLICATION_INCOMPLETE` · `APPLICATION_STATE_INVALID` · `OFFER_EXPIRED` · `APPLICANT_UNDER_AGE` |
-| Academic and enrollment | `ALREADY_ENROLLED` · `OFFERING_FULL` · `ENROLLMENT_NOT_ACTIVE` · `REGISTRATION_CLOSED` · `ELECTIVE_NOT_AVAILABLE` · `PRIMARY_REQUIRED` · `CURRICULUM_LOCKED` · `SEMESTER_STATE_INVALID` |
+| Admissions | `INTAKE_CLOSED` · `INTAKE_OVERLAP` · `APPLICATION_ALREADY_OPEN` · `APPLICATION_INCOMPLETE` · `APPLICATION_STATE_INVALID` · `OFFER_EXPIRED` · `APPLICANT_UNDER_AGE` |
+| Academic and enrollment | `ALREADY_ENROLLED` · `OFFERING_FULL` · `ENROLLMENT_NOT_ACTIVE` · `PRIMARY_REQUIRED` · `CURRICULUM_LOCKED` · `OFFERING_OVERLAP` · `BEFORE_INTAKE_START` · `OUTSIDE_OFFERING_DATES` |
 | Class Meetings | `MEETING_STATE_INVALID` · `MEETING_IN_PROGRESS` · `JOIN_WINDOW_CLOSED` · `PROVIDER_NOT_READY` · `PROVIDER_UNAVAILABLE` · `LECTURER_SCHEDULE_CONFLICT` · `ROOM_CONFLICT` |
 | Attendance | `ROLL_CALL_CLOSED` · `OVERRIDE_REASON_REQUIRED` · `PARTICIPANT_ALREADY_MATCHED` |
 | Video | `VIDEO_NOT_AVAILABLE` · `YOUTUBE_URL_INVALID` · `YOUTUBE_VIDEO_PRIVATE` · `YOUTUBE_VIDEO_NOT_FOUND` · `YOUTUBE_CHANNEL_NOT_ALLOWED` · `VIDEO_CHECK_UNAVAILABLE` · `SOURCE_MISSING` |

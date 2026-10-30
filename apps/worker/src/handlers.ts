@@ -1,6 +1,7 @@
 import { QUEUES, type DomainEvent, type QueueName } from "@glim/contracts";
+import { OfferingsService } from "@glim/modules/academic";
 import { IntakesService, OffersService, PurgeService } from "@glim/modules/admissions";
-import { SessionService, UserAdminService } from "@glim/modules/identity";
+import { SessionService, SettingsService, UserAdminService } from "@glim/modules/identity";
 import { AttendanceService, ParticipantsService } from "@glim/modules/attendance";
 import { LIVE_PROVIDER, type LiveProvider } from "@glim/integrations/live-provider/port";
 import {
@@ -12,12 +13,10 @@ import {
   SubscriptionsService,
 } from "@glim/modules/class-meeting";
 import { ImportsService } from "@glim/modules/imports";
-import { ProgressionService, RegistrationService } from "@glim/modules/enrollment";
 import { NotificationsService } from "@glim/modules/notifications";
 import { BackupService, InboxService, OpsService } from "@glim/modules/ops";
 import { AvailabilityService, RecordingsService, VideoAdminService } from "@glim/modules/video";
 import { QuizAttemptsService } from "@glim/modules/assessment";
-import { SemesterResultsService } from "@glim/modules/results";
 import { TranscriptsService } from "@glim/modules/transcripts";
 import type { INestApplicationContext } from "@nestjs/common";
 import type { Job } from "pg-boss";
@@ -42,8 +41,8 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const notifications = deps.context.get(NotificationsService);
   const offers = deps.context.get(OffersService);
   const purge = deps.context.get(PurgeService);
-  const registration = deps.context.get(RegistrationService);
-  const progression = deps.context.get(ProgressionService);
+  const offerings = deps.context.get(OfferingsService);
+  const settings = deps.context.get(SettingsService);
   const imports = deps.context.get(ImportsService);
   const series = deps.context.get(SeriesService);
   const lifecycle = deps.context.get(MeetingLifecycleService);
@@ -94,7 +93,6 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
   const videoAvailability = deps.context.get(AvailabilityService);
   const videoAdmin = deps.context.get(VideoAdminService);
   const quizAttempts = deps.context.get(QuizAttemptsService);
-  const semesterResults = deps.context.get(SemesterResultsService);
   const transcripts = deps.context.get(TranscriptsService);
   return {
     "domain-event": (job) => dispatch(job.data as DomainEvent),
@@ -130,9 +128,6 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
       const { transcriptId, to } = job.data as { transcriptId: string; to: string };
       return transcripts.sendNow(transcriptId, to);
     },
-    "results.compute-semester": async (job) => {
-      await semesterResults.compute((job.data as { semesterId: string }).semesterId);
-    },
     "attendance.recompute": (job) =>
       attendance.recompute((job.data as { meetingId: string }).meetingId),
     "class-meeting.finalize": (job) =>
@@ -144,9 +139,8 @@ export function createHandlers(deps: HandlerDeps): HandlerRegistry {
         userId: null,
         type: "JOB",
       }),
-    "academic.progression": (job) => progression.run((job.data as { sessionId: string }).sessionId),
-    "semester.open-registration": (job) =>
-      registration.openRegistration((job.data as { semesterId: string }).semesterId),
+    // Offerings start and complete on their dates, by the institution's calendar (ADR-0005).
+    "academic.offering-lifecycle": async () => offerings.advance(await settings.today()),
     "notify.send": (job) =>
       notifications.deliver((job.data as { notificationId: string }).notificationId),
     // The 06:00 Lagos cron (no user) fans out; each person's digest then runs on its own.

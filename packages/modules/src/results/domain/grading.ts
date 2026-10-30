@@ -117,7 +117,7 @@ export function courseOutcome(
 /** A course result as GPA arithmetic sees it. */
 export interface ResultLine {
   courseId: string;
-  /** Orders attempts: a later attempt has a larger value (attempt number, then semester order). */
+  /** Orders attempts: a later attempt has a larger value (its attempt number). */
   attemptOrder: number;
   creditsX10: number;
   pointsX100: number | null;
@@ -152,19 +152,7 @@ function totals(counting: ResultLine[], exempt: ResultLine[]): GpaTotals {
 }
 
 /**
- * Semester GPA (§14.4): `roundHalfUp(Σ quality points / Σ credits)` over GRADED results that
- * count. Credits earned add passed counting results and EXEMPT credits; INCOMPLETE, WITHDRAWN and
- * AUDIT earn nothing. Every attempt in the semester counts (repeats are a cumulative matter).
- */
-export function semesterGpa(results: ResultLine[]): GpaTotals {
-  return totals(
-    results.filter(counts),
-    results.filter((r) => r.resultKind === "EXEMPT"),
-  );
-}
-
-/**
- * CGPA over a programme enrollment's results up to a semester, with the repeat policy:
+ * CGPA over a programme enrollment's results so far, with the repeat policy:
  * KEEP_ALL counts every attempt; REPLACE_LATEST only the latest per course; BEST only the one
  * with the most points per course (the later one on a tie). Earlier attempts stay on transcripts.
  */

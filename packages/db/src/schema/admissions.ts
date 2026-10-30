@@ -12,32 +12,31 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { academicSessions, programmes } from "./academic";
+import { programmes } from "./academic";
 import { citext, enumCheck, std, stdRo, tstz } from "./columns";
-import { files } from "./content";
+import { files } from "./files";
 import { users } from "./identity";
 
 /**
- * Owner: admissions. One per year: applications open in November and close in June, and the
- * students start in `academic_session` (TRD §6.3, §10.1).
+ * Owner: admissions. An admission cycle: applications are taken between `opens_on` and
+ * `closes_on`, and its cohort starts on `starts_on`. There may be several a year, but their
+ * application windows never overlap (exclusion constraint, migration 0052; ADR-0005).
  */
 export const intakes = pgTable(
   "intakes",
   {
     ...std(),
     code: citext().notNull().unique(),
-    academicSessionId: uuid("academic_session_id")
-      .notNull()
-      .unique()
-      .references(() => academicSessions.id, { onDelete: "restrict" }),
     opensOn: date("opens_on").notNull(),
     closesOn: date("closes_on").notNull(),
+    startsOn: date("starts_on").notNull(),
     offerAcceptanceDays: integer("offer_acceptance_days").notNull().default(21),
     status: text().notNull().default("PLANNED"),
   },
   (t) => [
     enumCheck("intakes.status", t.status),
     check("intakes_dates_check", sql`${t.closesOn} > ${t.opensOn}`),
+    check("intakes_starts_check", sql`${t.startsOn} >= ${t.opensOn}`),
     check("intakes_offer_acceptance_days_check", sql`${t.offerAcceptanceDays} > 0`),
   ],
 );

@@ -9,27 +9,26 @@ export function IntakeStatus({ intake }: { intake: CurrentIntake["intake"] }) {
   if (intake.status === "OPEN")
     return (
       <p className="text-body">
-        Applications for the <strong>{intake.academicSessionName}</strong> are open until{" "}
+        Applications for the <strong>{intake.code}</strong> Intake are open until{" "}
         <strong>
           <CalendarDate value={intake.closesOn} />
         </strong>
-        .
+        . Studies start on <CalendarDate value={intake.startsOn} />.
       </p>
     );
   if (intake.status === "PLANNED")
     return (
       <p className="text-body">
-        Applications for the <strong>{intake.academicSessionName}</strong> open on{" "}
+        Applications for the <strong>{intake.code}</strong> Intake open on{" "}
         <strong>
           <CalendarDate value={intake.opensOn} />
         </strong>
-        .
+        . Studies start on <CalendarDate value={intake.startsOn} />.
       </p>
     );
   return (
     <Banner tone="warning">
-      Applications for the {intake.academicSessionName} are closed. You can't start an application
-      now.
+      Applications for the {intake.code} Intake are closed. You can't start an application now.
     </Banner>
   );
 }

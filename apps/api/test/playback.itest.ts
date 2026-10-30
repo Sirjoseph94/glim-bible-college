@@ -182,9 +182,9 @@ describe("PATCH /videos/:id/progress (AC-09)", () => {
     expect(bad.statusCode).toBe(400);
   });
 
-  it("ends when the course enrollment is dropped (AC-08)", async () => {
+  it("ends when the student is withdrawn from the course (AC-08)", async () => {
     await q(
-      "UPDATE course_enrollments SET status = 'DROPPED' WHERE student_id = (SELECT id FROM students WHERE user_id = $1)",
+      "UPDATE course_enrollments SET status = 'WITHDRAWN' WHERE student_id = (SELECT id FROM students WHERE user_id = $1)",
       [p.sEnrolled.userId],
     );
     expect((await play("sEnrolled")).statusCode).toBe(404);

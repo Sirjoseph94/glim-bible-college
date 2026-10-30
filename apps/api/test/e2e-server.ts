@@ -12,8 +12,9 @@ import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { S3ObjectStorage } from "@glim/integrations/storage/s3";
 import { FAKE_CHANNEL_URL, FakeVideoHost } from "@glim/integrations/video-host/fake";
 import { ReactPdfTranscriptRenderer } from "@glim/integrations/pdf/react-pdf";
+import { IntakesService } from "@glim/modules/admissions";
 import {
-  CalendarService,
+  CohortsService,
   CoursesService,
   CurriculaService,
   OfferingsService,
@@ -103,18 +104,11 @@ for (const [email, displayName, role] of E2E_STAFF) {
     .get(StaffAccountsService)
     .inviteStaff({ email, displayName, roles: [role] }, SYSTEM_ACTOR);
 }
-// A programme applicants can choose, and a planned Academic Session for the admissions spec's intake.
+// The college's one programme, which applicants apply to (ADR-0005).
 const ministry = unwrap(
-  await app.get(ProgrammesService).create(
-    {
-      code: "DMIN",
-      name: "Diploma in Ministry",
-      awardType: "DIPLOMA",
-      durationSemesters: 4,
-      levels: 2,
-    },
-    SYSTEM_ACTOR,
-  ),
+  await app
+    .get(ProgrammesService)
+    .create({ code: "DMIN", name: "Diploma in Ministry" }, SYSTEM_ACTOR),
 );
 // Students enroll on the programme's active curriculum when they accept an offer.
 const pastoral = unwrap(
@@ -128,7 +122,7 @@ const pastoral = unwrap(
 const curricula = app.get(CurriculaService);
 const draft = unwrap(
   await curricula.create(
-    { programmeId: ministry.id, effectiveFrom: "2030-09-01", minElectiveCredits: "0.0" },
+    { programmeId: ministry.id, effectiveFrom: "2030-09-01" },
     SYSTEM_ACTOR,
   ),
 );
@@ -136,47 +130,33 @@ unwrap(
   await curricula.replacePlacements(
     draft.id,
     draft.version,
-    [
-      {
-        courseId: pastoral.id,
-        levelNo: 1,
-        semesterNo: 1,
-        courseType: "COMPULSORY",
-        creditOverride: null,
-      },
-    ],
+    [{ courseId: pastoral.id, creditOverride: null }],
     SYSTEM_ACTOR,
   ),
 );
 unwrap(await curricula.activate(draft.id, SYSTEM_ACTOR));
-await app
-  .get(CalendarService)
-  .createSession(
-    { code: "2030/2031", name: "2030/2031 Session", startsOn: "2030-09-01", endsOn: "2031-06-30" },
-    SYSTEM_ACTOR,
+// A Lecturer (invited) teaching a published offering, and a Room, for the Class Meeting spec. The
+// offering's cohort comes from a closed intake of its own, so the admissions spec plans its own
+// intake freely; the offering runs from 2026 on, so specs can book Class Meetings on any day ahead.
+const closedCohort = async (code: string, opensOn: string, closesOn: string, startsOn: string) => {
+  const intakes = app.get(IntakesService);
+  const intake = unwrap(
+    await intakes.create(
+      { code, opensOn, closesOn, startsOn, offerAcceptanceDays: 21 },
+      SYSTEM_ACTOR,
+    ),
   );
-// A Lecturer (invited) teaching a published offering, and a Room, for the Class Meeting spec.
-// Its own session, so the admissions spec's session stays untouched.
-const calendar = app.get(CalendarService);
-const teachingSession = unwrap(
-  await calendar.createSession(
-    { code: "2032/2033", name: "2032/2033 Session", startsOn: "2032-09-01", endsOn: "2033-06-30" },
-    SYSTEM_ACTOR,
-  ),
-);
-const teachingSemester = unwrap(
-  await calendar.createSemester(
-    {
-      academicSessionId: teachingSession.id,
-      code: "S1",
-      name: "First Semester",
-      sequence: 1,
-      startsOn: "2032-09-06",
-      endsOn: "2033-01-28",
-    },
-    SYSTEM_ACTOR,
-  ),
-);
+  unwrap(await intakes.transition(intake.id, "CLOSED", SYSTEM_ACTOR));
+  return db.withTx(({ db: tx }) =>
+    app.get(CohortsService).getOrCreate(tx, {
+      programme: { id: ministry.id, code: ministry.code, name: ministry.name },
+      intake: { id: intake.id, code: intake.code },
+    }),
+  );
+};
+const teachingCohort = await closedCohort("2026-E2E", "2025-01-01", "2025-02-01", "2026-01-01");
+// An empty cohort for the academic spec to plan and offer courses to.
+await closedCohort("2027-E2E", "2025-03-01", "2025-04-01", "2027-01-04");
 unwrap(
   await app
     .get(RoomsService)
@@ -212,8 +192,10 @@ const teachingOffering = unwrap(
   await app.get(AssignmentsService).createOfferingWithLecturers(
     {
       courseId: pastoral.id,
-      semesterId: teachingSemester.id,
-      sectionCode: "01",
+      cohortId: teachingCohort,
+      startsOn: "2026-01-01",
+      endsOn: "2099-12-31",
+      examOn: "2099-12-31",
       titleOverride: null,
       capacity: null,
       lecturers: [
@@ -243,18 +225,24 @@ for (const [n, given, family, mode] of [
     [userId, given, family],
   );
   const enrollmentId = await one(
-    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, entry_session_id, matric_number, study_mode, started_on)
-     VALUES ($1, $2, $3, $4, $5, $6, '2032-09-01') RETURNING id`,
-    [studentId, ministry.id, draft.id, teachingSession.id, `GLIM/DIP/2032/000${String(n)}`, mode],
-  );
-  const semesterEnrollmentId = await one(
-    "INSERT INTO semester_enrollments (programme_enrollment_id, semester_id, level_no) VALUES ($1, $2, 1) RETURNING id",
-    [enrollmentId, teachingSemester.id],
+    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, intake_id, cohort_id, matric_number, study_mode, started_on)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, '2026-01-01') RETURNING id`,
+    [
+      studentId,
+      ministry.id,
+      draft.id,
+      (await db.pool.query<{ intake_id: string }>("SELECT intake_id FROM cohorts WHERE id = $1", [
+        teachingCohort,
+      ])).rows[0]?.intake_id,
+      teachingCohort,
+      `GLIM/DIP/2032/000${String(n)}`,
+      mode,
+    ],
   );
   await db.pool.query(
-    `INSERT INTO course_enrollments (semester_enrollment_id, programme_enrollment_id, course_offering_id, student_id, selection, status)
-     VALUES ($1, $2, $3, $4, 'COMPULSORY', 'ENROLLED')`,
-    [semesterEnrollmentId, enrollmentId, teachingOffering, studentId],
+    `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status)
+     VALUES ($1, $2, $3, 'COHORT', 'ENROLLED')`,
+    [enrollmentId, teachingOffering, studentId],
   );
 }
 // Recordings may come from the fake YouTube's channel.

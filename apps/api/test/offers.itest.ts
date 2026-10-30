@@ -3,7 +3,7 @@ import { FakeOidcIssuer } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { OffersService } from "@glim/modules/admissions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admissionsWorld, type AdmissionsWorld } from "./admissions-world";
+import { admissionsWorld } from "./admissions-world";
 import { applicantKit } from "./applicants";
 import { createTestApp, type TestApp } from "./harness";
 import { createPersonas, sessionFor, type Personas } from "./personas";
@@ -11,7 +11,6 @@ import { createPersonas, sessionFor, type Personas } from "./personas";
 let issuer: FakeOidcIssuer;
 let t: TestApp;
 let p: Personas;
-let world: AdmissionsWorld;
 let kit: ReturnType<typeof applicantKit>;
 let application: Application;
 /** When the offer was made; every step below is measured from it. */
@@ -31,8 +30,8 @@ beforeAll(async () => {
     }),
   });
   p = await createPersonas(t);
-  world = await admissionsWorld(t, p);
-  kit = applicantKit(t, issuer, () => world.certificate.id);
+  await admissionsWorld(t, p);
+  kit = applicantKit(t, issuer);
   const ready = await kit.complete("Kemi");
   await kit.submit(ready.headers, ready.application.id);
   await kit.admit(ready.application.id, p.admOfficer.headers);

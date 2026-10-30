@@ -89,13 +89,6 @@
     "enrollment:course-enrollment:manage": {
       "staff": ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"]
     },
-    "enrollment:elective:select": {
-      "staff": [],
-      "student": {
-        "own": true,
-        "rule": "registration-window-open"
-      }
-    },
     "meeting:class-meeting:read": {
       "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"],
       "lecturer": "attend",
@@ -240,13 +233,7 @@
     "results:course-result:reopen": {
       "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
     },
-    "results:semester:compute": {
-      "staff": ["SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"]
-    },
-    "results:semester:approve": {
-      "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
-    },
-    "results:semester:publish": {
+    "results:course-result:approve": {
       "staff": ["SYSTEM_ADMIN", "REGISTRAR"]
     },
     "results:record:read": {

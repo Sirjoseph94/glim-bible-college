@@ -46,7 +46,6 @@ export type ApplicationSection = (typeof APPLICATION_SECTIONS)[number];
 /** What a draft save may change, one or more sections at a time. */
 export const applicationDraftSchema = z
   .object({
-    programmeId: z.uuid().optional(),
     studyMode: z.enum(ENUMS["applications.study_mode"]).optional(),
     personal: z
       .object({
@@ -144,8 +143,7 @@ export const applicationSchema = z.object({
   intake: z.object({
     id: z.uuid(),
     code: z.string(),
-    academicSessionName: z.string(),
-    /** When the Academic Session starts: the date the minimum age is checked against. */
+    /** When the intake's cohort starts: the date the minimum age is checked against. */
     startsOn: isoDate,
     closesOn: isoDate,
     status: z.enum(ENUMS["intakes.status"]),
@@ -154,7 +152,6 @@ export const applicationSchema = z.object({
     id: z.uuid(),
     code: z.string(),
     name: z.string(),
-    awardType: z.enum(ENUMS["programmes.award_type"]),
   }),
   studyMode: z.enum(ENUMS["applications.study_mode"]).nullable(),
   personal: z.object({
@@ -237,13 +234,12 @@ export type ApplicationSummary = z.infer<typeof applicationSummarySchema>;
 export const startApplication = endpoint({
   method: "POST",
   path: "/applications",
-  summary: "Start an application to the open intake",
+  summary: "Start an application to the open intake, for the college's programme",
   tag: "Applications",
   auth: "session",
   rateLimit: "apply",
   body: z
     .object({
-      programmeId: z.uuid(),
       studyMode: z.enum(ENUMS["applications.study_mode"]),
     })
     .strict(),

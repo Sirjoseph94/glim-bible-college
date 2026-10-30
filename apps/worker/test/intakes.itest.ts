@@ -24,11 +24,9 @@ beforeAll(async () => {
     clock,
     logger: createLogger({ service: "intake-test", level: "silent" }),
   });
-  await db.pool.query(`
-    WITH s AS (
-      INSERT INTO academic_sessions (code, name, starts_on, ends_on) VALUES ('2027/2028', '2027/2028 Session', '2027-09-01', '2028-06-30') RETURNING id
-    )
-    INSERT INTO intakes (code, academic_session_id, opens_on, closes_on) SELECT '2027', id, '2026-11-01', '2027-06-30' FROM s`);
+  await db.pool.query(
+    "INSERT INTO intakes (code, opens_on, closes_on, starts_on) VALUES ('2027', '2026-11-01', '2027-06-30', '2027-09-01')",
+  );
 });
 
 afterAll(async () => {
@@ -67,11 +65,10 @@ describe("admissions.intake-status (daily, Lagos time)", () => {
   });
 
   it("leaves an intake closed early by hand closed, inside its dates", async () => {
-    const { rows } = await db.pool.query<{ id: string }>(`
-      WITH s AS (
-        INSERT INTO academic_sessions (code, name, starts_on, ends_on) VALUES ('2028/2029', '2028/2029 Session', '2028-09-01', '2029-06-30') RETURNING id
-      )
-      INSERT INTO intakes (code, academic_session_id, opens_on, closes_on, status) SELECT '2028', id, '2027-11-01', '2028-06-30', 'OPEN' FROM s RETURNING id`);
+    const { rows } = await db.pool.query<{ id: string }>(
+      `INSERT INTO intakes (code, opens_on, closes_on, starts_on, status)
+       VALUES ('2028', '2027-11-01', '2028-06-30', '2028-09-01', 'OPEN') RETURNING id`,
+    );
     clock.set("2028-01-15T09:00:00Z");
     const closed = await context
       .get(IntakesService)

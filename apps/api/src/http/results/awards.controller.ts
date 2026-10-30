@@ -1,11 +1,11 @@
-import { results, type ParamsOf, type QueryOf } from "@glim/contracts";
+import { results, type BodyOf, type ParamsOf, type QueryOf } from "@glim/contracts";
 import type { AuditActor } from "@glim/modules/audit";
 import type { ActiveSession } from "@glim/modules/identity";
 import { AwardsService } from "@glim/modules/results";
 import { unwrap } from "@glim/shared";
 import { Controller, Inject } from "@nestjs/common";
 import { Actor, CurrentSession } from "../../common/auth.guard";
-import { Endpoint, Params, Query } from "../../common/endpoint";
+import { Body, Endpoint, Params, Query } from "../../common/endpoint";
 import type { Reply } from "../../common/response.interceptor";
 
 /** Awards: propose with a checklist, then confer (§14.6). */
@@ -17,7 +17,7 @@ export class AwardsController {
   async candidates(
     @Query(results.listAwardCandidates) query: QueryOf<typeof results.listAwardCandidates>,
   ): Promise<Reply<typeof results.listAwardCandidates>> {
-    return { items: await this.awards.candidates(query.programmeId) };
+    return { items: await this.awards.candidates(query.cohortId) };
   }
 
   @Endpoint(results.listAwards)
@@ -30,10 +30,13 @@ export class AwardsController {
   @Endpoint(results.proposeAward)
   async propose(
     @Params(results.proposeAward) params: ParamsOf<typeof results.proposeAward>,
+    @Body(results.proposeAward) body: BodyOf<typeof results.proposeAward>,
     @CurrentSession() session: ActiveSession,
     @Actor() actor: AuditActor,
   ): Promise<Reply<typeof results.proposeAward>> {
-    return unwrap(await this.awards.propose(params.id, { ...actor, userId: session.userId }));
+    return unwrap(
+      await this.awards.propose(params.id, body.awardType, { ...actor, userId: session.userId }),
+    );
   }
 
   @Endpoint(results.confirmAward)

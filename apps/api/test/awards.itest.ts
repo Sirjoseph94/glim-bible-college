@@ -1,4 +1,5 @@
-import type { Award, AwardCandidate, GradebookColumn, Video } from "@glim/contracts";
+import type { Award, AwardCandidate, GradebookColumn, MyResults, Video } from "@glim/contracts";
+import { recordImportedResult } from "@glim/modules/results";
 import { FAKE_CHANNEL_URL } from "@glim/integrations/video-host/fake";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { idempotencyKey } from "./applicants";
@@ -6,9 +7,9 @@ import { createTestApp, type TestApp } from "./harness";
 import { createPersonas, type PersonaName, type Personas } from "./personas";
 
 /**
- * Awards and graduation (TRD §14.6). PBIB101 (3 credits) is the curriculum's one compulsory
- * course and 2 elective credits are required. O1 is finalized and the semester published:
- * sEnrolled 80 ⇒ A (CGPA 5.00), sCompleted 20 ⇒ F (0.00), sGraduated 90 ⇒ A.
+ * Awards and graduation (TRD §14.6, ADR-0005). The curriculum is PBIB101 then PBIB102, 3 credits
+ * each: the Certificate needs 3 credits passed, the Diploma both courses. O1 (PBIB101) is
+ * finalized: sEnrolled 80 ⇒ A (CGPA 5.00), sCompleted 20 ⇒ F (0.00), sGraduated 90 ⇒ A.
  */
 
 let t: TestApp;
@@ -47,10 +48,34 @@ async function enrollmentOf(as: PersonaName): Promise<string> {
   return rows[0]?.id ?? "";
 }
 
-const propose = async (as: PersonaName) =>
-  send("registrar", "POST", `/programme-enrollments/${await enrollmentOf(as)}/award/propose`);
+const propose = async (as: PersonaName, awardType: "CERTIFICATE" | "DIPLOMA") =>
+  send("registrar", "POST", `/programme-enrollments/${await enrollmentOf(as)}/award/propose`, {
+    awardType,
+  });
 const confirm = (awardId: string, as: PersonaName = "registrar") =>
   send(as, "POST", `/awards/${awardId}/confirm`, undefined, key());
+
+/** A past PBIB102 result for the persona, approved as imports are (D-04). */
+async function passSecondCourse(as: PersonaName): Promise<void> {
+  const course = await q<{ id: string }>("SELECT id FROM courses WHERE code = 'PBIB102'");
+  const recorded = await t.db.withTx(({ db }) =>
+    enrollmentOf(as).then((programmeEnrollmentId) =>
+      recordImportedResult(
+        db,
+        {
+          programmeEnrollmentId,
+          completedOn: "2026-10-30",
+          courseId: course.rows[0]?.id ?? "",
+          creditsX10: null,
+          finalPctX100: 7500,
+          resultKind: "GRADED",
+        },
+        new Date("2026-11-01T00:00:00Z"),
+      ),
+    ),
+  );
+  expect(recorded.ok).toBe(true);
+}
 
 beforeAll(async () => {
   t = await createTestApp();
@@ -62,17 +87,11 @@ beforeAll(async () => {
     "UPDATE programmes SET grading_scheme_id = (SELECT id FROM grading_schemes WHERE name = 'GLIM Diploma') WHERE code = 'PDIP'",
   );
   await q("UPDATE settings SET youtube_channel_urls = $1", [[FAKE_CHANNEL_URL]]);
-  // The curriculum: PBIB101 compulsory; an elective placement; 2 elective credits required.
-  await q("UPDATE curricula SET min_elective_credits = 2 WHERE id = $1", [p.world.curriculumId]);
+  await q("INSERT INTO courses (code, title, credits) VALUES ('PBIB102', 'Second Course', 3)");
   await q(
-    `INSERT INTO curriculum_courses (curriculum_id, course_id, level_no, semester_no, course_type)
-     SELECT $1, id, 1, 1, 'COMPULSORY' FROM courses WHERE code = 'PBIB101'`,
-    [p.world.curriculumId],
-  );
-  await q("INSERT INTO courses (code, title, credits) VALUES ('ELC101', 'Elective', 2)");
-  await q(
-    `INSERT INTO curriculum_courses (curriculum_id, course_id, level_no, semester_no, course_type)
-     SELECT $1, id, 1, 1, 'ELECTIVE' FROM courses WHERE code = 'ELC101'`,
+    `INSERT INTO curriculum_courses (curriculum_id, course_id, position)
+     SELECT $1, id, CASE code WHEN 'PBIB101' THEN 1 ELSE 2 END FROM courses
+      WHERE code IN ('PBIB101', 'PBIB102')`,
     [p.world.curriculumId],
   );
 
@@ -112,87 +131,153 @@ beforeAll(async () => {
     );
     expect(res.statusCode, res.body).toBe(200);
   }
-  for (const [as, url, body] of [
-    ["l1Primary", `/course-offerings/${p.world.offerings.O1}/results/finalize`, undefined],
-    ["registrar", "/results/semesters/compute", { semesterId: p.world.semesterId }],
-    ["registrar", "/results/semesters/approve", { semesterId: p.world.semesterId }],
-    ["registrar", "/results/semesters/publish", { semesterId: p.world.semesterId }],
-  ] as const) {
-    const res = await send(as, "POST", url, body, key());
-    expect(res.statusCode, res.body).toBe(200);
-  }
+  const finalized = await send(
+    "l1Primary",
+    "POST",
+    `/course-offerings/${p.world.offerings.O1}/results/finalize`,
+    undefined,
+    key(),
+  );
+  expect(finalized.statusCode, finalized.body).toBe(200);
 });
 
 afterAll(async () => {
   await t.close();
 });
 
-describe("proposing", () => {
-  it("lists ACTIVE students with their CGPA", async () => {
+describe("candidates", () => {
+  it("lists ACTIVE students with their CGPA, credits passed and which awards they've earned", async () => {
     const res = await send("registrar", "GET", "/awards/candidates");
     expect(res.statusCode).toBe(200);
     const items = res.json<{ items: AwardCandidate[] }>().items;
-    const enrolled = items.find((c) => c.studentName === "sEnrolled Persona");
-    expect(enrolled).toMatchObject({ cgpaX100: 500, creditsEarnedX10: 30, award: null });
+    expect(items.find((c) => c.studentName === "sEnrolled Persona")).toMatchObject({
+      cgpaX100: 500,
+      creditsEarnedX10: 30,
+      totalCreditsX10: 60,
+      certificateEligible: true,
+      diplomaEligible: false,
+      awards: [],
+    });
+    expect(items.find((c) => c.studentName === "sCompleted Persona")).toMatchObject({
+      creditsEarnedX10: 0,
+      certificateEligible: false,
+    });
     // sGraduated's programme enrollment is COMPLETED already.
     expect(items.some((c) => c.studentName === "sGraduated Persona")).toBe(false);
     expect((await send("acadAdmin", "GET", "/awards/candidates")).statusCode).toBe(403);
   });
+});
 
-  it("works out CGPA, credits and class, with a checklist that doesn't block the proposal", async () => {
-    const res = await propose("sEnrolled");
+describe("proposing", () => {
+  it("works out the Certificate with a checklist: it waits for the Registrar's approval", async () => {
+    const res = await propose("sEnrolled", "CERTIFICATE");
     expect(res.statusCode, res.body).toBe(200);
     const award = res.json<Award>();
     expect(award).toMatchObject({
+      awardType: "CERTIFICATE",
       status: "DRAFT",
       cgpaX100: 500,
-      creditsEarnedX10: 30,
       awardClass: "Distinction",
       certificateNo: null,
     });
     expect(award.requirements.map((r) => [r.key, r.met])).toEqual([
-      ["COMPULSORY", true],
-      ["ELECTIVE_CREDITS", false],
-      ["PUBLISHED", true],
+      ["HALF_CREDITS", true],
+      ["APPROVED", false],
       ["SCHEME", true],
     ]);
-    expect(award.requirements[1]?.detail).toBe("0 of 2 elective credits earned");
+    expect(award.requirements[0]?.detail).toBe("3 of 6 credits passed");
     const refused = await confirm(award.id);
     expect(refused.statusCode).toBe(422);
     expect(refused.json<ErrorBody>().error.code).toBe("REQUIREMENTS_NOT_MET");
-    expect(refused.json<ErrorBody>().error.message).toContain("Minimum elective credits");
+  });
+
+  it("needs every curriculum course passed for the Diploma", async () => {
+    const award = (await propose("sEnrolled", "DIPLOMA")).json<Award>();
+    expect(award.requirements.find((r) => r.key === "ALL_COURSES")).toMatchObject({
+      met: false,
+      detail: "Not yet passed: PBIB102",
+    });
   });
 
   it("refuses an award below a CGPA of 1.00 with NO_AWARD", async () => {
-    const res = await propose("sCompleted");
-    const award = res.json<Award>();
+    const award = (await propose("sCompleted", "CERTIFICATE")).json<Award>();
     expect(award).toMatchObject({ cgpaX100: 0, awardClass: null });
-    expect(award.requirements.find((r) => r.key === "COMPULSORY")).toMatchObject({
+    expect(award.requirements.find((r) => r.key === "HALF_CREDITS")).toMatchObject({
       met: false,
-      detail: "Not yet passed: PBIB101",
+      detail: "0 of 6 credits passed",
     });
-    const refused = await confirm(award.id);
-    expect(refused.json<ErrorBody>().error.code).toBe("NO_AWARD");
+    expect((await confirm(award.id)).json<ErrorBody>().error.code).toBe("NO_AWARD");
+  });
+});
+
+describe("approving results", () => {
+  it("is the Registrar's, by offering or by cohort; Lecturers and Academic Admins can't", async () => {
+    const scope = { offeringId: p.world.offerings.O1 };
+    expect((await send("l1Primary", "POST", "/results/approve", scope, key())).statusCode).toBe(
+      403,
+    );
+    expect((await send("acadAdmin", "POST", "/results/approve", scope, key())).statusCode).toBe(
+      403,
+    );
+    const res = await send("registrar", "POST", "/results/approve", scope, key());
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json()).toEqual({ approved: 3, skipped: 0 });
+    // Again, for the whole cohort: nothing left to approve.
+    const again = await send(
+      "registrar",
+      "POST",
+      "/results/approve",
+      { cohortId: p.world.cohortId },
+      key(),
+    );
+    expect(again.json()).toEqual({ approved: 0, skipped: 0 });
+    const mine = (await send("sEnrolled", "GET", "/me/results")).json<MyResults>();
+    expect(mine.programmes[0]?.summary.provisional).toBe(false);
+    const notices = await q(
+      "SELECT 1 FROM notifications WHERE kind = 'results.course-approved' AND user_id = $1",
+      [p.sEnrolled.userId],
+    );
+    expect(notices.rowCount).toBe(1);
   });
 });
 
 describe("confirming", () => {
-  it("confers the award with a certificate number, completes the enrollment and graduates the student", async () => {
-    await q("UPDATE curricula SET min_elective_credits = 0 WHERE id = $1", [p.world.curriculumId]);
+  it("confers the Certificate halfway: numbered, and the student carries on", async () => {
     await q("UPDATE users SET referral_code = 'ALUM01' WHERE id = $1", [p.sEnrolled.userId]);
-    // Before: the recording plays.
-    expect((await send("sEnrolled", "GET", `/videos/${video.id}/play`)).statusCode).toBe(200);
-    const proposed = (await propose("sEnrolled")).json<Award>();
+    const proposed = (await propose("sEnrolled", "CERTIFICATE")).json<Award>();
     expect(proposed.requirements.every((r) => r.met)).toBe(true);
     expect((await confirm(proposed.id, "acadAdmin")).statusCode).toBe(403);
 
     const res = await confirm(proposed.id);
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json<Award>()).toMatchObject({
+      awardType: "CERTIFICATE",
       status: "CONFERRED",
       awardClass: "Distinction",
-      certificateNo: "GLIM/DIP/AWD/2026/0001",
+      certificateNo: "GLIM/CERT/AWD/2026/0001",
       awardedOn: "2026-11-02",
+    });
+    const state = await q<{ pe: string; student: string }>(
+      `SELECT pe.status AS pe, s.status AS student FROM programme_enrollments pe
+         JOIN students s ON s.id = pe.student_id WHERE pe.id = $1`,
+      [proposed.programmeEnrollmentId],
+    );
+    expect(state.rows[0]).toEqual({ pe: "ACTIVE", student: "ACTIVE" });
+    expect((await send("sEnrolled", "GET", `/videos/${video.id}/play`)).statusCode).toBe(200);
+    // Proposing a conferred Certificate is refused.
+    expect((await propose("sEnrolled", "CERTIFICATE")).statusCode).toBe(409);
+  });
+
+  it("confers the Diploma at the end: numbered, the enrollment completed and the student graduated", async () => {
+    await passSecondCourse("sEnrolled");
+    const proposed = (await propose("sEnrolled", "DIPLOMA")).json<Award>();
+    expect(proposed.requirements.every((r) => r.met)).toBe(true);
+    const res = await confirm(proposed.id);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json<Award>()).toMatchObject({
+      awardType: "DIPLOMA",
+      status: "CONFERRED",
+      certificateNo: "GLIM/DIP/AWD/2026/0001",
     });
     const state = await q<{ pe: string; ended: string; student: string; referral: string }>(
       `SELECT pe.status AS pe, pe.ended_on::text AS ended, s.status AS student, u.referral_code AS referral
@@ -210,9 +295,6 @@ describe("confirming", () => {
     // Confirming again changes nothing: no second number.
     const again = await confirm(proposed.id);
     expect(again.json<Award>().certificateNo).toBe("GLIM/DIP/AWD/2026/0001");
-    // Proposing a conferred award is refused.
-    expect((await propose("sEnrolled")).statusCode).toBe(409);
-
     const audit = await q(
       "SELECT 1 FROM audit_logs WHERE action = 'results.award.conferred' AND resource_id = $1",
       [proposed.id],
@@ -221,24 +303,22 @@ describe("confirming", () => {
   });
 
   it("ends access to the course's recordings once the student graduates", async () => {
-    const t2 = await send("sEnrolled", "GET", `/videos/${video.id}/play`);
-    expect(t2.statusCode).toBe(404);
+    expect((await send("sEnrolled", "GET", `/videos/${video.id}/play`)).statusCode).toBe(404);
   });
 
   it("numbers certificates without gaps, and keeps a student with another ACTIVE enrollment active", async () => {
-    // sGraduated is made ACTIVE with an ACTIVE Certificate enrollment too.
+    // sGraduated is made ACTIVE with an ACTIVE enrollment on another programme too.
     await q("UPDATE students SET status = 'ACTIVE' WHERE user_id = $1", [p.sGraduated.userId]);
+    await q("INSERT INTO programmes (code, name) VALUES ('POTHER', 'Persona Other')");
     await q(
-      `INSERT INTO programmes (code, name, award_type, duration_semesters, levels)
-       VALUES ('PCERT', 'Persona Certificate', 'CERTIFICATE', 2, 1)`,
-    );
-    await q(
-      `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, entry_session_id, matric_number, study_mode, started_on)
-       SELECT s.id, (SELECT id FROM programmes WHERE code = 'PCERT'), $2, $3, 'GLIM/PCERT/0009', 'ONLINE', '2080-09-01'
+      `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, intake_id, cohort_id, matric_number, study_mode, started_on)
+       SELECT s.id, (SELECT id FROM programmes WHERE code = 'POTHER'), $2, $3, $4, 'GLIM/POTHER/0009', 'ONLINE', '2025-01-01'
          FROM students s WHERE s.user_id = $1`,
-      [p.sGraduated.userId, p.world.curriculumId, p.world.sessionId],
+      [p.sGraduated.userId, p.world.curriculumId, p.world.intakeId, p.world.cohortId],
     );
-    const proposed = (await propose("sGraduated")).json<Award>();
+    await passSecondCourse("sGraduated");
+    const proposed = (await propose("sGraduated", "DIPLOMA")).json<Award>();
+    expect(proposed.requirements.every((r) => r.met)).toBe(true);
     const res = await confirm(proposed.id);
     expect(res.json<Award>().certificateNo).toBe("GLIM/DIP/AWD/2026/0002");
     const student = await q<{ status: string }>("SELECT status FROM students WHERE user_id = $1", [
@@ -249,6 +329,7 @@ describe("confirming", () => {
       items: Award[];
     }>();
     expect(listed.items.map((a) => a.certificateNo).sort()).toEqual([
+      "GLIM/CERT/AWD/2026/0001",
       "GLIM/DIP/AWD/2026/0001",
       "GLIM/DIP/AWD/2026/0002",
     ]);

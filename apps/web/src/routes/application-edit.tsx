@@ -17,7 +17,7 @@ import { ProgressBar } from "../components/ui/progress-bar";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
 import { Icon } from "../design/icons";
-import { currentIntakeQuery } from "../api/intake";
+import { currentIntakeQuery, PROGRAMME_SHAPE } from "../api/intake";
 
 /** Autosave interval (TRD §10.2: every 5–10 s). */
 const AUTOSAVE_MS = 5000;
@@ -296,6 +296,8 @@ function StartApplication() {
       </div>
     );
   const { intake: open, programmes } = intake.data;
+  // One programme (ADR-0005): applicants don't choose it, they're told it.
+  const programme = programmes[0];
 
   return (
     <form
@@ -305,7 +307,7 @@ function StartApplication() {
         const form = new FormData(event.currentTarget);
         void run(async () => {
           await api<typeof applications.startApplication>("POST", "/applications", {
-            body: { programmeId: form.get("programmeId"), studyMode: form.get("studyMode") },
+            body: { studyMode: form.get("studyMode") },
           });
           await queryClient.invalidateQueries({ queryKey: ["applications"] });
           await queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -316,8 +318,8 @@ function StartApplication() {
         title="Start your application"
         meta={
           <>
-            For the {open.academicSessionName}. Applications close on{" "}
-            <CalendarDate value={open.closesOn} />.
+            For the {open.code} Intake, starting on <CalendarDate value={open.startsOn} />.
+            Applications close on <CalendarDate value={open.closesOn} />.
           </>
         }
       />
@@ -327,19 +329,13 @@ function StartApplication() {
         </Banner>
       ) : null}
       <Card className="space-y-5">
-        <fieldset>
-          <legend className="text-label text-ink">Programme</legend>
-          {programmes.map((p, index) => (
-            <Radio
-              key={p.id}
-              name="programmeId"
-              value={p.id}
-              required
-              defaultChecked={index === 0}
-              label={p.name}
-            />
-          ))}
-        </fieldset>
+        {programme === undefined ? null : (
+          <div className="space-y-1">
+            <p className="text-label text-ink">Programme</p>
+            <p className="text-body text-ink">{programme.name}</p>
+            <p className="text-body-sm text-ink-muted">{PROGRAMME_SHAPE}</p>
+          </div>
+        )}
         <fieldset>
           <legend className="text-label text-ink">Study mode</legend>
           <Radio name="studyMode" value="ON_CAMPUS" required label="On campus" />
@@ -523,7 +519,7 @@ function Wizard({ initial }: { initial: Application }) {
     <div className="space-y-5">
       <PageHeader
         title="Your application"
-        meta={`${application.programme.name} · ${application.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${application.intake.academicSessionName}`}
+        meta={`${application.programme.name} · ${application.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${application.intake.code} Intake`}
       />
       {saveState === "conflict" ? (
         <Banner
@@ -679,7 +675,7 @@ function SectionIntro({
       return (
         <p className="text-body-sm text-ink-muted">
           You must be at least {application.minimumAgeYears} on{" "}
-          <CalendarDate value={application.intake.startsOn} />, when the Academic Session starts.
+          <CalendarDate value={application.intake.startsOn} />, when studies start.
         </p>
       );
     case "spiritual":
@@ -976,7 +972,7 @@ function Review({
       <div id="review-reason" className="space-y-3">
         {open ? null : (
           <Banner tone="warning">
-            Applications for the {application.intake.academicSessionName} have closed, so this
+            Applications for the {application.intake.code} Intake have closed, so this
             application can't be submitted.
           </Banner>
         )}

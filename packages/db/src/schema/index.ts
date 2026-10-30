@@ -6,6 +6,8 @@ export * from "./audit";
 export * from "./authorization";
 export * from "./cohorts";
 export * from "./content";
+export * from "./files";
+export * from "./offerings";
 export * from "./enrollment";
 export * from "./identity";
 export * from "./imports";

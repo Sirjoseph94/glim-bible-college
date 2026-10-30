@@ -15,11 +15,11 @@ async function signIn(page: Page, who: { email: string; password: string }) {
 }
 
 /**
- * TRD §14.5: after the term-results spec reopened Bola's result, the Lecturer finalizes it again;
- * the Registrar computes, approves and publishes the semester on a phone; Bola's GPA and CGPA are
- * no longer Provisional.
+ * TRD §14.5, ADR-0005: after the term-results spec reopened Bola's result, the Lecturer finalizes
+ * it again; the Registrar approves the cohort's results on a phone; Bola's CGPA is no longer
+ * Provisional.
  */
-test("the Registrar computes, approves and publishes semester results", async ({ page }) => {
+test("the Registrar approves a cohort's results", async ({ page }) => {
   await signIn(page, LECTURER);
   await openTeaching(page, "Pastoral Care", "Gradebook");
   await page.getByRole("link", { name: "Finalize results" }).click();
@@ -35,36 +35,34 @@ test("the Registrar computes, approves and publishes semester results", async ({
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
-  await page.getByRole("link", { name: "Semester results", exact: true }).click();
-  await page.getByLabel("Semester").selectOption({ label: "First Semester, 2032/2033" });
-  await page.getByRole("button", { name: "Compute" }).click();
-  await expect(page.getByText("Computed 2; 2 changed.")).toBeVisible();
+  await page.getByRole("link", { name: "Cohort results", exact: true }).click();
+  await page
+    .getByLabel("Cohort")
+    .selectOption({ label: "DMIN-2026-E2E · Diploma in Ministry, 2026-E2E intake" });
   const bola = page.getByRole("row", { name: /Bola Online/ });
   await expect(bola).toContainText("Provisional");
-  // §11.10: the cohort is ready; approving publishes too, after a Dialog saying what it does.
-  await expect(page.getByText("1 cohort is ready to approve")).toBeVisible();
-  // Each cohort names its level and how many of its courses are finalized (ui #06).
-  const cohort = page.getByRole("table", { name: "Cohorts" }).getByRole("row").nth(1);
-  await expect(cohort).toContainText(/· Years? \d/);
-  await expect(cohort).toContainText(/(\d+) of \1/);
-  await page.getByRole("button", { name: "Approve and publish" }).click();
-  const approve = page.getByRole("dialog", { name: /^Approve / });
-  await expect(approve).toContainText("2 students' GPA and CGPA become official");
-  await approve.getByRole("button", { name: "Approve and publish" }).click();
-  await expect(
-    page.getByText("Approved 2 and published 2. Students have been told."),
-  ).toBeVisible();
-  await expect(bola).toContainText("Published");
+  // §11.10: the course is ready; approving asks first, saying what it does.
+  await expect(page.getByText("1 course has results to approve")).toBeVisible();
+  const course = page.getByRole("table", { name: "Courses" }).getByRole("row", { name: /PAS101/ });
+  await expect(course).toContainText("2 of 2");
+  await expect(course).toContainText("Ready to approve");
+  await page.getByRole("button", { name: "Approve all" }).click();
+  const approve = page.getByRole("dialog", { name: "Approve DMIN-2026-E2E's results?" });
+  await expect(approve).toContainText("Finalized results become official");
+  await approve.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Approved 2 results. Students have been told.")).toBeVisible();
+  await expect(course).toContainText("Approved");
+  await expect(bola).not.toContainText("Provisional");
   await expect(page.getByRole("link", { name: "Broadsheet (CSV)" })).toHaveAttribute(
     "href",
-    /\/api\/v1\/reports\/results\?semesterId=.+&format=csv$/,
+    /\/api\/v1\/reports\/results\?cohortId=.+&format=csv$/,
   );
   await signOut(page);
 
   await signIn(page, STUDENT);
   await openArea(page, "Results");
   const gpa = page.getByRole("region", { name: "Grade point average" });
-  await expect(gpa).toContainText(/This semester\d\.\d\dCGPA\d\.\d\d/);
+  await expect(gpa).toContainText(/CGPA\d\.\d\d/);
   await expect(gpa).toContainText("Approved");
   await expect(page.getByText(/provisional/i)).toHaveCount(0);
 });

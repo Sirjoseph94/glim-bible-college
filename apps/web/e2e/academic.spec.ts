@@ -5,7 +5,7 @@ import { openArea, signOut } from "./nav";
 const EMAIL = "e2e-academic@glim.test";
 const PASSWORD = "academic passphrase 2026";
 
-test("the Academic Admin sets up a programme, courses and an active curriculum", async ({
+test("the Academic Admin sets up a programme, an ordered curriculum, and a cohort's courses", async ({
   page,
 }) => {
   await page.goto(`/invite/${await linkToken(EMAIL, "invite")}`);
@@ -17,10 +17,11 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await openArea(page, "Academic");
   await page.getByRole("button", { name: "Add a programme" }).click();
   const programmeSheet = page.getByRole("dialog", { name: "Add a programme" });
-  await programmeSheet.getByLabel("Code (e.g. DIP)").fill("CERT");
-  await programmeSheet.getByLabel("Name").fill("Certificate in Theology");
+  // Coded after DMIN, the seeded programme that applicants apply to.
+  await programmeSheet.getByLabel("Code (e.g. DIP)").fill("THEO");
+  await programmeSheet.getByLabel("Name").fill("Diploma in Theology");
   await programmeSheet.getByRole("button", { name: "Add programme" }).click();
-  await expect(page.getByText("CERT · Certificate in Theology")).toBeVisible();
+  await expect(page.getByText("THEO · Diploma in Theology")).toBeVisible();
 
   for (const [code, title, credits] of [
     ["BIB101", "Old Testament Survey", "3"],
@@ -37,7 +38,7 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   }
 
   await page
-    .getByRole("region", { name: "Certificate in Theology" })
+    .getByRole("region", { name: "Diploma in Theology" })
     .getByRole("button", { name: "New curriculum version" })
     .click();
   await expect(page.getByRole("heading", { name: "Curriculum v1" })).toBeVisible();
@@ -46,8 +47,11 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await page
     .getByLabel("Course 2", { exact: true })
     .selectOption({ label: "MIN101 Introduction to Ministry" });
-  await page.getByLabel("Type 2").selectOption("ELECTIVE");
-  await page.getByRole("button", { name: "Save placements" }).click();
+  // The order is the order cohorts take the courses in (ADR-0005).
+  await page.getByRole("button", { name: "Move course 2 earlier" }).click();
+  await page.getByRole("button", { name: "Save courses" }).click();
+  await expect(page.getByText("5.0 credits in all", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Course 1", { exact: true })).toHaveText(/MIN101/);
   await expect(page.getByText("Draft", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Activate", exact: true }).click();
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
@@ -55,33 +59,22 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
 
   // The curriculum is a detail page (back link, no section links): go through the area.
   await openArea(page, "Academic");
-  await page.getByRole("link", { name: "Calendar" }).click();
-  await page.getByRole("button", { name: "Plan an Academic Session" }).click();
-  const sessionSheet = page.getByRole("dialog", { name: "Plan an Academic Session" });
-  await sessionSheet.getByLabel("Code (e.g. 2027/2028)").fill("2026/2027");
-  await sessionSheet.getByLabel("Starts (September)").fill("2026-09-01");
-  await sessionSheet.getByLabel("Ends (June)").fill("2027-06-30");
-  await sessionSheet.getByRole("button", { name: "Plan Academic Session" }).click();
-  // Scoped to this session: other specs plan sessions of their own.
-  const session = page.getByRole("region", { name: "2026/2027 Session" });
-  await expect(session.getByRole("heading", { name: "2026/2027 Session" })).toBeVisible();
-  await expect(session.getByText("Planned", { exact: true })).toBeVisible();
-  await session.getByRole("button", { name: "Activate Academic Session" }).click();
-  await expect(session.getByText("Active", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Cohorts" }).click();
+  await page
+    .getByLabel("Cohort")
+    .selectOption({ label: "DMIN-2027-E2E · starts 2027-01-04 · 0 active" });
+  const schedule = page.getByRole("region", { name: "DMIN-2027-E2E schedule" });
+  await expect(schedule.getByText("Nothing scheduled yet")).toBeVisible();
+  await schedule.getByRole("button", { name: "Plan 1 course" }).click();
+  const planSheet = page.getByRole("dialog", { name: "Plan DMIN-2027-E2E's courses" });
+  await planSheet.getByLabel("First course starts on").fill("2027-01-04");
+  await planSheet.getByLabel("Weeks per course").fill("4");
+  await planSheet.getByRole("button", { name: "Create draft offerings" }).click();
+  const planned = schedule.getByRole("listitem", { name: "PAS101 Pastoral Care" });
+  await expect(planned).toContainText("Mon, 4 Jan 2027");
+  await expect(planned).toContainText("Draft");
 
-  await session.getByRole("button", { name: "Add semester 1" }).click();
-  const semesterSheet = page.getByRole("dialog", { name: "Add semester 1" });
-  await semesterSheet.getByLabel("Starts", { exact: true }).fill("2026-09-07");
-  await semesterSheet.getByLabel("Ends", { exact: true }).fill("2027-01-29");
-  await semesterSheet.getByLabel("Exams start").fill("2027-01-11");
-  await semesterSheet.getByLabel("Exams end").fill("2027-01-22");
-  await semesterSheet.getByRole("button", { name: "Add semester" }).click();
-  const firstSemester = session.getByRole("listitem", { name: "First Semester (S1)" });
-  await expect(firstSemester.getByText("Planned", { exact: true })).toBeVisible();
-  await expect(firstSemester.getByText("Mon, 11 Jan 2027")).toBeVisible();
-  await firstSemester.getByRole("button", { name: "Open registration" }).click();
-  await expect(firstSemester.getByText("Registration open", { exact: true })).toBeVisible();
-
+  await page.getByRole("link", { name: "Rooms" }).click();
   await page.getByRole("button", { name: "Add a Room" }).click();
   const roomSheet = page.getByRole("dialog", { name: "Add a Room" });
   await roomSheet.getByLabel("Room code").fill("R1");
@@ -101,9 +94,16 @@ test("the Academic Admin sets up a programme, courses and an active curriculum",
   await expect(page.getByText("Rev Tunde Bello was invited by email.")).toBeVisible();
 
   await page.getByRole("link", { name: "Offerings" }).click();
-  await page.getByRole("button", { name: "Offer a course this semester" }).click();
-  const offeringSheet = page.getByRole("dialog", { name: "Offer a course this semester" });
+  await page
+    .getByLabel("Cohort")
+    .selectOption({ label: "DMIN-2027-E2E · Diploma in Ministry, 2027-E2E intake" });
+  await page.getByRole("button", { name: "Offer a course to this cohort" }).click();
+  const offeringSheet = page.getByRole("dialog", { name: "Offer a course to this cohort" });
   await offeringSheet.getByLabel("Course").selectOption({ label: "BIB101 Old Testament Survey" });
+  // Straight after the planned PAS101, which ends on 31 January.
+  await offeringSheet.getByLabel("Starts").fill("2027-02-01");
+  await offeringSheet.getByLabel("Ends").fill("2027-02-26");
+  await offeringSheet.getByLabel("Exam").fill("2027-02-26");
   await offeringSheet.getByLabel("Primary Lecturer").selectOption({ label: "Rev Tunde Bello" });
   await offeringSheet.getByRole("button", { name: "Create offering" }).click();
   await expect(page.getByRole("listitem", { name: "Rev Tunde Bello" })).toContainText("Primary");

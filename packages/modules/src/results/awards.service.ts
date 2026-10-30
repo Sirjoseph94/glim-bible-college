@@ -6,6 +6,7 @@ import {
   CLOCK,
   domainError,
   err,
+  formatDecimal,
   ok,
   parseDecimal,
   type Clock,
@@ -15,19 +16,44 @@ import {
 import { toLocalDate } from "@glim/shared/time";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import {
+  awardEligibility,
+  isProvisional,
+  passedCourses,
+  type CurriculumCourse,
+} from "./domain/awards";
 import { awardClassFor, cumulativeGpa } from "./domain/grading";
 import { rulesOf } from "./grading-schemes.service";
-import { lineOf } from "./semester-results.service";
+import { lineOf, summarize } from "./summary";
 
 type Actor = AuditActor & { userId: string };
+type AwardType = Award["awardType"];
 
-/** What a programme enrollment has earned toward its award. */
+type CurriculumCourses = (CurriculumCourse & { code: string })[];
+
+/** The curriculum's courses with the credits each counts for (the override, or the course's). */
+async function curriculumCourses(db: Database, curriculumId: string): Promise<CurriculumCourses> {
+  const cc = schema.curriculumCourses;
+  const c = schema.courses;
+  const rows = await db
+    .select({ courseId: cc.courseId, code: c.code, override: cc.creditOverride, credits: c.credits })
+    .from(cc)
+    .innerJoin(c, eq(c.id, cc.courseId))
+    .where(eq(cc.curriculumId, curriculumId))
+    .orderBy(asc(cc.position));
+  return rows.map((r) => ({
+    courseId: r.courseId,
+    code: r.code,
+    creditsX10: parseDecimal(r.override ?? r.credits, 1),
+  }));
+}
+
+/** What a programme enrollment has earned toward one award. */
 interface Assessment {
   cgpaX100: number;
   creditsEarnedX10: number;
   awardClass: string | null;
   requirements: AwardRequirement[];
-  awardType: string;
 }
 
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
@@ -35,9 +61,11 @@ const x10 = (v: number) =>
   v % 10 === 0 ? String(v / 10) : `${String(Math.trunc(v / 10))}.${String(v % 10)}`;
 
 /**
- * Awards (owner: results, TRD §14.6): the Registrar proposes an award, which works out the final
- * CGPA, credits and award class with a checklist of requirements, then confirms it, which gives it
- * a gap-free certificate number and graduates the student.
+ * Awards (owner: results, TRD §14.6, ADR-0005): a Diploma student earns the Certificate once
+ * they've passed courses worth half the curriculum's credits, and the Diploma once they've passed
+ * every course. The Registrar proposes an award, which works out the CGPA, credits and award class
+ * with a checklist of requirements, then confirms it, which gives it a gap-free certificate
+ * number; conferring the Diploma also completes the programme and graduates the student.
  */
 @Injectable()
 export class AwardsService {
@@ -49,17 +77,21 @@ export class AwardsService {
   ) {}
 
   /** Proposes (or re-proposes) the award; unmet requirements are listed, not refused. */
-  async propose(programmeEnrollmentId: string, actor: Actor): Promise<DomainResult<Award>> {
+  async propose(
+    programmeEnrollmentId: string,
+    awardType: AwardType,
+    actor: Actor,
+  ): Promise<DomainResult<Award>> {
     const result = await this.db.withTxResult<string, DomainError>(async ({ db }) => {
       const a = schema.awards;
       const [existing] = await db
         .select()
         .from(a)
-        .where(eq(a.programmeEnrollmentId, programmeEnrollmentId))
+        .where(and(eq(a.programmeEnrollmentId, programmeEnrollmentId), eq(a.awardType, awardType)))
         .for("update");
       if (existing?.status === "CONFERRED")
         return err(domainError("CONFLICT", "This award has already been conferred."));
-      const assessed = await this.assess(db, programmeEnrollmentId);
+      const assessed = await this.assess(db, programmeEnrollmentId, awardType);
       if (assessed === null) return notFound();
       const now = this.clock.now();
       const fields = {
@@ -74,7 +106,7 @@ export class AwardsService {
         existing === undefined
           ? await db
               .insert(a)
-              .values({ ...fields, programmeEnrollmentId, createdAt: now })
+              .values({ ...fields, programmeEnrollmentId, awardType, createdAt: now })
               .returning({ id: a.id })
           : await db
               .update(a)
@@ -88,6 +120,7 @@ export class AwardsService {
         resourceId: row.id,
         metadata: {
           programmeEnrollmentId,
+          awardType,
           cgpaX100: assessed.cgpaX100,
           awardClass: assessed.awardClass,
           unmet: assessed.requirements.filter((x) => !x.met).map((x) => x.key),
@@ -100,9 +133,10 @@ export class AwardsService {
 
   /**
    * Confers the award, checking again first: every requirement met (`REQUIREMENTS_NOT_MET`) and
-   * a CGPA that earns a class (`NO_AWARD`, checked first). Allocates the next certificate number for the award
-   * type and year in the same transaction, completes the programme enrollment and graduates the
-   * student unless another enrollment of theirs is still ACTIVE. Confirming again changes nothing.
+   * a CGPA that earns a class (`NO_AWARD`, checked first). Allocates the next certificate number
+   * for the award type and year in the same transaction. The Diploma also completes the programme
+   * enrollment and graduates the student unless another enrollment of theirs is still ACTIVE.
+   * Confirming again changes nothing.
    */
   async confirm(awardId: string, actor: Actor): Promise<DomainResult<Award>> {
     const result = await this.db.withTxResult<null, DomainError>(async (tx) => {
@@ -111,13 +145,14 @@ export class AwardsService {
       const [award] = await db.select().from(a).where(eq(a.id, awardId)).for("update");
       if (award === undefined) return notFound();
       if (award.status === "CONFERRED") return ok(null);
-      const assessed = await this.assess(db, award.programmeEnrollmentId);
+      const awardType = award.awardType as AwardType;
+      const assessed = await this.assess(db, award.programmeEnrollmentId, awardType);
       if (assessed === null) return notFound();
       if (assessed.awardClass === null)
         return err(
           domainError(
             "NO_AWARD",
-            `A final CGPA of ${(assessed.cgpaX100 / 100).toFixed(2)} earns no award.`,
+            `A CGPA of ${formatDecimal(assessed.cgpaX100, 2)} earns no award.`,
           ),
         );
 
@@ -136,11 +171,11 @@ export class AwardsService {
         .limit(1);
       const awardedOn = toLocalDate(now, settings?.timezone ?? "Africa/Lagos");
       const year = Number(awardedOn.slice(0, 4));
-      const code = assessed.awardType === "CERTIFICATE" ? "CERT" : "DIP";
+      const code = awardType === "CERTIFICATE" ? "CERT" : "DIP";
       const seq = schema.awardSequences;
       const [allocated] = await db
         .insert(seq)
-        .values({ awardType: assessed.awardType, year, nextValue: 2 })
+        .values({ awardType, year, nextValue: 2 })
         .onConflictDoUpdate({
           target: [seq.awardType, seq.year],
           set: { nextValue: sql`${seq.nextValue} + 1` },
@@ -167,27 +202,35 @@ export class AwardsService {
         .where(eq(a.id, awardId));
       const pe = schema.programmeEnrollments;
       const [enrollment] = await db
-        .update(pe)
-        .set({
-          status: "COMPLETED",
-          endedOn: awardedOn,
-          updatedAt: now,
-          version: sql`${pe.version} + 1`,
-        })
-        .where(eq(pe.id, award.programmeEnrollmentId))
-        .returning({ studentId: pe.studentId });
-      if (enrollment === undefined) throw new Error("programme enrollment vanished");
-      const [stillActive] = await db
-        .select({ id: pe.id })
+        .select({ studentId: pe.studentId })
         .from(pe)
-        .where(and(eq(pe.studentId, enrollment.studentId), eq(pe.status, "ACTIVE")))
-        .limit(1);
+        .where(eq(pe.id, award.programmeEnrollmentId));
+      if (enrollment === undefined) throw new Error("programme enrollment vanished");
       const st = schema.students;
-      if (stillActive === undefined)
+      // The Certificate is earned halfway: only the Diploma ends the programme (ADR-0005).
+      let graduated = false;
+      if (awardType === "DIPLOMA") {
         await db
-          .update(st)
-          .set({ status: "GRADUATED", updatedAt: now, version: sql`${st.version} + 1` })
-          .where(eq(st.id, enrollment.studentId));
+          .update(pe)
+          .set({
+            status: "COMPLETED",
+            endedOn: awardedOn,
+            updatedAt: now,
+            version: sql`${pe.version} + 1`,
+          })
+          .where(eq(pe.id, award.programmeEnrollmentId));
+        const [stillActive] = await db
+          .select({ id: pe.id })
+          .from(pe)
+          .where(and(eq(pe.studentId, enrollment.studentId), eq(pe.status, "ACTIVE")))
+          .limit(1);
+        graduated = stillActive === undefined;
+        if (graduated)
+          await db
+            .update(st)
+            .set({ status: "GRADUATED", updatedAt: now, version: sql`${st.version} + 1` })
+            .where(eq(st.id, enrollment.studentId));
+      }
       const [student] = await db
         .select({ userId: st.userId })
         .from(st)
@@ -196,7 +239,7 @@ export class AwardsService {
         await this.notifications.notify(tx, {
           userId: student.userId,
           kind: "results.award-conferred",
-          title: `Congratulations: your award (${assessed.awardClass}) has been conferred`,
+          title: `Congratulations: your ${awardType === "CERTIFICATE" ? "Certificate" : "Diploma"} (${assessed.awardClass}) has been conferred`,
           data: { awardId },
           email: false,
           dedupeKey: `award-conferred:${awardId}`,
@@ -207,10 +250,11 @@ export class AwardsService {
         resourceId: awardId,
         metadata: {
           programmeEnrollmentId: award.programmeEnrollmentId,
+          awardType,
           certificateNo,
           awardClass: assessed.awardClass,
           cgpaX100: assessed.cgpaX100,
-          graduated: stillActive === undefined,
+          graduated,
         },
       });
       return ok(null);
@@ -228,87 +272,105 @@ export class AwardsService {
     return Promise.all(rows.map((r) => this.one(r.id)));
   }
 
-  /** ACTIVE programme enrollments, with the CGPA of their latest semester result. */
-  async candidates(programmeId?: string): Promise<AwardCandidate[]> {
+  /**
+   * ACTIVE programme enrollments (optionally one cohort), with their CGPA, the credits they've
+   * passed towards the awards, which awards they're eligible for, and any awards proposed.
+   */
+  async candidates(cohortId?: string): Promise<AwardCandidate[]> {
     const pe = schema.programmeEnrollments;
     const st = schema.students;
     const p = schema.programmes;
+    const c = schema.cohorts;
     const rows = await this.db.read
       .select({
         id: pe.id,
+        curriculumId: pe.curriculumId,
+        schemeId: p.gradingSchemeId,
         given: st.givenName,
         family: st.familyName,
         matricNumber: pe.matricNumber,
         programmeCode: p.code,
+        cohortCode: c.code,
       })
       .from(pe)
       .innerJoin(st, eq(st.id, pe.studentId))
       .innerJoin(p, eq(p.id, pe.programmeId))
-      .where(
-        and(
-          eq(pe.status, "ACTIVE"),
-          programmeId === undefined ? undefined : eq(pe.programmeId, programmeId),
-        ),
-      )
-      .orderBy(asc(p.code), asc(pe.matricNumber));
+      .innerJoin(c, eq(c.id, pe.cohortId))
+      .where(and(eq(pe.status, "ACTIVE"), cohortId === undefined ? undefined : eq(pe.cohortId, cohortId)))
+      .orderBy(asc(c.code), asc(pe.matricNumber));
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);
-    const sr = schema.semesterResults;
-    const s = schema.semesters;
-    const ses = schema.academicSessions;
-    const latest = await this.db.read
-      .select({
-        id: sr.programmeEnrollmentId,
-        cgpa: sr.cgpaX100,
-        earned: sr.cumCreditsEarnedX10,
-        startsOn: ses.startsOn,
-        sequence: s.sequence,
-      })
-      .from(sr)
-      .innerJoin(s, eq(s.id, sr.semesterId))
-      .innerJoin(ses, eq(ses.id, s.academicSessionId))
-      .where(inArray(sr.programmeEnrollmentId, ids))
-      .orderBy(desc(ses.startsOn), desc(s.sequence));
+    const r = schema.courseResults;
+    const results = await this.db.read
+      .select()
+      .from(r)
+      .where(and(inArray(r.programmeEnrollmentId, ids), ne(r.status, "DRAFT")));
+    const schemeIds = [...new Set(rows.flatMap((x) => (x.schemeId === null ? [] : [x.schemeId])))];
+    const schemes =
+      schemeIds.length === 0
+        ? []
+        : await this.db.read
+            .select()
+            .from(schema.gradingSchemes)
+            .where(inArray(schema.gradingSchemes.id, schemeIds));
+    const curricula = new Map<string, CurriculumCourses>();
+    for (const curriculumId of new Set(rows.map((x) => x.curriculumId)))
+      curricula.set(curriculumId, await curriculumCourses(this.db.read, curriculumId));
     const a = schema.awards;
     const awards = await this.db.read
-      .select({ id: a.id, status: a.status, pe: a.programmeEnrollmentId })
+      .select({ id: a.id, awardType: a.awardType, status: a.status, pe: a.programmeEnrollmentId })
       .from(a)
-      .where(inArray(a.programmeEnrollmentId, ids));
-    return rows.map((r) => {
-      const last = latest.find((x) => x.id === r.id);
-      const award = awards.find((x) => x.pe === r.id);
+      .where(inArray(a.programmeEnrollmentId, ids))
+      .orderBy(asc(a.awardType));
+    return rows.map((row) => {
+      const scheme = schemes.find((x) => x.id === row.schemeId);
+      const rules = scheme === undefined ? null : rulesOf(scheme);
+      const mine = results.filter((x) => x.programmeEnrollmentId === row.id);
+      const summary = summarize(mine, rules);
+      const eligibility = awardEligibility(
+        curricula.get(row.curriculumId) ?? [],
+        mine.map(lineOf),
+        rules?.repeatPolicy ?? "BEST",
+      );
       return {
-        programmeEnrollmentId: r.id,
-        studentName: `${r.given} ${r.family}`,
-        matricNumber: r.matricNumber,
-        programmeCode: r.programmeCode,
-        cgpaX100: last?.cgpa ?? null,
-        creditsEarnedX10: last?.earned ?? 0,
-        award:
-          award === undefined ? null : { id: award.id, status: award.status as Award["status"] },
+        programmeEnrollmentId: row.id,
+        studentName: `${row.given} ${row.family}`,
+        matricNumber: row.matricNumber,
+        programmeCode: row.programmeCode,
+        cohortCode: row.cohortCode,
+        cgpaX100: summary.cgpaX100,
+        creditsEarnedX10: eligibility.passedCreditsX10,
+        totalCreditsX10: eligibility.totalCreditsX10,
+        certificateEligible: eligibility.certificate,
+        diplomaEligible: eligibility.diploma,
+        awards: awards
+          .filter((x) => x.pe === row.id)
+          .map((x) => ({
+            id: x.id,
+            awardType: x.awardType as AwardType,
+            status: x.status as Award["status"],
+          })),
       };
     });
   }
 
   /**
-   * Works out the award from every non-draft result of the programme enrollment: the CGPA and
-   * credits under the scheme's repeat policy, and the checklist — every compulsory course of the
-   * curriculum passed (or exempted), the minimum elective credits, every semester published, no
-   * result reopened, and a CGPA that earns a class.
+   * Works out one award from every non-draft result of the programme enrollment: the CGPA under
+   * the scheme's repeat policy, the award class, and the checklist. The Certificate needs passed
+   * courses worth half the curriculum's credits, the Diploma every curriculum course passed (or
+   * exempted); both need every counted result approved, none reopened, and a grading scheme.
    */
-  private async assess(db: Database, programmeEnrollmentId: string): Promise<Assessment | null> {
+  private async assess(
+    db: Database,
+    programmeEnrollmentId: string,
+    awardType: AwardType,
+  ): Promise<Assessment | null> {
     const pe = schema.programmeEnrollments;
     const p = schema.programmes;
     const [enrollment] = await db
-      .select({
-        curriculumId: pe.curriculumId,
-        awardType: p.awardType,
-        schemeId: p.gradingSchemeId,
-        minElective: schema.curricula.minElectiveCredits,
-      })
+      .select({ curriculumId: pe.curriculumId, schemeId: p.gradingSchemeId })
       .from(pe)
       .innerJoin(p, eq(p.id, pe.programmeId))
-      .innerJoin(schema.curricula, eq(schema.curricula.id, pe.curriculumId))
       .where(eq(pe.id, programmeEnrollmentId));
     if (enrollment === undefined) return null;
     const [scheme] =
@@ -322,68 +384,53 @@ export class AwardsService {
 
     const r = schema.courseResults;
     const results = await db
-      .select({ result: r, code: schema.courses.code })
+      .select()
       .from(r)
-      .innerJoin(schema.courses, eq(schema.courses.id, r.courseId))
       .where(and(eq(r.programmeEnrollmentId, programmeEnrollmentId), ne(r.status, "DRAFT")));
     const [reopened] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(r)
       .where(and(eq(r.programmeEnrollmentId, programmeEnrollmentId), eq(r.status, "DRAFT")));
-    const cum = cumulativeGpa(
-      results.map((x) => lineOf(x.result)),
-      rules?.repeatPolicy ?? "BEST",
-    );
+    const lines = results.map(lineOf);
+    const policy = rules?.repeatPolicy ?? "BEST";
+    const cum = cumulativeGpa(lines, policy);
     const cgpaX100 = cum.gpaX100 ?? 0;
 
-    const cc = schema.curriculumCourses;
-    const placements = await db
-      .select({ courseId: cc.courseId, type: cc.courseType, code: schema.courses.code })
-      .from(cc)
-      .innerJoin(schema.courses, eq(schema.courses.id, cc.courseId))
-      .where(eq(cc.curriculumId, enrollment.curriculumId))
-      .orderBy(asc(schema.courses.code));
-    const earned = new Map<string, number>();
-    for (const { result } of results)
-      if (result.passed === true || result.resultKind === "EXEMPT")
-        earned.set(result.courseId, Math.max(earned.get(result.courseId) ?? 0, result.creditsX10));
-    const compulsory = placements.filter((x) => x.type === "COMPULSORY");
-    const missing = compulsory.filter((x) => !earned.has(x.courseId)).map((x) => x.code);
-    const compulsoryIds = new Set(compulsory.map((x) => x.courseId));
-    const electiveX10 = [...earned.entries()]
-      .filter(([courseId]) => !compulsoryIds.has(courseId))
-      .reduce((sum, [, credits]) => sum + credits, 0);
-    const minElectiveX10 = parseDecimal(enrollment.minElective, 1);
-
-    const sr = schema.semesterResults;
-    const semesters = await db
-      .select({ status: sr.status })
-      .from(sr)
-      .where(eq(sr.programmeEnrollmentId, programmeEnrollmentId));
-    const unpublished = semesters.filter((x) => x.status !== "PUBLISHED").length;
+    const curriculum = await curriculumCourses(db, enrollment.curriculumId);
+    const eligibility = awardEligibility(curriculum, lines, policy);
+    const passed = passedCourses(curriculum, lines, policy);
+    const missing = curriculum.filter((c) => !passed.has(c.courseId)).map((c) => c.code);
+    const unapproved = isProvisional(results);
+    const reopenedCount = reopened?.n ?? 0;
 
     const requirements: AwardRequirement[] = [
+      awardType === "CERTIFICATE"
+        ? {
+            key: "HALF_CREDITS",
+            label: "Courses worth half the curriculum's credits passed",
+            met: eligibility.certificate,
+            detail: `${x10(eligibility.passedCreditsX10)} of ${x10(eligibility.totalCreditsX10)} credits passed`,
+          }
+        : {
+            key: "ALL_COURSES",
+            label: "Every curriculum course passed",
+            met: eligibility.diploma,
+            detail: missing.length === 0 ? null : `Not yet passed: ${missing.join(", ")}`,
+          },
       {
-        key: "COMPULSORY",
-        label: "Every compulsory course passed",
-        met: missing.length === 0,
-        detail: missing.length === 0 ? null : `Not yet passed: ${missing.join(", ")}`,
-      },
-      {
-        key: "ELECTIVE_CREDITS",
-        label: "Minimum elective credits",
-        met: electiveX10 >= minElectiveX10,
-        detail: `${x10(electiveX10)} of ${x10(minElectiveX10)} elective credits earned`,
-      },
-      {
-        key: "PUBLISHED",
-        label: "Every semester's results published",
-        met: semesters.length > 0 && unpublished === 0 && (reopened?.n ?? 0) === 0,
+        key: "APPROVED",
+        label: "Every result approved by the Registrar",
+        met: !unapproved && reopenedCount === 0,
         detail:
-          semesters.length === 0
-            ? "No semester results yet"
-            : unpublished > 0 || (reopened?.n ?? 0) > 0
-              ? `${String(unpublished)} semester(s) not published${(reopened?.n ?? 0) > 0 ? `; ${String(reopened?.n ?? 0)} result(s) reopened` : ""}`
+          results.length === 0
+            ? "No results yet"
+            : unapproved || reopenedCount > 0
+              ? [
+                  unapproved ? "Some results aren't approved yet" : null,
+                  reopenedCount > 0 ? `${String(reopenedCount)} result(s) reopened` : null,
+                ]
+                  .filter((x) => x !== null)
+                  .join("; ")
               : null,
       },
       {
@@ -398,7 +445,6 @@ export class AwardsService {
       creditsEarnedX10: cum.creditsEarnedX10,
       awardClass: rules === null ? null : awardClassFor(cum.gpaX100, rules),
       requirements,
-      awardType: enrollment.awardType,
     };
   }
 
@@ -424,6 +470,7 @@ export class AwardsService {
     if (row === undefined) throw new Error(`award ${id} vanished`);
     return {
       id: row.award.id,
+      awardType: row.award.awardType as AwardType,
       programmeEnrollmentId: row.award.programmeEnrollmentId,
       studentName: `${row.given} ${row.family}`,
       matricNumber: row.matricNumber,

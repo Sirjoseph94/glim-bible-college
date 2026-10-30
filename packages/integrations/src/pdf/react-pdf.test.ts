@@ -3,11 +3,19 @@ import type { TranscriptSnapshot } from "@glim/contracts";
 import { describe, expect, it } from "vitest";
 import { ReactPdfTranscriptRenderer } from "./react-pdf";
 
-/** Spike S-16: Unicode names, 4-semester pagination and render time (< 3 s). */
+/** Spike S-16: Unicode names, several pages of courses and render time (< 3 s). */
 
-const course = (code: string, title: string, letter: string, pct: number) => ({
+const course = (
+  code: string,
+  title: string,
+  letter: string,
+  pct: number,
+  completedOn: string,
+  provisional: boolean,
+) => ({
   code,
   title,
+  completedOn,
   creditsX10: 30,
   finalPctX100: pct,
   letter,
@@ -16,40 +24,47 @@ const course = (code: string, title: string, letter: string, pct: number) => ({
   attemptNo: 1,
   repeated: false,
   imported: false,
+  provisional,
 });
 
 function snapshot(kind: "OFFICIAL" | "UNOFFICIAL"): TranscriptSnapshot {
-  const semesters = [1, 2, 3, 4].map((n) => ({
-    sessionCode: n <= 2 ? "2025/2026" : "2026/2027",
-    semesterName: n % 2 === 1 ? "First Semester" : "Second Semester",
-    provisional: kind === "UNOFFICIAL" && n === 4,
-    courses: Array.from({ length: 8 }, (_, i) =>
-      course(
-        `DIP${String(n)}0${String(i)}`,
-        `Ìjọ́sìn àti Ẹ̀kọ́ Bíbélì ${String(i)} — Ọlọ́run`,
-        "B",
-        6500 + i,
-      ),
+  // 32 courses one after another, as four years of the old semesters held.
+  const courses = Array.from({ length: 32 }, (_, i) =>
+    course(
+      `DIP${String(100 + i)}`,
+      `Ìjọ́sìn àti Ẹ̀kọ́ Bíbélì ${String(i)} — Ọlọ́run`,
+      "B",
+      6500 + i,
+      `2026-${String((i % 12) + 1).padStart(2, "0")}-28`,
+      kind === "UNOFFICIAL" && i >= 24,
     ),
-    creditsAttemptedX10: 240,
-    creditsEarnedX10: 240,
-    gpaX100: 400,
-    cgpaX100: 400,
-    standing: "GOOD" as const,
-  }));
+  );
   return {
-    version: 1,
+    version: 2,
     kind,
     asOf: "2027-07-01",
     institution: { name: "GLIM Online Bible College" },
-    programme: { code: "DIP", name: "Diploma in Ministry", awardType: "DIPLOMA" },
+    programme: { code: "DIP", name: "Diploma in Ministry" },
     student: { legalName: "Adébáyọ̀ Ọláolúwa Ńnàmdí Ụ̀gọ́chukwu", matricNumber: "GLIM/DIP/2025/0012" },
-    semesters,
+    courses,
     totals: { creditsAttemptedX10: 960, creditsEarnedX10: 960, cgpaX100: 400, standing: "GOOD" },
-    award:
+    awards:
       kind === "OFFICIAL"
-        ? { awardClass: "Credit", certificateNo: "GLIM/DIP/AWD/2027/0001", awardedOn: "2027-07-01" }
-        : null,
+        ? [
+            {
+              awardType: "CERTIFICATE",
+              awardClass: "Credit",
+              certificateNo: "GLIM/CERT/AWD/2026/0001",
+              awardedOn: "2026-07-01",
+            },
+            {
+              awardType: "DIPLOMA",
+              awardClass: "Credit",
+              certificateNo: "GLIM/DIP/AWD/2027/0001",
+              awardedOn: "2027-07-01",
+            },
+          ]
+        : [],
     legend: {
       bands: [
         { minX100: 7000, maxX100: 10000, letter: "A", pointsX100: 500, pass: true },
@@ -71,7 +86,7 @@ const input = (kind: "OFFICIAL" | "UNOFFICIAL") => ({
 });
 
 describe("ReactPdfTranscriptRenderer (S-16)", () => {
-  it("renders a 4-semester transcript with tonal marks in under 3 s, fonts embedded, several pages", async () => {
+  it("renders a 32-course transcript with tonal marks in under 3 s, fonts embedded, several pages", async () => {
     const renderer = new ReactPdfTranscriptRenderer();
     await renderer.render(input("OFFICIAL")); // warm-up: font loading
     const started = performance.now();

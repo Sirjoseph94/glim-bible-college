@@ -17,7 +17,7 @@ test("a signed-out visitor sees the landing page, its Programmes and the ways in
   const programmes = page.getByRole("region", { name: "Programmes" });
   await expect(
     programmes.getByRole("listitem").filter({ hasText: "Diploma in Ministry" }),
-  ).toContainText("2 years");
+  ).toContainText("One course at a time");
 
   // Admissions says where the Intake stands, in words, whatever state the suite left it in.
   await expect(page.getByRole("region", { name: "Admissions" })).toContainText(

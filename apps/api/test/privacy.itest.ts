@@ -2,7 +2,7 @@ import type { Application, DataExport } from "@glim/contracts";
 import { FakeOidcIssuer } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admissionsWorld, type AdmissionsWorld } from "./admissions-world";
+import { admissionsWorld } from "./admissions-world";
 import { applicantKit, idempotencyKey } from "./applicants";
 import { createTestApp, type TestApp } from "./harness";
 import { createPersonas, type PersonaName, type Personas } from "./personas";
@@ -12,7 +12,6 @@ import { createPersonas, type PersonaName, type Personas } from "./personas";
 let issuer: FakeOidcIssuer;
 let t: TestApp;
 let p: Personas;
-let world: AdmissionsWorld;
 let kit: ReturnType<typeof applicantKit>;
 let headers: Record<string, string>;
 let application: Application;
@@ -40,8 +39,8 @@ beforeAll(async () => {
     }),
   });
   p = await createPersonas(t);
-  world = await admissionsWorld(t, p);
-  kit = applicantKit(t, issuer, () => world.certificate.id);
+  await admissionsWorld(t, p);
+  kit = applicantKit(t, issuer);
   // An applicant admitted and accepted: an application with sensitive answers, and a student.
   const ready = await kit.complete("Chiamaka", { spiritual: { bornAgainWhen: "SECRET-WHEN" } });
   headers = ready.headers;
@@ -89,7 +88,7 @@ describe("data export", () => {
     expect(s.signInMethods).toEqual([expect.objectContaining({ provider: "google" })]);
     // Their own application, with their own answers.
     expect(res.body).toContain("SECRET-WHEN");
-    expect(res.body).toContain("GLIM/CERT/");
+    expect(res.body).toContain("GLIM/DIP/");
     for (const secret of ["passwordHash", "tokenHash", "csrfSecret", "storageKey"])
       expect(res.body).not.toContain(secret);
     expect(res.body).not.toContain(p.sEnrolled.email);
@@ -160,7 +159,7 @@ describe("erasure", () => {
          JOIN students s ON s.id = pe.student_id WHERE s.user_id = $1`,
       [userId],
     );
-    expect(enrollment.rows[0]?.matric_number).toMatch(/^GLIM\/CERT\//);
+    expect(enrollment.rows[0]?.matric_number).toMatch(/^GLIM\/DIP\//);
     expect(enrollment.rows[0]?.application_id).toBeNull();
     // Signed out everywhere.
     expect((await t.request({ url: "/api/v1/me/data-export", headers })).statusCode).toBe(401);

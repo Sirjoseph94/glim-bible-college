@@ -29,8 +29,8 @@ beforeAll(async () => {
     }),
   });
   p = await createPersonas(t);
-  const world = await admissionsWorld(t, p);
-  kit = applicantKit(t, issuer, () => world.certificate.id);
+  await admissionsWorld(t, p);
+  kit = applicantKit(t, issuer);
   const officer = p.admOfficer.headers;
   const decide = async (id: string, decision: "ADMIT" | "REJECT") => {
     await t.request({

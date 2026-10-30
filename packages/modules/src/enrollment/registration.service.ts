@@ -1,325 +1,190 @@
 import type { MyRegistration } from "@glim/contracts";
-import { Db, schema, type Tx } from "@glim/db";
-import { RoleService } from "@glim/modules/authorization";
-import { NotificationsService } from "@glim/modules/notifications";
+import { Db, schema, type Database, type Tx, type TxQueue } from "@glim/db";
 import { CLOCK, type Clock } from "@glim/shared";
-import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
-/** What happened to one compulsory course for one student (§9.3 step 3). */
-export interface CourseOutcome {
-  courseId: string;
-  courseCode: string;
-  title: string;
-  outcome: "REGISTERED" | "ALREADY_REGISTERED" | "NO_OFFERING";
-  offeringId?: string;
-}
-
-const OPEN = ["REGISTRATION", "ACTIVE"];
 const TEACHABLE = ["PUBLISHED", "ACTIVE"];
 
+type Programmes = MyRegistration["programmes"];
+type Course = Programmes[number]["courses"][number];
+
 /**
- * Registration (owner: enrollment, TRD §9.3, AC-03). Opening a semester's registration creates
- * each eligible programme enrollment's semester enrollment and registers it for every compulsory
- * course of its Level and semester that has a published offering. It is idempotent, so it can be
- * re-run; students accepted later are registered inside their acceptance.
+ * Registration (owner: enrollment, TRD §9.3, ADR-0005). A cohort takes every course of its
+ * curriculum, so there's nothing to choose: publishing an offering registers every ACTIVE student
+ * of its cohort, and a student accepted later is registered for the cohort's current and
+ * upcoming offerings inside their acceptance. Both are idempotent.
  */
 @Injectable()
 export class RegistrationService {
   constructor(
     @Inject(Db) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
-    @Inject(LOGGER) private readonly logger: Logger,
-    @Inject(RoleService) private readonly roles: RoleService,
-    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   /**
-   * The `semester.open-registration` job: every ACTIVE programme enrollment that started on or
-   * before this semester's Academic Session, each in its own transaction. Courses with no published
-   * offering are logged and the Academic Admins are told.
+   * Registers every ACTIVE programme enrollment of the offering's cohort for it, inside the
+   * publishing transaction (`selection = 'COHORT'`).
    */
-  async openRegistration(
-    semesterId: string,
-  ): Promise<{ enrollments: number; registered: number; missing: string[] }> {
-    const semester = await this.semester(semesterId);
-    if (semester === null || !OPEN.includes(semester.status))
-      return { enrollments: 0, registered: 0, missing: [] };
+  async registerCohort(
+    db: Database,
+    boss: TxQueue,
+    offering: { id: string; cohortId: string },
+  ): Promise<number> {
     const pe = schema.programmeEnrollments;
-    const entry = schema.academicSessions;
-    const eligible = await this.db.read
-      .select({ id: pe.id })
+    const students = await db
+      .select({ id: pe.id, studentId: pe.studentId })
       .from(pe)
-      .innerJoin(entry, eq(entry.id, pe.entrySessionId))
-      .where(and(eq(pe.status, "ACTIVE"), lte(entry.startsOn, semester.sessionStartsOn)))
+      .where(and(eq(pe.cohortId, offering.cohortId), eq(pe.status, "ACTIVE")))
       .orderBy(asc(pe.matricNumber));
-
     let registered = 0;
-    const missing = new Map<string, CourseOutcome>();
-    for (const { id } of eligible) {
-      const outcomes = await this.db.withTx((tx) =>
-        this.registerEnrollment(tx, semesterId, id, null),
+    for (const s of students) {
+      const created = await this.enroll(
+        { db, boss },
+        { programmeEnrollmentId: s.id, studentId: s.studentId, offeringId: offering.id },
+        "Registered with the cohort when the offering was published",
+        null,
       );
-      for (const o of outcomes) {
-        if (o.outcome === "REGISTERED") registered++;
-        if (o.outcome === "NO_OFFERING") missing.set(o.courseId, o);
-      }
+      if (created) registered++;
     }
-    if (missing.size > 0)
-      await this.reportMissing(semesterId, semester.name, [...missing.values()]);
-    return {
-      enrollments: eligible.length,
-      registered,
-      missing: [...missing.values()].map((o) => o.courseCode),
-    };
+    return registered;
   }
 
   /**
-   * Registers one programme enrollment for a semester inside the caller's transaction: the
-   * semester enrollment at its current Level, then each compulsory course of that Level and
-   * semester with a published offering (`selection = 'COMPULSORY'`). Safe to repeat.
+   * Registers one programme enrollment for its cohort's published and running offerings, inside
+   * the caller's transaction (acceptance). Courses the cohort already finished are left for a
+   * manual registration later. Safe to repeat.
    */
   async registerEnrollment(
     tx: Tx,
-    semesterId: string,
     programmeEnrollmentId: string,
     actorUserId: string | null,
-  ): Promise<CourseOutcome[]> {
+  ): Promise<number> {
     const { db } = tx;
     const pe = schema.programmeEnrollments;
     const [enrollment] = await db.select().from(pe).where(eq(pe.id, programmeEnrollmentId));
-    const [semester] = await db
-      .select({ sequence: schema.semesters.sequence })
-      .from(schema.semesters)
-      .where(eq(schema.semesters.id, semesterId));
-    if (enrollment?.status !== "ACTIVE" || semester === undefined) return [];
-
-    const cc = schema.curriculumCourses;
-    const c = schema.courses;
-    const placements = await db
-      .select({ courseId: cc.courseId, courseType: cc.courseType, code: c.code, title: c.title })
-      .from(cc)
-      .innerJoin(c, eq(c.id, cc.courseId))
-      .where(
-        and(
-          eq(cc.curriculumId, enrollment.curriculumId),
-          eq(cc.levelNo, enrollment.currentLevel),
-          eq(cc.semesterNo, semester.sequence),
-        ),
-      )
-      .orderBy(asc(c.code));
-    // Only programmes with something in this semester get a semester enrollment.
-    if (placements.length === 0) return [];
-
-    const se = schema.semesterEnrollments;
-    await db
-      .insert(se)
-      .values({ programmeEnrollmentId, semesterId, levelNo: enrollment.currentLevel })
-      .onConflictDoNothing();
-    const [semesterEnrollment] = await db
-      .select({ id: se.id, status: se.status })
-      .from(se)
-      .where(
-        and(eq(se.programmeEnrollmentId, programmeEnrollmentId), eq(se.semesterId, semesterId)),
-      );
-    if (semesterEnrollment?.status !== "REGISTERED") return [];
-
-    const compulsory = placements.filter((p) => p.courseType === "COMPULSORY");
+    if (enrollment?.status !== "ACTIVE") return 0;
     const o = schema.courseOfferings;
-    const offerings =
-      compulsory.length === 0
-        ? []
-        : await db
-            .select({ id: o.id, courseId: o.courseId })
-            .from(o)
-            .where(
-              and(
-                eq(o.semesterId, semesterId),
-                inArray(
-                  o.courseId,
-                  compulsory.map((p) => p.courseId),
-                ),
-                inArray(o.status, TEACHABLE),
-              ),
-            )
-            .orderBy(asc(o.sectionCode));
-
-    const now = this.clock.now();
-    const outcomes: CourseOutcome[] = [];
-    for (const placement of compulsory) {
-      const base = {
-        courseId: placement.courseId,
-        courseCode: placement.code,
-        title: placement.title,
-      };
-      const offering = offerings.find((x) => x.courseId === placement.courseId);
-      if (offering === undefined) {
-        outcomes.push({ ...base, outcome: "NO_OFFERING" });
-        continue;
-      }
-      const [created] = await db
-        .insert(schema.courseEnrollments)
-        .values({
-          semesterEnrollmentId: semesterEnrollment.id,
-          programmeEnrollmentId,
-          courseOfferingId: offering.id,
-          studentId: enrollment.studentId,
-          selection: "COMPULSORY",
-          enrolledAt: now,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing()
-        .returning({ id: schema.courseEnrollments.id });
-      if (created === undefined) {
-        outcomes.push({ ...base, outcome: "ALREADY_REGISTERED", offeringId: offering.id });
-        continue;
-      }
-      await db.insert(schema.courseEnrollmentEvents).values({
-        courseEnrollmentId: created.id,
-        fromStatus: null,
-        toStatus: "ENROLLED",
+    const offerings = await db
+      .select({ id: o.id })
+      .from(o)
+      .where(and(eq(o.cohortId, enrollment.cohortId), inArray(o.status, TEACHABLE)))
+      .orderBy(asc(o.startsOn));
+    let registered = 0;
+    for (const offering of offerings) {
+      const created = await this.enroll(
+        tx,
+        { programmeEnrollmentId, studentId: enrollment.studentId, offeringId: offering.id },
+        "Registered with the cohort on acceptance",
         actorUserId,
-        reason: "Compulsory course, registered when registration opened",
-        createdAt: now,
-      });
-      await tx.boss.publish(
-        "course.enrollment.activated",
-        {
-          courseEnrollmentId: created.id,
-          courseOfferingId: offering.id,
-          studentId: enrollment.studentId,
-        },
-        { occurredAt: now, actorUserId },
       );
-      outcomes.push({ ...base, outcome: "REGISTERED", offeringId: offering.id });
+      if (created) registered++;
     }
-    return outcomes;
+    return registered;
   }
 
-  /** The student's own programmes and registered courses, newest semester first (§9.3). */
+  /** The student's own programmes and their courses in date order (§9.3). */
   async forUser(userId: string): Promise<MyRegistration> {
     const db = this.db.read;
     const pe = schema.programmeEnrollments;
     const pr = schema.programmes;
+    const cohort = schema.cohorts;
     const programmes = await db
-      .select({ enrollment: pe, code: pr.code, name: pr.name })
+      .select({ enrollment: pe, code: pr.code, name: pr.name, cohort })
       .from(pe)
       .innerJoin(schema.students, eq(schema.students.id, pe.studentId))
       .innerJoin(pr, eq(pr.id, pe.programmeId))
+      .innerJoin(cohort, eq(cohort.id, pe.cohortId))
       .where(eq(schema.students.userId, userId))
       .orderBy(desc(pe.startedOn));
     if (programmes.length === 0) return { programmes: [] };
 
-    const se = schema.semesterEnrollments;
-    const s = schema.semesters;
-    const session = schema.academicSessions;
-    const semesterRows = await db
-      .select({ se, semester: s, sessionName: session.name })
-      .from(se)
-      .innerJoin(s, eq(s.id, se.semesterId))
-      .innerJoin(session, eq(session.id, s.academicSessionId))
-      .where(
-        inArray(
-          se.programmeEnrollmentId,
-          programmes.map((p) => p.enrollment.id),
-        ),
-      )
-      .orderBy(desc(s.startsOn));
     const ce = schema.courseEnrollments;
     const o = schema.courseOfferings;
     const c = schema.courses;
-    const courseRows =
-      semesterRows.length === 0
-        ? []
-        : await db
-            .select({
-              ce,
-              code: c.code,
-              title: c.title,
-              override: o.titleOverride,
-              credits: c.credits,
-            })
-            .from(ce)
-            .innerJoin(o, eq(o.id, ce.courseOfferingId))
-            .innerJoin(c, eq(c.id, o.courseId))
-            .where(
-              inArray(
-                ce.semesterEnrollmentId,
-                semesterRows.map((r) => r.se.id),
-              ),
-            )
-            .orderBy(asc(c.code));
+    const m = schema.examMakeups;
+    const courseRows = await db
+      .select({ ce, offering: o, code: c.code, title: c.title, credits: c.credits, makeupOn: m.makeupOn })
+      .from(ce)
+      .innerJoin(o, eq(o.id, ce.courseOfferingId))
+      .innerJoin(c, eq(c.id, o.courseId))
+      .leftJoin(m, and(eq(m.courseOfferingId, o.id), eq(m.studentId, ce.studentId)))
+      .where(
+        inArray(
+          ce.programmeEnrollmentId,
+          programmes.map((p) => p.enrollment.id),
+        ),
+      )
+      .orderBy(asc(o.startsOn), asc(c.code));
 
     return {
       programmes: programmes.map((p) => ({
         matricNumber: p.enrollment.matricNumber,
         programme: { code: p.code, name: p.name },
-        studyMode: p.enrollment.studyMode as MyRegistration["programmes"][number]["studyMode"],
-        currentLevel: p.enrollment.currentLevel,
-        status: p.enrollment.status as MyRegistration["programmes"][number]["status"],
-        semesters: semesterRows
-          .filter((r) => r.se.programmeEnrollmentId === p.enrollment.id)
-          .map((r) => ({
-            semesterEnrollmentId: r.se.id,
-            semester: {
-              id: r.semester.id,
-              name: r.semester.name,
-              sessionName: r.sessionName,
-              status: r.semester
-                .status as MyRegistration["programmes"][number]["semesters"][number]["semester"]["status"],
-              startsOn: r.semester.startsOn,
-              endsOn: r.semester.endsOn,
-            },
-            levelNo: r.se.levelNo,
-            courses: courseRows
-              .filter((x) => x.ce.semesterEnrollmentId === r.se.id)
-              .map((x) => ({
-                courseEnrollmentId: x.ce.id,
-                offeringId: x.ce.courseOfferingId,
-                courseCode: x.code,
-                title: x.override ?? x.title,
-                credits: x.credits,
-                selection: x.ce.selection as "COMPULSORY" | "ELECTIVE" | "MANUAL",
-                status: x.ce.status as "ENROLLED" | "DROPPED" | "WITHDRAWN" | "COMPLETED",
-              })),
-          })),
+        cohort: { id: p.cohort.id, code: p.cohort.code, name: p.cohort.name },
+        studyMode: p.enrollment.studyMode as Programmes[number]["studyMode"],
+        status: p.enrollment.status as Programmes[number]["status"],
+        courses: courseRows
+          .filter((x) => x.ce.programmeEnrollmentId === p.enrollment.id)
+          .map(
+            (x): Course => ({
+              courseEnrollmentId: x.ce.id,
+              offeringId: x.ce.courseOfferingId,
+              courseCode: x.code,
+              title: x.offering.titleOverride ?? x.title,
+              credits: x.credits,
+              startsOn: x.offering.startsOn,
+              endsOn: x.offering.endsOn,
+              examOn: x.offering.examOn,
+              makeupOn: x.makeupOn,
+              offeringStatus: x.offering.status as Course["offeringStatus"],
+              selection: x.ce.selection as Course["selection"],
+              status: x.ce.status as Course["status"],
+            }),
+          ),
       })),
     };
   }
 
-  /** Ops warning plus an in-app notice to each Academic Admin, once per course and semester. */
-  private async reportMissing(semesterId: string, semesterName: string, missing: CourseOutcome[]) {
-    this.logger.warn(
-      { semesterId, courses: missing.map((m) => m.courseCode) },
-      "compulsory courses have no published offering",
-    );
-    await this.db.withTx(async (tx) => {
-      for (const adminId of await this.roles.holders("ACADEMIC_ADMIN", tx.db)) {
-        for (const course of missing) {
-          await this.notifications.notify(tx, {
-            userId: adminId,
-            kind: "enrollment.registration.offering-missing",
-            title: `${course.courseCode} has no published offering in ${semesterName}`,
-            body: `Students due to take ${course.courseCode} ${course.title} couldn't be registered. Publish an offering, then re-run registration.`,
-            data: { semesterId, courseId: course.courseId },
-            email: false,
-            dedupeKey: `offering-missing:${semesterId}:${course.courseId}`,
-          });
-        }
-      }
+  /** One cohort registration, with its event row and `course.enrollment.activated`. */
+  private async enroll(
+    tx: { db: Database; boss: TxQueue },
+    who: { programmeEnrollmentId: string; studentId: string; offeringId: string },
+    reason: string,
+    actorUserId: string | null,
+  ): Promise<boolean> {
+    const now = this.clock.now();
+    const [created] = await tx.db
+      .insert(schema.courseEnrollments)
+      .values({
+        programmeEnrollmentId: who.programmeEnrollmentId,
+        courseOfferingId: who.offeringId,
+        studentId: who.studentId,
+        selection: "COHORT",
+        enrolledAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.courseEnrollments.id });
+    if (created === undefined) return false;
+    await tx.db.insert(schema.courseEnrollmentEvents).values({
+      courseEnrollmentId: created.id,
+      fromStatus: null,
+      toStatus: "ENROLLED",
+      actorUserId,
+      reason,
+      createdAt: now,
     });
-  }
-
-  private async semester(id: string) {
-    const s = schema.semesters;
-    const session = schema.academicSessions;
-    const [row] = await this.db.read
-      .select({ name: s.name, status: s.status, sessionStartsOn: session.startsOn })
-      .from(s)
-      .innerJoin(session, eq(session.id, s.academicSessionId))
-      .where(eq(s.id, id));
-    return row ?? null;
+    await tx.boss.publish(
+      "course.enrollment.activated",
+      {
+        courseEnrollmentId: created.id,
+        courseOfferingId: who.offeringId,
+        studentId: who.studentId,
+      },
+      { occurredAt: now, actorUserId },
+    );
+    return true;
   }
 }

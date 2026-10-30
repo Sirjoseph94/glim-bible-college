@@ -187,7 +187,7 @@ export class OffersService {
         name: [application.firstName, application.lastName].filter(Boolean).join(" "),
         programmeName: found?.programme.name ?? "",
         studyMode: application.studyMode === "ON_CAMPUS" ? "on campus" : "online",
-        academicSessionName: found?.intake.academicSessionName ?? "",
+        startsOn: found?.intake.startsOn ?? "",
         timeZone: settings.timezone,
         ...(application.offerExpiresAt === null
           ? {}

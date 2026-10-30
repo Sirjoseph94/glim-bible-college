@@ -8,7 +8,6 @@ import {
   finalPercentX100,
   percentForBanding,
   roundHalfUp,
-  semesterGpa,
   standingFor,
   validateScheme,
   type ResultLine,
@@ -196,7 +195,7 @@ describe("letter bands", () => {
   });
 });
 
-describe("GPA and CGPA (Appendix C.3)", () => {
+describe("CGPA (Appendix C.3, the old semesters as blocks of courses)", () => {
   const s1 = [
     result("DIP101", 3, 72),
     result("DIP103", 2, 65),
@@ -206,8 +205,8 @@ describe("GPA and CGPA (Appendix C.3)", () => {
   const s2 = [result("DIP102", 3, 80), result("DIP104", 3, 55), result("DIP106", 2, 61)];
   const s3 = [result("DIP107", 2, 52, 2), result("DIP201", 3, 70)];
 
-  it("semester 1: 29000 over 100 ⇒ 2.90, 80 credits earned", () => {
-    expect(semesterGpa(s1)).toEqual({
+  it("after block 1: 29000 over 100 ⇒ 2.90, 80 credits earned", () => {
+    expect(cumulativeGpa(s1, "KEEP_ALL")).toEqual({
       creditsAttemptedX10: 100,
       creditsEarnedX10: 80,
       qualityPointsX1000: 29_000,
@@ -215,16 +214,16 @@ describe("GPA and CGPA (Appendix C.3)", () => {
     });
   });
 
-  it("semester 2: 32000 over 80 ⇒ 4.00; CGPA 3.39 ⇒ Credit, GOOD", () => {
-    expect(semesterGpa(s2).gpaX100).toBe(400);
+  it("block 2 alone: 32000 over 80 ⇒ 4.00; CGPA 3.39 ⇒ Credit, GOOD", () => {
+    expect(cumulativeGpa(s2, "KEEP_ALL").gpaX100).toBe(400);
     const cgpa = cumulativeGpa([...s1, ...s2], "KEEP_ALL");
     expect(cgpa.gpaX100).toBe(339);
     expect(awardClassFor(cgpa.gpaX100, DIPLOMA)).toBe("Credit");
     expect(standingFor(cgpa.gpaX100, DIPLOMA)).toBe("GOOD");
   });
 
-  it("semester 3 with the repeat: 4.20; CGPA 3.57 KEEP_ALL, 3.90 REPLACE_LATEST and BEST", () => {
-    expect(semesterGpa(s3).gpaX100).toBe(420);
+  it("block 3 with the repeat: 4.20; CGPA 3.57 KEEP_ALL, 3.90 REPLACE_LATEST and BEST", () => {
+    expect(cumulativeGpa(s3, "KEEP_ALL").gpaX100).toBe(420);
     const all = [...s1, ...s2, ...s3];
     expect(cumulativeGpa(all, "KEEP_ALL")).toMatchObject({
       qualityPointsX1000: 82_000,
@@ -248,11 +247,11 @@ describe("GPA and CGPA (Appendix C.3)", () => {
     expect(cumulativeGpa([first, resit], "KEEP_ALL").gpaX100).toBe(400);
   });
 
-  it("a semester without counting credits has no GPA and standing UNKNOWN", () => {
+  it("results without counting credits give no CGPA and standing UNKNOWN", () => {
     const audit = { ...result("A1", 2, 90), resultKind: "AUDIT" as const };
     const withdrawn = { ...result("W1", 3, 0), resultKind: "WITHDRAWN" as const, passed: null };
     for (const lines of [[], [audit], [withdrawn]]) {
-      const t = semesterGpa(lines);
+      const t = cumulativeGpa(lines, "BEST");
       expect(t.gpaX100).toBeNull();
       expect(t.creditsEarnedX10).toBe(0);
       expect(standingFor(t.gpaX100, DIPLOMA)).toBe("UNKNOWN");
@@ -262,7 +261,7 @@ describe("GPA and CGPA (Appendix C.3)", () => {
 
   it("EXEMPT credits are earned but not attempted", () => {
     const exempt = { ...result("E1", 2, 0), resultKind: "EXEMPT" as const, passed: null };
-    expect(semesterGpa([result("C1", 3, 72), exempt])).toMatchObject({
+    expect(cumulativeGpa([result("C1", 3, 72), exempt], "KEEP_ALL")).toMatchObject({
       creditsAttemptedX10: 30,
       creditsEarnedX10: 50,
       gpaX100: 500,
@@ -271,11 +270,14 @@ describe("GPA and CGPA (Appendix C.3)", () => {
 
   it("results that don't count in GPA are left out", () => {
     expect(
-      semesterGpa([result("C1", 3, 72), { ...result("C2", 3, 30), countsInGpa: false }]),
+      cumulativeGpa(
+        [result("C1", 3, 72), { ...result("C2", 3, 30), countsInGpa: false }],
+        "KEEP_ALL",
+      ),
     ).toMatchObject({ creditsAttemptedX10: 30, gpaX100: 500 });
   });
 
-  it("GPA stays within 0–5 and KEEP_ALL equals the semesters pooled (property)", () => {
+  it("CGPA stays within 0–5 (property)", () => {
     const line = fc
       .record({
         course: fc.constantFrom("A", "B", "C", "D"),
@@ -294,7 +296,6 @@ describe("GPA and CGPA (Appendix C.3)", () => {
             expect(g).toBeLessThanOrEqual(500);
           }
         }
-        expect(cumulativeGpa(lines, "KEEP_ALL")).toEqual(semesterGpa(lines));
         // BEST is never below REPLACE_LATEST in quality points per course picked.
         const best = cumulativeGpa(lines, "BEST");
         const latest = cumulativeGpa(lines, "REPLACE_LATEST");

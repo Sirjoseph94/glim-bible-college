@@ -100,7 +100,7 @@ function StatusView({ id }: { id: string }) {
     <div className="space-y-5">
       <PageHeader
         title="Your application"
-        meta={`${a.programme.name} · ${a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${a.intake.academicSessionName}`}
+        meta={`${a.programme.name} · ${a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${a.intake.code} Intake`}
       />
 
       <Card className="space-y-3">
@@ -131,7 +131,7 @@ function StatusView({ id }: { id: string }) {
             </p>
             <p>
               We've emailed you the next steps. Keep signing in with this Google account; your
-              courses appear here when registration opens for your first semester.
+              courses appear here as your cohort's courses are published.
             </p>
           </Banner>
         ) : null}

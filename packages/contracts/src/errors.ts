@@ -25,6 +25,8 @@ export const ERROR_STATUS = {
   GOOGLE_ACCOUNT_REQUIRED: 422,
   // Admissions
   INTAKE_CLOSED: 422,
+  /** Intakes' application windows may not overlap (ADR-0005). */
+  INTAKE_OVERLAP: 409,
   APPLICATION_ALREADY_OPEN: 409,
   APPLICATION_INCOMPLETE: 422,
   APPLICATION_STATE_INVALID: 409,
@@ -34,11 +36,14 @@ export const ERROR_STATUS = {
   ALREADY_ENROLLED: 409,
   OFFERING_FULL: 409,
   ENROLLMENT_NOT_ACTIVE: 422,
-  REGISTRATION_CLOSED: 422,
-  ELECTIVE_NOT_AVAILABLE: 422,
   PRIMARY_REQUIRED: 422,
   CURRICULUM_LOCKED: 409,
-  SEMESTER_STATE_INVALID: 409,
+  /** Another live offering of the cohort covers some of the same days (ADR-0005). */
+  OFFERING_OVERLAP: 409,
+  /** An offering may not start before its cohort's intake starts. */
+  BEFORE_INTAKE_START: 422,
+  /** A Class Meeting must fall within its offering's dates. */
+  OUTSIDE_OFFERING_DATES: 422,
   // Class Meetings
   MEETING_STATE_INVALID: 409,
   MEETING_IN_PROGRESS: 409,

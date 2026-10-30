@@ -16,6 +16,13 @@ const escape = (value: string) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 const str = (value: unknown) => (typeof value === "string" ? value : "");
+/** "6 September 2027" for an ISO calendar date; "" for anything else. */
+const longDate = (value: unknown) =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" }).format(
+        new Date(`${value}T00:00:00Z`),
+      )
+    : "";
 
 /** Plain text plus minimal HTML (TRD §15.1): no remote images, well under 20 KB. */
 function email(input: {
@@ -70,7 +77,7 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       category: "application-receipt",
       paragraphs: [
         `Dear ${str(data.name)},`,
-        `Thank you for applying to GLIM Online Bible College. We have received your application for the ${str(data.programmeName)} (${str(data.studyMode)}), starting in the ${str(data.academicSessionName)}.`,
+        `Thank you for applying to GLIM Online Bible College. We have received your application for the ${str(data.programmeName)} (${str(data.studyMode)}), starting on ${longDate(data.startsOn)}.`,
         `Your Application Reference No is ${str(data.referenceNo)}. Please quote it whenever you contact us.`,
         "We review applications as they arrive and will email you when there's a decision.",
       ],
@@ -89,7 +96,7 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       category: "application-admitted",
       paragraphs: [
         `Dear ${str(data.name)},`,
-        `We're delighted to offer you a place on the ${str(data.programmeName)} (${str(data.studyMode)}), starting in the ${str(data.academicSessionName)}. Your Application Reference No is ${str(data.referenceNo)}.`,
+        `We're delighted to offer you a place on the ${str(data.programmeName)} (${str(data.studyMode)}), starting on ${longDate(data.startsOn)}. Your Application Reference No is ${str(data.referenceNo)}.`,
         `Please accept your offer by ${deadline}. If you don't accept by then, the offer lapses.`,
         "When you accept, you'll get your Matric Number and the first steps for your studies.",
       ],
@@ -135,9 +142,9 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       category: "application-accepted",
       paragraphs: [
         `Dear ${str(data.name)},`,
-        `Welcome to GLIM Online Bible College! You've accepted your place on the ${str(data.programmeName)}, starting in the ${str(data.academicSessionName)}.`,
+        `Welcome to GLIM Online Bible College! You've accepted your place on the ${str(data.programmeName)}, starting on ${longDate(data.startsOn)}.`,
         `Your Matric Number is ${str(data.matricNumber)}. Please quote it whenever you contact the college.`,
-        "Next steps: sign in with the same Google account you applied with. Your courses appear when registration opens for your first semester, and we'll email you before classes begin.",
+        "Next steps: sign in with the same Google account you applied with. You take your courses one at a time with your cohort; each appears in the app once it's scheduled, and we'll email you before classes begin.",
         `Your personal referral code is ${str(data.referralCode)}. Share it with anyone you encourage to apply.`,
       ],
       link: { label: "Sign in to GLIM", url: `${appOrigin}/` },
@@ -201,14 +208,15 @@ export const TEMPLATES: Record<string, (input: TemplateInput) => Rendered> = {
       link: { label: "Open the job dashboard", url: `${appOrigin}/admin/jobs` },
     }),
 
-  "results.semester-published": ({ data, appOrigin }) =>
+  "assessment.makeup-exam": ({ data, appOrigin }) =>
     email({
-      subject: "Your semester results are published",
-      category: "results-published",
+      subject: `${str(data.courseCode)}: your makeup exam is on ${longDate(data.makeupOn)}`,
+      category: "makeup-exam",
       paragraphs: [
-        `The Registrar has published your results for ${str(data.semesterName)}, ${str(data.sessionCode)}. Your GPA and CGPA are now final, not provisional.`,
+        `Your Lecturer has set a makeup exam for ${str(data.courseCode)} ${str(data.courseTitle)} on ${longDate(data.makeupOn)}.`,
+        "If you study online, the online exam is open for you on that day (Lagos time). Your course result is finalized once you've sat it.",
       ],
-      link: { label: "My results", url: `${appOrigin}/results` },
+      link: { label: "My courses", url: `${appOrigin}/courses` },
     }),
 
   "transcript.issued": ({ data, appOrigin }) =>

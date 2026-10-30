@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -13,9 +14,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { courseOfferings, courses } from "./academic";
+import { courses } from "./academic";
+import { courseOfferings } from "./offerings";
 import { enumCheck, std, stdRo, tstz } from "./columns";
-import { files } from "./content";
+import { files } from "./files";
 import { students } from "./enrollment";
 import { users } from "./identity";
 
@@ -290,6 +292,30 @@ export const examOnlineGrants = pgTable(
     reason: text().notNull(),
   },
   (t) => [unique("exam_online_grants_once").on(t.quizId, t.studentId)],
+);
+
+/**
+ * Owner: assessment. A later exam date the Lecturer set for one student who missed the offering's
+ * exam (GLOSSARY "Makeup Exam", ADR-0005). Until the student has an exam grade, finalizing the
+ * course leaves their result out.
+ */
+export const examMakeups = pgTable(
+  "exam_makeups",
+  {
+    ...std(),
+    courseOfferingId: uuid("course_offering_id")
+      .notNull()
+      .references(() => courseOfferings.id, { onDelete: "restrict" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "restrict" }),
+    makeupOn: date("makeup_on").notNull(),
+    reason: text().notNull(),
+    setBy: uuid("set_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+  },
+  (t) => [unique("exam_makeups_once").on(t.courseOfferingId, t.studentId)],
 );
 
 /** Owner: assessment. The questions of a quiz, in order, with their points. */

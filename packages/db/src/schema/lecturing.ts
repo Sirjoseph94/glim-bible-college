@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { date, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { courseOfferings } from "./academic";
+import { courseOfferings } from "./offerings";
 import { enumCheck, std } from "./columns";
 import { users } from "./identity";
 
