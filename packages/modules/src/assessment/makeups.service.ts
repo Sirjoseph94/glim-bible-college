@@ -189,10 +189,7 @@ export class MakeupsService {
       })
       .from(m)
       .innerJoin(st, eq(st.id, m.studentId))
-      .leftJoin(
-        ce,
-        and(eq(ce.studentId, m.studentId), eq(ce.courseOfferingId, m.courseOfferingId)),
-      )
+      .leftJoin(ce, and(eq(ce.studentId, m.studentId), eq(ce.courseOfferingId, m.courseOfferingId)))
       .leftJoin(pe, eq(pe.id, ce.programmeEnrollmentId))
       .where(where)
       .orderBy(asc(m.makeupOn), asc(st.familyName), asc(st.givenName));

@@ -72,7 +72,12 @@ export class CohortResultsService {
     const pe = schema.programmeEnrollments;
     const st = schema.students;
     const students = await db
-      .select({ id: pe.id, matricNumber: pe.matricNumber, given: st.givenName, family: st.familyName })
+      .select({
+        id: pe.id,
+        matricNumber: pe.matricNumber,
+        given: st.givenName,
+        family: st.familyName,
+      })
       .from(pe)
       .innerJoin(st, eq(st.id, pe.studentId))
       .where(eq(pe.cohortId, cohortId))

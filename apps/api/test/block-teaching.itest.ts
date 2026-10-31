@@ -235,9 +235,13 @@ describe("registration", () => {
     const item = res.json<RosterItem>();
     expect(item).toMatchObject({ selection: "MANUAL", status: "ENROLLED" });
     expect(item.cohortCode).not.toBe("DIP-2027");
-    const withdrawn = await send("POST", `/course-enrollments/${item.courseEnrollmentId}/withdraw`, {
-      reason: "Changed their mind",
-    });
+    const withdrawn = await send(
+      "POST",
+      `/course-enrollments/${item.courseEnrollmentId}/withdraw`,
+      {
+        reason: "Changed their mind",
+      },
+    );
     expect(withdrawn.json<RosterItem>().status).toBe("WITHDRAWN");
   });
 });
@@ -320,10 +324,15 @@ describe("makeup exams", () => {
       "idempotency-key": idempotencyKey(),
     });
   const grade = async (name: string, score: string, version = 0) =>
-    send("PUT", `/assessments/${exam.assessmentId}/grades/${await studentId(name)}`, { score }, {
-      ...p.l1Primary.headers,
-      "if-match": `"${String(version)}"`,
-    });
+    send(
+      "PUT",
+      `/assessments/${exam.assessmentId}/grades/${await studentId(name)}`,
+      { score },
+      {
+        ...p.l1Primary.headers,
+        "if-match": `"${String(version)}"`,
+      },
+    );
   const setMakeup = async (name: string, makeupOn: string, headers = p.l1Primary.headers) =>
     send(
       "PUT",

@@ -226,8 +226,7 @@ export const updateCurriculum = endpoint({
   resource: { type: "curriculum", param: "id" },
   ifMatch: true,
   params: idParams,
-  body: z
-    .object({ effectiveFrom: z.iso.date().optional() }).strict(),
+  body: z.object({ effectiveFrom: z.iso.date().optional() }).strict(),
   response: curriculumDetailSchema,
 });
 

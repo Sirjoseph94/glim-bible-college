@@ -1008,9 +1008,7 @@ export const setMakeupExam = endpoint({
   permission: "assessment:grade:update",
   resource: { type: "course-offering", param: "id" },
   params: z.object({ id: z.uuid(), studentId: z.uuid() }),
-  body: z
-    .object({ makeupOn: z.iso.date(), reason: z.string().trim().min(3).max(500) })
-    .strict(),
+  body: z.object({ makeupOn: z.iso.date(), reason: z.string().trim().min(3).max(500) }).strict(),
   response: makeupExamSchema,
 });
 

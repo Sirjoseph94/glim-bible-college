@@ -74,7 +74,9 @@ describe("worker", () => {
   it("completes offerings past their last day on the daily academic.offering-lifecycle job", async () => {
     const one = async (text: string, values: unknown[] = []) =>
       (await db.pool.query<{ id: string }>(text, values)).rows[0]?.id;
-    const programme = await one("INSERT INTO programmes (code, name) VALUES ('WDIP', 'W') RETURNING id");
+    const programme = await one(
+      "INSERT INTO programmes (code, name) VALUES ('WDIP', 'W') RETURNING id",
+    );
     const course = await one(
       "INSERT INTO courses (code, title, credits) VALUES ('W101', 'W', 3) RETURNING id",
     );

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { awardEligibility, isProvisional } from "./awards";
 import type { ResultLine } from "./grading";
 
-const line = (courseId: string, creditsX10: number, passed: boolean, over: Partial<ResultLine> = {}): ResultLine => ({
+const line = (
+  courseId: string,
+  creditsX10: number,
+  passed: boolean,
+  over: Partial<ResultLine> = {},
+): ResultLine => ({
   courseId,
   attemptOrder: 1,
   creditsX10,
@@ -29,7 +34,9 @@ describe("awardEligibility (ADR-0005)", () => {
       certificate: false,
       diploma: false,
     });
-    expect(awardEligibility(curriculum, [line("A", 30, true), line("B", 20, true)], "BEST")).toMatchObject({
+    expect(
+      awardEligibility(curriculum, [line("A", 30, true), line("B", 20, true)], "BEST"),
+    ).toMatchObject({
       passedCreditsX10: 50,
       certificate: true,
       diploma: false,
@@ -38,7 +45,10 @@ describe("awardEligibility (ADR-0005)", () => {
 
   it("needs every curriculum course passed for the Diploma", () => {
     const all = curriculum.map((c) => line(c.courseId, c.creditsX10, true));
-    expect(awardEligibility(curriculum, all, "BEST")).toMatchObject({ certificate: true, diploma: true });
+    expect(awardEligibility(curriculum, all, "BEST")).toMatchObject({
+      certificate: true,
+      diploma: true,
+    });
     const oneFailed = [...all.slice(0, 3), line("D", 20, false)];
     expect(awardEligibility(curriculum, oneFailed, "BEST")).toMatchObject({
       passedCreditsX10: 80,
@@ -81,7 +91,9 @@ describe("awardEligibility (ADR-0005)", () => {
 
 describe("isProvisional", () => {
   it("is provisional while any counted result isn't approved", () => {
-    expect(isProvisional([{ status: "APPROVED", resultKind: "GRADED", countsInGpa: true }])).toBe(false);
+    expect(isProvisional([{ status: "APPROVED", resultKind: "GRADED", countsInGpa: true }])).toBe(
+      false,
+    );
     expect(
       isProvisional([
         { status: "APPROVED", resultKind: "GRADED", countsInGpa: true },

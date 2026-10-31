@@ -202,17 +202,15 @@ export class CurriculaService {
         .delete(schema.curriculumCourses)
         .where(eq(schema.curriculumCourses.curriculumId, id));
       if (placements.length > 0) {
-        await db
-          .insert(schema.curriculumCourses)
-          .values(
-            placements.map((p, i) => ({
-              ...p,
-              position: i + 1,
-              curriculumId: id,
-              createdAt: now,
-              updatedAt: now,
-            })),
-          );
+        await db.insert(schema.curriculumCourses).values(
+          placements.map((p, i) => ({
+            ...p,
+            position: i + 1,
+            curriculumId: id,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
       }
       await this.bump(db, id, {});
       await this.audit.record(db, actor, {

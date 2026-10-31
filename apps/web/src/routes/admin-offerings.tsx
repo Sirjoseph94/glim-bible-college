@@ -897,7 +897,13 @@ function DateFields({
 }
 
 /** Moving an offering's dates: it can't overlap the cohort's others or leave its Class Meetings. */
-function Dates({ offering: o, onSaved }: { offering: Offering; onSaved: (next: Offering) => void }) {
+function Dates({
+  offering: o,
+  onSaved,
+}: {
+  offering: Offering;
+  onSaved: (next: Offering) => void;
+}) {
   const queryClient = useQueryClient();
   const { busy, problem, fieldErrors, run } = useSubmit();
   return (

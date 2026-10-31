@@ -465,7 +465,9 @@ export class CourseResultsService {
       const examUngraded =
         exams.length === 0 ||
         exams.some((col) => {
-          const grade = grades.find((x) => x.assessmentId === col.id && x.studentId === s.studentId);
+          const grade = grades.find(
+            (x) => x.assessmentId === col.id && x.studentId === s.studentId,
+          );
           return grade?.score == null && grade?.status !== "EXCUSED";
         });
       // Waiting on a makeup exam (or on an exam column not set up yet): left out, not missing.

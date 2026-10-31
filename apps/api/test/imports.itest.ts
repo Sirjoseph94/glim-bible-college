@@ -289,10 +289,9 @@ describe("importing Lecturers and course enrollments", () => {
       created: 2,
     });
     expect(
-      await count(
-        "SELECT count(*) AS n FROM course_enrollments WHERE course_offering_id = $1",
-        [offering.id],
-      ),
+      await count("SELECT count(*) AS n FROM course_enrollments WHERE course_offering_id = $1", [
+        offering.id,
+      ]),
     ).toBe(2);
   });
 
@@ -300,7 +299,14 @@ describe("importing Lecturers and course enrollments", () => {
     await t.db.pool.query(
       "UPDATE programmes SET grading_scheme_id = (SELECT id FROM grading_schemes WHERE name = 'GLIM Diploma') WHERE code = 'DIP'",
     );
-    const columns = ["matric_number", "course_code", "completed_on", "percent", "credits", "result_kind"];
+    const columns = [
+      "matric_number",
+      "course_code",
+      "completed_on",
+      "percent",
+      "credits",
+      "result_kind",
+    ];
     const file = await upload(
       toCsv(columns, [
         ["GLIM/DIP/2025/0003", "BIB101", "2025-10-31", "35", "", ""],
@@ -322,8 +328,20 @@ describe("importing Lecturers and course enrollments", () => {
     );
     // The retake is the second attempt because it was completed later.
     expect(rows).toEqual([
-      { completed_on: "2025-10-31", attempt_no: 1, letter: "F", status: "APPROVED", source: "IMPORT" },
-      { completed_on: "2026-02-27", attempt_no: 2, letter: "A", status: "APPROVED", source: "IMPORT" },
+      {
+        completed_on: "2025-10-31",
+        attempt_no: 1,
+        letter: "F",
+        status: "APPROVED",
+        source: "IMPORT",
+      },
+      {
+        completed_on: "2026-02-27",
+        attempt_no: 2,
+        letter: "A",
+        status: "APPROVED",
+        source: "IMPORT",
+      },
     ]);
     // Importing the file again changes nothing.
     const again = await upload(

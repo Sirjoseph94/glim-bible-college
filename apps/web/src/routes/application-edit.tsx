@@ -972,8 +972,8 @@ function Review({
       <div id="review-reason" className="space-y-3">
         {open ? null : (
           <Banner tone="warning">
-            Applications for the {application.intake.code} Intake have closed, so this
-            application can't be submitted.
+            Applications for the {application.intake.code} Intake have closed, so this application
+            can't be submitted.
           </Banner>
         )}
         {gaps.length > 0 ? (

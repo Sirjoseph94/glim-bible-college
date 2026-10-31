@@ -42,7 +42,9 @@ describe("Db.withTx (INV-5: jobs commit or roll back with the change)", () => {
     });
 
     expect(await institutionName()).toBe("GLIM Bible College");
-    const jobs = await boss.fetch<{ name: string; payload: { offeringId: string } }>("domain-event");
+    const jobs = await boss.fetch<{ name: string; payload: { offeringId: string } }>(
+      "domain-event",
+    );
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.data).toMatchObject({
       name: "academic.offering.completed",

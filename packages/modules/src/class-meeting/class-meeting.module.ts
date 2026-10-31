@@ -41,8 +41,7 @@ class ClassMeetingResources implements OnModuleInit {
     this.offerings.registerDatesCheck(async (db, offeringId, dates) => {
       const zone = (await this.settings.get()).timezone;
       const m = schema.classMeetings;
-      const day = (column: typeof m.scheduledStart) =>
-        sql`(${column} AT TIME ZONE ${zone})::date`;
+      const day = (column: typeof m.scheduledStart) => sql`(${column} AT TIME ZONE ${zone})::date`;
       const [meeting] = await db
         .select({ id: m.id })
         .from(m)

@@ -605,7 +605,12 @@ export class QuizAttemptsService {
  */
 async function windowFor(
   db: Database,
-  quiz: { assessmentId: string; courseOfferingId: string; opensAt: Date | null; closesAt: Date | null },
+  quiz: {
+    assessmentId: string;
+    courseOfferingId: string;
+    opensAt: Date | null;
+    closesAt: Date | null;
+  },
   studentId: string,
 ): Promise<{ opensAt: Date | null; closesAt: Date | null }> {
   const m = schema.examMakeups;

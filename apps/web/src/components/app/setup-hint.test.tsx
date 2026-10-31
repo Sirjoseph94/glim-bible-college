@@ -39,9 +39,7 @@ describe("SetupHint", () => {
 
   it("says who to ask, without a link, when the viewer can't open that page", () => {
     const html = render(["ADMISSIONS_OFFICER"]);
-    expect(html).toContain(
-      "No Rooms yet. Ask an Academic Admin to add one on the Rooms page.",
-    );
+    expect(html).toContain("No Rooms yet. Ask an Academic Admin to add one on the Rooms page.");
     expect(html).not.toContain("<a");
   });
 });

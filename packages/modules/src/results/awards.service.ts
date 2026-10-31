@@ -36,7 +36,12 @@ async function curriculumCourses(db: Database, curriculumId: string): Promise<Cu
   const cc = schema.curriculumCourses;
   const c = schema.courses;
   const rows = await db
-    .select({ courseId: cc.courseId, code: c.code, override: cc.creditOverride, credits: c.credits })
+    .select({
+      courseId: cc.courseId,
+      code: c.code,
+      override: cc.creditOverride,
+      credits: c.credits,
+    })
     .from(cc)
     .innerJoin(c, eq(c.id, cc.courseId))
     .where(eq(cc.curriculumId, curriculumId))
@@ -296,7 +301,12 @@ export class AwardsService {
       .innerJoin(st, eq(st.id, pe.studentId))
       .innerJoin(p, eq(p.id, pe.programmeId))
       .innerJoin(c, eq(c.id, pe.cohortId))
-      .where(and(eq(pe.status, "ACTIVE"), cohortId === undefined ? undefined : eq(pe.cohortId, cohortId)))
+      .where(
+        and(
+          eq(pe.status, "ACTIVE"),
+          cohortId === undefined ? undefined : eq(pe.cohortId, cohortId),
+        ),
+      )
       .orderBy(asc(c.code), asc(pe.matricNumber));
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);

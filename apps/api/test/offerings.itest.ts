@@ -23,9 +23,8 @@ beforeAll(async () => {
       credits: "3",
     })
   ).body;
-  other = (
-    await post<Course>("/api/v1/courses", { code: "THE202", title: "Ethics", credits: "2" })
-  ).body;
+  other = (await post<Course>("/api/v1/courses", { code: "THE202", title: "Ethics", credits: "2" }))
+    .body;
   const programme = (
     await post<Programme>("/api/v1/programmes", { code: "ODIP", name: "Offerings Diploma" })
   ).body;
@@ -253,7 +252,10 @@ describe("Course Offerings", () => {
       url: `/api/v1/course-offerings?cohortId=${cohortId}`,
       headers: p.registrar.headers,
     });
-    expect(all.json<{ items: Offering[] }>().items.map((o) => o.courseCode)).toEqual(["THE201", "THE202"]);
+    expect(all.json<{ items: Offering[] }>().items.map((o) => o.courseCode)).toEqual([
+      "THE201",
+      "THE202",
+    ]);
 
     const nobody = await t.request({ url: "/api/v1/course-offerings", headers: p.noRole.headers });
     expect(nobody.json()).toEqual({ items: [] });

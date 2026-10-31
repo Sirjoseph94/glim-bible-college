@@ -121,10 +121,7 @@ const pastoral = unwrap(
 );
 const curricula = app.get(CurriculaService);
 const draft = unwrap(
-  await curricula.create(
-    { programmeId: ministry.id, effectiveFrom: "2030-09-01" },
-    SYSTEM_ACTOR,
-  ),
+  await curricula.create({ programmeId: ministry.id, effectiveFrom: "2030-09-01" }, SYSTEM_ACTOR),
 );
 unwrap(
   await curricula.replacePlacements(
@@ -231,9 +228,11 @@ for (const [n, given, family, mode] of [
       studentId,
       ministry.id,
       draft.id,
-      (await db.pool.query<{ intake_id: string }>("SELECT intake_id FROM cohorts WHERE id = $1", [
-        teachingCohort,
-      ])).rows[0]?.intake_id,
+      (
+        await db.pool.query<{ intake_id: string }>("SELECT intake_id FROM cohorts WHERE id = $1", [
+          teachingCohort,
+        ])
+      ).rows[0]?.intake_id,
       teachingCohort,
       `GLIM/DIP/2032/000${String(n)}`,
       mode,

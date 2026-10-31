@@ -37,7 +37,9 @@ test("the Registrar confers the Certificate, then the Diploma", async ({ page })
       .filter({ hasText: "Courses worth half the curriculum's credits passed" }),
   ).toContainText(/Met$/);
   await expect(
-    requirements.getByRole("listitem").filter({ hasText: "Every result approved by the Registrar" }),
+    requirements
+      .getByRole("listitem")
+      .filter({ hasText: "Every result approved by the Registrar" }),
   ).toContainText(/Met$/);
   await expect(requirements).not.toContainText("Not met");
   // Conferring is consequential: a dialog names the student before it goes ahead.

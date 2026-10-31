@@ -226,7 +226,5 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
     page.getByRole("listitem", { name: "Intake 2030" }).getByText("Closed", { exact: true }),
   ).toBeVisible();
   await applicant.goto("/apply");
-  await expect(
-    applicant.getByText("Applications for the 2030 Intake are closed."),
-  ).toBeVisible();
+  await expect(applicant.getByText("Applications for the 2030 Intake are closed.")).toBeVisible();
 });

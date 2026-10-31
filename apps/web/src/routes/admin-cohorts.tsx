@@ -166,11 +166,7 @@ function Schedule({ cohortId }: { cohortId: string }) {
           </p>
         </div>
       ) : null}
-      <PlanSchedule
-        schedule={schedule.data}
-        open={planning}
-        onOpenChange={setPlanning}
-      />
+      <PlanSchedule schedule={schedule.data} open={planning} onOpenChange={setPlanning} />
     </section>
   );
 }

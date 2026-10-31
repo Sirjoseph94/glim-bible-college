@@ -181,7 +181,9 @@ export async function createCohort(
   intake: { code: string; opensOn: string; closesOn: string; startsOn: string },
 ): Promise<{ intakeId: string; cohortId: string }> {
   const intakes = t.app.get(IntakesService);
-  const created = unwrap(await intakes.create({ ...intake, offerAcceptanceDays: 21 }, SYSTEM_ACTOR));
+  const created = unwrap(
+    await intakes.create({ ...intake, offerAcceptanceDays: 21 }, SYSTEM_ACTOR),
+  );
   unwrap(await intakes.transition(created.id, "CLOSED", SYSTEM_ACTOR));
   const cohortId = await t.db.withTx(({ db }) =>
     t.app.get(CohortsService).getOrCreate(db, {

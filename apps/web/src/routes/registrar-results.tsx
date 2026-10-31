@@ -296,8 +296,8 @@ export function CourseResultsPage() {
           await refresh();
         }}
       >
-        The result goes back to draft until the course is finalized again, and the student's
-        CGPA is provisional until it's approved again.
+        The result goes back to draft until the course is finalized again, and the student's CGPA is
+        provisional until it's approved again.
       </ConfirmDialog>
     </div>
   );
@@ -714,9 +714,7 @@ export function CohortResultsPage() {
                             className={cn(bodyCell, stickyCell, "text-left font-normal")}
                           >
                             <span className="block text-subhead">{x.studentName}</span>
-                            <span className="block text-meta text-ink-muted">
-                              {x.matricNumber}
-                            </span>
+                            <span className="block text-meta text-ink-muted">{x.matricNumber}</span>
                           </th>
                           {view.data.offerings.map((o) => {
                             const result = x.results[o.offeringId];
@@ -738,9 +736,7 @@ export function CohortResultsPage() {
                               <span className="block text-meta text-ink-muted">Provisional</span>
                             ) : null}
                           </td>
-                          <td className={bodyCell}>
-                            {STANDING_LABELS[x.summary.standing] || "–"}
-                          </td>
+                          <td className={bodyCell}>{STANDING_LABELS[x.summary.standing] || "–"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -785,8 +781,8 @@ export function CohortResultsPage() {
           await refresh();
         }}
       >
-        Finalized results become official: transcripts and awards can include them. Reopened
-        results are left until they're finalized again.
+        Finalized results become official: transcripts and awards can include them. Reopened results
+        are left until they're finalized again.
       </ConfirmDialog>
     </div>
   );

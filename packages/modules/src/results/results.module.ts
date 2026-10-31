@@ -8,12 +8,7 @@ import { CourseResultsService } from "./course-results.service";
 import { GradingSchemesService } from "./grading-schemes.service";
 import { CohortResultsService } from "./cohort-results.service";
 
-const services = [
-  GradingSchemesService,
-  CourseResultsService,
-  CohortResultsService,
-  AwardsService,
-];
+const services = [GradingSchemesService, CourseResultsService, CohortResultsService, AwardsService];
 
 /** Results (TRD §14.3–14.6): grading schemes, course results, approval, awards and the arithmetic. */
 @Module({

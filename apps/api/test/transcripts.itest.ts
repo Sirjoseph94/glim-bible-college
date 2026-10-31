@@ -215,15 +215,8 @@ describe("official transcripts", () => {
     expect(notYet.json<ErrorBody>().error.code).toBe("TRANSCRIPT_NOT_ISSUABLE");
 
     expect(
-      (
-        await send(
-          "registrar",
-          "POST",
-          "/results/approve",
-          { cohortId: p.world.cohortId },
-          key(),
-        )
-      ).statusCode,
+      (await send("registrar", "POST", "/results/approve", { cohortId: p.world.cohortId }, key()))
+        .statusCode,
     ).toBe(200);
     const issued = await send(
       "registrar",

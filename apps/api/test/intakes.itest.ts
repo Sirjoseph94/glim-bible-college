@@ -44,10 +44,18 @@ describe("intakes", () => {
       startsOn: "2026-10-01",
     });
     expect(startsBeforeOpening.statusCode).toBe(400);
-    expect((await plan({ code: "2027", opensOn: "2026-11-01", closesOn: "2027-06-30" })).statusCode).toBe(400);
     expect(
-      (await t.request({ method: "POST", url: "/api/v1/intakes", headers: p.acadAdmin.headers, payload: {} }))
-        .statusCode,
+      (await plan({ code: "2027", opensOn: "2026-11-01", closesOn: "2027-06-30" })).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await t.request({
+          method: "POST",
+          url: "/api/v1/intakes",
+          headers: p.acadAdmin.headers,
+          payload: {},
+        })
+      ).statusCode,
     ).toBe(403);
 
     const res = await plan({

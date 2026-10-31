@@ -104,7 +104,14 @@ export class RegistrationService {
     const c = schema.courses;
     const m = schema.examMakeups;
     const courseRows = await db
-      .select({ ce, offering: o, code: c.code, title: c.title, credits: c.credits, makeupOn: m.makeupOn })
+      .select({
+        ce,
+        offering: o,
+        code: c.code,
+        title: c.title,
+        credits: c.credits,
+        makeupOn: m.makeupOn,
+      })
       .from(ce)
       .innerJoin(o, eq(o.id, ce.courseOfferingId))
       .innerJoin(c, eq(c.id, o.courseId))
@@ -126,22 +133,20 @@ export class RegistrationService {
         status: p.enrollment.status as Programmes[number]["status"],
         courses: courseRows
           .filter((x) => x.ce.programmeEnrollmentId === p.enrollment.id)
-          .map(
-            (x): Course => ({
-              courseEnrollmentId: x.ce.id,
-              offeringId: x.ce.courseOfferingId,
-              courseCode: x.code,
-              title: x.offering.titleOverride ?? x.title,
-              credits: x.credits,
-              startsOn: x.offering.startsOn,
-              endsOn: x.offering.endsOn,
-              examOn: x.offering.examOn,
-              makeupOn: x.makeupOn,
-              offeringStatus: x.offering.status as Course["offeringStatus"],
-              selection: x.ce.selection as Course["selection"],
-              status: x.ce.status as Course["status"],
-            }),
-          ),
+          .map((x): Course => ({
+            courseEnrollmentId: x.ce.id,
+            offeringId: x.ce.courseOfferingId,
+            courseCode: x.code,
+            title: x.offering.titleOverride ?? x.title,
+            credits: x.credits,
+            startsOn: x.offering.startsOn,
+            endsOn: x.offering.endsOn,
+            examOn: x.offering.examOn,
+            makeupOn: x.makeupOn,
+            offeringStatus: x.offering.status as Course["offeringStatus"],
+            selection: x.ce.selection as Course["selection"],
+            status: x.ce.status as Course["status"],
+          })),
       })),
     };
   }

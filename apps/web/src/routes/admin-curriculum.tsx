@@ -281,11 +281,7 @@ function Editor({ curriculum }: { curriculum: CurriculumDetail }) {
               icon="book"
               onClick={() => {
                 const first = courses.data?.items.find((c) => c.status === "ACTIVE");
-                if (first)
-                  setRows([
-                    ...rows,
-                    { courseId: first.id, creditOverride: null },
-                  ]);
+                if (first) setRows([...rows, { courseId: first.id, creditOverride: null }]);
               }}
             >
               Add a course

@@ -116,9 +116,7 @@ describe("sectionLinks", () => {
 
   it("leaves out pages the person's roles don't reach", () => {
     expect(
-      sectionLinks("/results/cohorts", { ...none, staff: ["ACADEMIC_ADMIN"] }).map(
-        (l) => l.label,
-      ),
+      sectionLinks("/results/cohorts", { ...none, staff: ["ACADEMIC_ADMIN"] }).map((l) => l.label),
     ).toEqual(["Course results", "Cohort results"]);
   });
 
