@@ -242,7 +242,7 @@ export class ReviewService {
           name: [current.firstName, current.lastName].filter(Boolean).join(" "),
           programmeName: found.programme.name,
           studyMode: MODE_LABEL[current.studyMode ?? ""] ?? "",
-          academicSessionName: found.intake.academicSessionName,
+          startsOn: found.intake.startsOn,
           ...(offerExpiresAt === null ? {} : { offerExpiresAt: offerExpiresAt.toISOString() }),
           timeZone: settings.timezone,
           ...(current.email === null ? {} : { emailTo: current.email }),

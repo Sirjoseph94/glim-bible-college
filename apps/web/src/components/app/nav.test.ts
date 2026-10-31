@@ -37,10 +37,10 @@ describe("navItems (handoff §6.3, decision D-UI-01)", () => {
     expect(labels({ ...none, isApplicant: true })).toEqual(["Home", "Application", "Profile"]);
   });
 
-  it("gives the Registrar the results area, pointing at semester results", () => {
+  it("gives the Registrar the results area, pointing at cohort results", () => {
     const items = navItems({ ...none, staff: ["REGISTRAR"] });
     expect(items.map((i) => i.label)).toEqual(["Home", "Results", "Profile"]);
-    expect(items[1]?.to).toBe("/results/semesters");
+    expect(items[1]?.to).toBe("/results/cohorts");
   });
 
   it("gives a System Admin every staff area, Ops last before Profile", () => {
@@ -72,7 +72,7 @@ describe("activeItem", () => {
   const admin = navItems({ ...none, staff: ["SYSTEM_ADMIN"] });
 
   it("marks the area a page belongs to, not just its first page", () => {
-    expect(activeItem("/admin/calendar", admin)?.label).toBe("Academic");
+    expect(activeItem("/admin/cohorts", admin)?.label).toBe("Academic");
     expect(activeItem("/admin/curricula/abc", admin)?.label).toBe("Academic");
     expect(activeItem("/results/awards", admin)?.label).toBe("Results");
     expect(activeItem("/admin/users/123", admin)?.label).toBe("People");
@@ -106,8 +106,9 @@ describe("sectionLinks", () => {
   it("lists an area's pages the person may open, on any page of the area", () => {
     expect(sectionLinks("/admin/imports", { ...none, staff: ["ACADEMIC_ADMIN"] })).toEqual([
       { label: "Setup", to: "/admin/academic" },
-      { label: "Calendar", to: "/admin/calendar" },
+      { label: "Cohorts", to: "/admin/cohorts" },
       { label: "Offerings", to: "/admin/offerings" },
+      { label: "Rooms", to: "/admin/rooms" },
       { label: "Lecturers", to: "/admin/lecturers" },
       { label: "Imports", to: "/admin/imports" },
     ]);
@@ -115,10 +116,8 @@ describe("sectionLinks", () => {
 
   it("leaves out pages the person's roles don't reach", () => {
     expect(
-      sectionLinks("/results/semesters", { ...none, staff: ["ACADEMIC_ADMIN"] }).map(
-        (l) => l.label,
-      ),
-    ).toEqual(["Course results", "Semester results"]);
+      sectionLinks("/results/cohorts", { ...none, staff: ["ACADEMIC_ADMIN"] }).map((l) => l.label),
+    ).toEqual(["Course results", "Cohort results"]);
   });
 
   it("is empty for a page that isn't in an area with several pages", () => {

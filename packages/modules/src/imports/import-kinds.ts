@@ -1,6 +1,6 @@
 import type { ImportKind } from "@glim/contracts";
 import { schema, type Database } from "@glim/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { recordImportedResult } from "@glim/modules/results";
 import { parseDecimal } from "@glim/shared";
 import { z } from "zod";
@@ -16,8 +16,6 @@ export interface RowContext {
   now: Date;
   /** Users the row created (they get invites and referral codes after the batch). */
   createdUsers: string[];
-  /** Semesters whose results the row changed (they're recomputed after the batch). */
-  semesters: Set<string>;
 }
 
 const text = (max = 200) => z.string().trim().min(1).max(max);
@@ -60,8 +58,7 @@ const studentRow = z.object({
     .toUpperCase()
     .transform((v) => v.replace(/[ -]/g, "_"))
     .pipe(z.enum(["ON_CAMPUS", "ONLINE"])),
-  level: z.coerce.number().int().min(1).max(6),
-  entry_session_code: text(20),
+  cohort_code: z.string().trim().toUpperCase().min(1).max(40),
 });
 
 const lecturerRow = z.object({
@@ -81,14 +78,8 @@ const lecturerRow = z.object({
 const courseEnrollmentRow = z.object({
   matric_number: z.string().trim().toUpperCase().min(1).max(40),
   course_code: z.string().trim().toUpperCase().min(1).max(20),
-  session_code: text(20),
-  semester_code: z.string().trim().toUpperCase().min(1).max(10),
-  section_code: z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? "01" : v))
-    .optional()
-    .transform((v) => v ?? "01"),
+  /** The cohort whose offering of the course it is; empty is the student's own cohort. */
+  cohort_code: optional(40).transform((v) => v?.toUpperCase() ?? null),
   status: z
     .string()
     .trim()
@@ -145,8 +136,7 @@ const students: ImportKindSpec<z.infer<typeof studentRow>> = {
     "matric_number",
     "programme_code",
     "study_mode",
-    "level",
-    "entry_session_code",
+    "cohort_code",
   ],
   required: [
     "email",
@@ -155,8 +145,7 @@ const students: ImportKindSpec<z.infer<typeof studentRow>> = {
     "matric_number",
     "programme_code",
     "study_mode",
-    "level",
-    "entry_session_code",
+    "cohort_code",
   ],
   example: [
     "ada.okafor@gmail.com",
@@ -170,8 +159,7 @@ const students: ImportKindSpec<z.infer<typeof studentRow>> = {
     "GLIM/DIP/2025/0012",
     "DIP",
     "ONLINE",
-    "2",
-    "2025/2026",
+    "DIP-2025",
   ],
   parse: (row) => studentRow.safeParse(row),
   async apply(ctx, row) {
@@ -189,11 +177,19 @@ const students: ImportKindSpec<z.infer<typeof studentRow>> = {
       );
     if (curriculum === undefined)
       throw new RowError(`Programme ${row.programme_code} has no active curriculum`);
-    const [session] = await db
-      .select({ id: schema.academicSessions.id, startsOn: schema.academicSessions.startsOn })
-      .from(schema.academicSessions)
-      .where(eq(schema.academicSessions.code, row.entry_session_code));
-    if (session === undefined) throw new RowError(`No Academic Session ${row.entry_session_code}`);
+    const [cohort] = await db
+      .select({
+        id: schema.cohorts.id,
+        intakeId: schema.cohorts.intakeId,
+        startsOn: schema.intakes.startsOn,
+      })
+      .from(schema.cohorts)
+      .innerJoin(schema.intakes, eq(schema.intakes.id, schema.cohorts.intakeId))
+      .where(
+        and(eq(schema.cohorts.programmeId, programme.id), eq(schema.cohorts.code, row.cohort_code)),
+      );
+    if (cohort === undefined)
+      throw new RowError(`No ${row.programme_code} cohort with code ${row.cohort_code}`);
 
     const userId = await userFor(ctx, row.email, `${row.given_name} ${row.family_name}`);
     const profile = {
@@ -235,11 +231,11 @@ const students: ImportKindSpec<z.infer<typeof studentRow>> = {
         studentId,
         programmeId: programme.id,
         curriculumId: curriculum.id,
-        entrySessionId: session.id,
+        intakeId: cohort.intakeId,
+        cohortId: cohort.id,
         matricNumber: row.matric_number,
         studyMode: row.study_mode,
-        currentLevel: row.level,
-        startedOn: session.startsOn,
+        startedOn: cohort.startsOn,
         createdAt: ctx.now,
         updatedAt: ctx.now,
       });
@@ -249,10 +245,15 @@ const students: ImportKindSpec<z.infer<typeof studentRow>> = {
       throw new RowError(
         `Matric Number ${row.matric_number} belongs to another student or programme`,
       );
-    if (enrollment.studyMode !== row.study_mode || enrollment.currentLevel !== row.level) {
+    if (enrollment.studyMode !== row.study_mode || enrollment.cohortId !== cohort.id) {
       await db
         .update(pe)
-        .set({ studyMode: row.study_mode, currentLevel: row.level, updatedAt: ctx.now })
+        .set({
+          studyMode: row.study_mode,
+          cohortId: cohort.id,
+          intakeId: cohort.intakeId,
+          updatedAt: ctx.now,
+        })
         .where(eq(pe.id, enrollment.id));
       return "updated";
     }
@@ -297,16 +298,9 @@ const lecturers: ImportKindSpec<z.infer<typeof lecturerRow>> = {
 };
 
 const courseEnrollments: ImportKindSpec<z.infer<typeof courseEnrollmentRow>> = {
-  columns: [
-    "matric_number",
-    "course_code",
-    "session_code",
-    "semester_code",
-    "section_code",
-    "status",
-  ],
-  required: ["matric_number", "course_code", "session_code", "semester_code"],
-  example: ["GLIM/DIP/2025/0012", "BIB101", "2025/2026", "S1", "01", "COMPLETED"],
+  columns: ["matric_number", "course_code", "cohort_code", "status"],
+  required: ["matric_number", "course_code"],
+  example: ["GLIM/DIP/2025/0012", "BIB101", "DIP-2025", "COMPLETED"],
   parse: (row) => courseEnrollmentRow.safeParse(row),
   async apply(ctx, row) {
     const { db } = ctx;
@@ -314,47 +308,26 @@ const courseEnrollments: ImportKindSpec<z.infer<typeof courseEnrollmentRow>> = {
     const [enrollment] = await db.select().from(pe).where(eq(pe.matricNumber, row.matric_number));
     if (enrollment === undefined)
       throw new RowError(`No student with Matric Number ${row.matric_number}`);
-    const s = schema.semesters;
-    const [semester] = await db
-      .select({ id: s.id })
-      .from(s)
-      .innerJoin(schema.academicSessions, eq(schema.academicSessions.id, s.academicSessionId))
-      .where(
-        and(eq(schema.academicSessions.code, row.session_code), eq(s.code, row.semester_code)),
-      );
-    if (semester === undefined)
-      throw new RowError(`No semester ${row.semester_code} in ${row.session_code}`);
     const o = schema.courseOfferings;
+    const cohort = schema.cohorts;
     const [offering] = await db
       .select({ id: o.id })
       .from(o)
       .innerJoin(schema.courses, eq(schema.courses.id, o.courseId))
+      .innerJoin(cohort, eq(cohort.id, o.cohortId))
       .where(
         and(
           eq(schema.courses.code, row.course_code),
-          eq(o.semesterId, semester.id),
-          eq(o.sectionCode, row.section_code),
+          row.cohort_code === null
+            ? eq(o.cohortId, enrollment.cohortId)
+            : eq(cohort.code, row.cohort_code),
+          ne(o.status, "CANCELLED"),
         ),
       );
     if (offering === undefined)
       throw new RowError(
-        `No offering of ${row.course_code} section ${row.section_code} in ${row.session_code} ${row.semester_code}`,
+        `No offering of ${row.course_code} for cohort ${row.cohort_code ?? "of the student"}`,
       );
-
-    const se = schema.semesterEnrollments;
-    await db
-      .insert(se)
-      .values({
-        programmeEnrollmentId: enrollment.id,
-        semesterId: semester.id,
-        levelNo: enrollment.currentLevel,
-      })
-      .onConflictDoNothing();
-    const [semesterEnrollment] = await db
-      .select({ id: se.id })
-      .from(se)
-      .where(and(eq(se.programmeEnrollmentId, enrollment.id), eq(se.semesterId, semester.id)));
-    if (semesterEnrollment === undefined) throw new Error("semester enrollment missing");
 
     const ce = schema.courseEnrollments;
     const [existing] = await db
@@ -385,7 +358,6 @@ const courseEnrollments: ImportKindSpec<z.infer<typeof courseEnrollmentRow>> = {
     const [created] = await db
       .insert(ce)
       .values({
-        semesterEnrollmentId: semesterEnrollment.id,
         programmeEnrollmentId: enrollment.id,
         courseOfferingId: offering.id,
         studentId: enrollment.studentId,
@@ -411,8 +383,7 @@ const courseEnrollments: ImportKindSpec<z.infer<typeof courseEnrollmentRow>> = {
 const courseResultRow = z.object({
   matric_number: z.string().trim().toUpperCase().min(1).max(40),
   course_code: z.string().trim().toUpperCase().min(1).max(20),
-  session_code: text(20),
-  semester_code: text(20),
+  completed_on: z.string().trim().pipe(z.iso.date()),
   result_kind: z
     .string()
     .trim()
@@ -450,17 +421,9 @@ const courseResultRow = z.object({
 
 /** Past results of current students (D-04): APPROVED, so they count toward CGPA. */
 const courseResults: ImportKindSpec<z.infer<typeof courseResultRow>> = {
-  columns: [
-    "matric_number",
-    "course_code",
-    "session_code",
-    "semester_code",
-    "percent",
-    "credits",
-    "result_kind",
-  ],
-  required: ["matric_number", "course_code", "session_code", "semester_code"],
-  example: ["GLIM/DIP/2025/0012", "BIB101", "2025/2026", "S1", "72", "", "GRADED"],
+  columns: ["matric_number", "course_code", "completed_on", "percent", "credits", "result_kind"],
+  required: ["matric_number", "course_code", "completed_on"],
+  example: ["GLIM/DIP/2025/0012", "BIB101", "2025-10-31", "72", "", "GRADED"],
   parse: (row) => courseResultRow.safeParse(row),
   async apply(ctx, row) {
     const { db } = ctx;
@@ -476,23 +439,13 @@ const courseResults: ImportKindSpec<z.infer<typeof courseResultRow>> = {
       .from(schema.courses)
       .where(eq(schema.courses.code, row.course_code));
     if (course === undefined) throw new RowError(`No course ${row.course_code}`);
-    const s = schema.semesters;
-    const [semester] = await db
-      .select({ id: s.id })
-      .from(s)
-      .innerJoin(schema.academicSessions, eq(schema.academicSessions.id, s.academicSessionId))
-      .where(
-        and(eq(schema.academicSessions.code, row.session_code), eq(s.code, row.semester_code)),
-      );
-    if (semester === undefined)
-      throw new RowError(`No semester ${row.semester_code} in ${row.session_code}`);
     if (row.result_kind === "GRADED" && row.percent === null)
       throw new RowError("percent: a graded result needs a percent");
     const recorded = await recordImportedResult(
       db,
       {
         programmeEnrollmentId: enrollment.id,
-        semesterId: semester.id,
+        completedOn: row.completed_on,
         courseId: course.id,
         creditsX10: row.credits === null ? null : parseDecimal(row.credits, 1),
         finalPctX100: row.percent === null ? null : parseDecimal(row.percent, 2),
@@ -501,7 +454,6 @@ const courseResults: ImportKindSpec<z.infer<typeof courseResultRow>> = {
       ctx.now,
     );
     if (!recorded.ok) throw new RowError(recorded.error.message);
-    if (recorded.value !== "unchanged") ctx.semesters.add(semester.id);
     return recorded.value;
   },
 };

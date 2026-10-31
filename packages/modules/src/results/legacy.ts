@@ -1,12 +1,13 @@
 import { schema, type Database } from "@glim/db";
 import { domainError, err, ok, parseDecimal, type DomainResult } from "@glim/shared";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, lt, ne, sql } from "drizzle-orm";
 import { courseOutcome, type ResultKind } from "./domain/grading";
 import { rulesOf } from "./grading-schemes.service";
 
 export interface ImportedResult {
   programmeEnrollmentId: string;
-  semesterId: string;
+  /** When the course was completed (YYYY-MM-DD): orders attempts and the transcript. */
+  completedOn: string;
   courseId: string;
   /** Null: the curriculum's credits for the course, else the course's. */
   creditsX10: number | null;
@@ -21,7 +22,7 @@ const problem = (message: string) => err(domainError("VALIDATION_FAILED", messag
  * Records a past course result for an existing student (D-04, §15.2) inside the import's
  * transaction: graded with the programme's scheme (rounding to a whole percent before banding,
  * the default), APPROVED straight away so it counts toward CGPA, and identified by programme
- * enrollment, semester and course so importing it again updates it.
+ * enrollment, course and completion date so importing it again updates it.
  */
 export async function recordImportedResult(
   db: Database,
@@ -80,7 +81,7 @@ export async function recordImportedResult(
     .where(
       and(
         eq(r.programmeEnrollmentId, input.programmeEnrollmentId),
-        eq(r.semesterId, input.semesterId),
+        eq(r.completedOn, input.completedOn),
         eq(r.courseId, input.courseId),
         ne(r.source, "IMPORT"),
       ),
@@ -88,34 +89,26 @@ export async function recordImportedResult(
   if (clash.length > 0)
     return problem("The student already has a result for this course from the gradebook");
 
-  // Attempts in earlier semesters come first.
-  const s = schema.semesters;
-  const ses = schema.academicSessions;
-  const [here] = await db
-    .select({ startsOn: ses.startsOn, sequence: s.sequence })
-    .from(s)
-    .innerJoin(ses, eq(ses.id, s.academicSessionId))
-    .where(eq(s.id, input.semesterId));
-  const others = await db
-    .select({ id: r.id, startsOn: ses.startsOn, sequence: s.sequence, semesterId: r.semesterId })
+  // Attempts completed earlier come first.
+  const [earlier] = await db
+    .select({ n: sql<number>`count(*)::int` })
     .from(r)
-    .innerJoin(s, eq(s.id, r.semesterId))
-    .innerJoin(ses, eq(ses.id, s.academicSessionId))
-    .where(and(eq(r.studentId, enrollment.studentId), eq(r.courseId, input.courseId)));
-  const earlier = others.filter(
-    (o) =>
-      here !== undefined &&
-      (o.startsOn < here.startsOn || (o.startsOn === here.startsOn && o.sequence < here.sequence)),
-  ).length;
+    .where(
+      and(
+        eq(r.studentId, enrollment.studentId),
+        eq(r.courseId, input.courseId),
+        lt(r.completedOn, input.completedOn),
+      ),
+    );
 
   const fields = {
     programmeEnrollmentId: input.programmeEnrollmentId,
-    semesterId: input.semesterId,
+    completedOn: input.completedOn,
     courseId: input.courseId,
     studentId: enrollment.studentId,
     gradingSchemeId: scheme.id,
     source: "IMPORT",
-    attemptNo: earlier + 1,
+    attemptNo: (earlier?.n ?? 0) + 1,
     creditsX10,
     finalPctX100: graded ? input.finalPctX100 : null,
     letter: outcome?.letter ?? null,
@@ -131,7 +124,7 @@ export async function recordImportedResult(
     .where(
       and(
         eq(r.programmeEnrollmentId, input.programmeEnrollmentId),
-        eq(r.semesterId, input.semesterId),
+        eq(r.completedOn, input.completedOn),
         eq(r.courseId, input.courseId),
         eq(r.source, "IMPORT"),
       ),

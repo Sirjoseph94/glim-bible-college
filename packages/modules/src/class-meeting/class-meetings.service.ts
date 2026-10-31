@@ -110,6 +110,7 @@ export class ClassMeetingsService {
     const roomId = input.roomId ?? null;
     const problem =
       (await this.writer.checkOffering(offeringId)) ??
+      (await this.writer.checkWithinOffering(offeringId, [{ start, end }])) ??
       (await this.writer.checkRoom(roomId)) ??
       (await this.writer.conflicts(offeringId, [{ start, end }], roomId, override.value === null));
     if (problem !== null) return err(problem);
@@ -241,6 +242,10 @@ export class ClassMeetingsService {
       end: p.end,
       meetingId: p.row.id,
     }));
+    if (timesChange) {
+      const outside = await this.writer.checkWithinOffering(current.courseOfferingId, slots);
+      if (outside !== null) return err(outside);
+    }
     // The effective Room is checked whenever the time or the Room changes; the Lecturers only
     // when the time does.
     if (moves) {

@@ -67,7 +67,7 @@ export function TranscriptsSection({
       <h2 className="text-heading">Transcripts</h2>
       <p className="text-body-sm text-ink-muted">
         An unofficial transcript is ready at once. The Registrar checks and issues official ones,
-        with approved semesters only.
+        once every result on it is approved.
       </p>
       {problem && !official ? (
         <Banner tone="danger" title={problem.title}>
@@ -348,63 +348,61 @@ function TranscriptView({ transcript: d }: { transcript: Transcript }) {
           {s.programme.name} ({s.programme.code}) · as of {s.asOf}
         </p>
       </header>
-      {s.semesters.map((sem) => (
-        <section key={`${sem.sessionCode}-${sem.semesterName}`} className="space-y-2">
-          <h2 className="flex flex-wrap items-center gap-2 text-heading">
-            {sem.semesterName}, {sem.sessionCode}
-            {sem.provisional ? <Badge status="provisional" /> : null}
-          </h2>
-          <DataTable
-            caption={`Courses, ${sem.semesterName} ${sem.sessionCode}`}
-            minWidth="min-w-120"
-          >
-            <thead>
-              <tr>
-                <th scope="col" className={headCell}>
-                  Course
-                </th>
-                <th scope="col" className={cn(headCell, numericCell)}>
-                  Credits
-                </th>
-                <th scope="col" className={cn(headCell, numericCell)}>
-                  %
-                </th>
-                <th scope="col" className={headCell}>
-                  Grade
-                </th>
+      <section className="space-y-2">
+        <h2 className="text-heading">Courses, in the order completed</h2>
+        <DataTable caption="Courses" captionHidden minWidth="min-w-120">
+          <thead>
+            <tr>
+              <th scope="col" className={headCell}>
+                Course
+              </th>
+              <th scope="col" className={headCell}>
+                Completed
+              </th>
+              <th scope="col" className={cn(headCell, numericCell)}>
+                Credits
+              </th>
+              <th scope="col" className={cn(headCell, numericCell)}>
+                %
+              </th>
+              <th scope="col" className={headCell}>
+                Grade
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {s.courses.map((c) => (
+              <tr key={`${c.code}-${String(c.attemptNo)}`}>
+                <td className={cn(bodyCell, "whitespace-normal")}>
+                  <span className="font-mono text-code">{c.code}</span> {c.title}
+                  {c.repeated ? " (repeated)" : ""}
+                  {c.provisional ? (
+                    <span className="ml-2">
+                      <Badge status="provisional" />
+                    </span>
+                  ) : null}
+                </td>
+                <td className={bodyCell}>{c.completedOn}</td>
+                <td className={cn(bodyCell, numericCell)}>{credits(c.creditsX10)}</td>
+                <td className={cn(bodyCell, numericCell)}>{hundredths(c.finalPctX100)}</td>
+                <td className={cn(bodyCell, "font-mono font-semibold")}>
+                  {c.letter ?? c.resultKind.toLowerCase()}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {sem.courses.map((c) => (
-                <tr key={`${c.code}-${String(c.attemptNo)}`}>
-                  <td className={cn(bodyCell, "whitespace-normal")}>
-                    <span className="font-mono text-code">{c.code}</span> {c.title}
-                    {c.repeated ? " (repeated)" : ""}
-                  </td>
-                  <td className={cn(bodyCell, numericCell)}>{credits(c.creditsX10)}</td>
-                  <td className={cn(bodyCell, numericCell)}>{hundredths(c.finalPctX100)}</td>
-                  <td className={cn(bodyCell, "font-mono font-semibold")}>
-                    {c.letter ?? c.resultKind.toLowerCase()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
-          <p className="text-body-sm text-ink-muted">
-            GPA {hundredths(sem.gpaX100)} · CGPA {hundredths(sem.cgpaX100)}
-          </p>
-        </section>
-      ))}
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
       <section className="space-y-1">
         <p className="text-subhead">
           CGPA {hundredths(s.totals.cgpaX100)} · {credits(s.totals.creditsEarnedX10)} credits earned
         </p>
-        {s.award === null ? null : (
-          <p className="text-body-sm">
-            Awarded {s.programme.awardType === "CERTIFICATE" ? "the Certificate" : "the Diploma"}{" "}
-            with {s.award.awardClass} on {s.award.awardedOn} · {s.award.certificateNo}
+        {s.awards.map((a) => (
+          <p key={a.certificateNo} className="text-body-sm">
+            Awarded {a.awardType === "CERTIFICATE" ? "the Certificate" : "the Diploma"} with{" "}
+            {a.awardClass} on {a.awardedOn} · {a.certificateNo}
           </p>
-        )}
+        ))}
       </section>
       <footer className="space-y-1 border-t border-line pt-3 text-meta text-ink-muted">
         <p>

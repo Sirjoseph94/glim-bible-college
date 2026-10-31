@@ -34,11 +34,10 @@ export interface Admission {
   userId: string;
   profile: StudentProfile;
   programme: { id: string; code: string };
-  /** The intake year, which numbers the Matric (D-01). */
+  /** The year the intake starts, which numbers the Matric (D-01). */
   intake: { id: string; year: number };
   cohortId: string;
   curriculumId: string;
-  entrySessionId: string;
   startedOn: string;
   applicationId: string;
   studyMode: StudyMode;
@@ -54,8 +53,8 @@ export class StudentsService {
 
   /**
    * Makes the user a student of the programme inside the caller's transaction: creates the
-   * student (or refreshes an existing one, e.g. a Certificate graduate admitted to the Diploma),
-   * allocates the next Matric Number and creates the ACTIVE programme enrollment at Level 1.
+   * student (or refreshes an existing one, e.g. a former student admitted again), allocates the
+   * next Matric Number and creates the ACTIVE programme enrollment in the intake's cohort.
    */
   async admit(
     db: Database,
@@ -107,7 +106,6 @@ export class StudentsService {
         curriculumId: input.curriculumId,
         intakeId: input.intake.id,
         cohortId: input.cohortId,
-        entrySessionId: input.entrySessionId,
         applicationId: input.applicationId,
         matricNumber,
         studyMode: input.studyMode,

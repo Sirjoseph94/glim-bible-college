@@ -28,7 +28,7 @@ export function browserTimeZone(): string | null {
 }
 
 /**
- * A calendar date (YYYY-MM-DD) such as a semester's start. Calendar dates belong to the
+ * A calendar date (YYYY-MM-DD) such as an offering's start. Calendar dates belong to the
  * institution's calendar (§5.1), so they read the same in every timezone.
  */
 export function CalendarDate({ value }: { value: string | null }) {

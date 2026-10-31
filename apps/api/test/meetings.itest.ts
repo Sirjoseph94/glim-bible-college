@@ -5,7 +5,7 @@ import { unwrap } from "@glim/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { idempotencyKey } from "./applicants";
 import { createTestApp, type TestApp } from "./harness";
-import { createPersonas, type PersonaName, type Personas } from "./personas";
+import { createCohort, createPersonas, type PersonaName, type Personas } from "./personas";
 
 /**
  * Scheduling a Class Meeting with a Room and a pasted online link (TRD §9.5, §11; v1 spec).
@@ -51,15 +51,35 @@ function schedule(
   });
 }
 
-/** A new published offering of the persona course, taught by the given personas. */
+let cohorts = 0;
+/**
+ * A cohort of its own for each extra offering: a cohort takes a course once, one course at a time
+ * (ADR-0005). Each intake gets its own application window in 2023.
+ */
+async function cohortFor(section: string): Promise<string> {
+  cohorts++;
+  const month = String(cohorts).padStart(2, "0");
+  const programme = { id: p.world.programmeId, code: "PDIP", name: "Persona Diploma" };
+  const { cohortId } = await createCohort(t, programme, {
+    code: `2025-${section}`,
+    opensOn: `2023-${month}-01`,
+    closesOn: `2023-${month}-20`,
+    startsOn: "2025-01-01",
+  });
+  return cohortId;
+}
+
+/** A new published offering of the persona course in a cohort of its own, taught by the given personas. */
 async function offering(section: string, teachers: [PersonaName, "PRIMARY" | "CO_LECTURER"][]) {
   const assignments = t.app.get(AssignmentsService);
   const id = unwrap(
     await assignments.createOfferingWithLecturers(
       {
         courseId: p.world.courseId,
-        semesterId: p.world.semesterId,
-        sectionCode: section,
+        cohortId: await cohortFor(section),
+        startsOn: "2025-01-01",
+        endsOn: "2099-12-31",
+        examOn: "2099-12-31",
         titleOverride: null,
         capacity: null,
         lecturers: await Promise.all(
@@ -310,17 +330,16 @@ describe("double-booking", () => {
 describe("student clashes", () => {
   it("warns, without blocking, when enrolled students have another meeting then", async () => {
     // sEnrolled also takes O2; O2 has a meeting on the 14th, 09:00–11:00.
-    const { rows } = await q<{ id: string; programme_enrollment_id: string; student_id: string }>(
-      `SELECT se.id, se.programme_enrollment_id, pe.student_id FROM semester_enrollments se
-         JOIN programme_enrollments pe ON pe.id = se.programme_enrollment_id
+    const { rows } = await q<{ id: string; student_id: string }>(
+      `SELECT pe.id, pe.student_id FROM programme_enrollments pe
          JOIN students s ON s.id = pe.student_id WHERE s.user_id = $1`,
       [p.sEnrolled.userId],
     );
-    const se = rows[0];
+    const pe = rows[0];
     await q(
-      `INSERT INTO course_enrollments (semester_enrollment_id, programme_enrollment_id, course_offering_id, student_id, selection, status)
-       VALUES ($1, $2, $3, $4, 'ELECTIVE', 'ENROLLED')`,
-      [se?.id, se?.programme_enrollment_id, p.world.offerings.O2, se?.student_id],
+      `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status)
+       VALUES ($1, $2, $3, 'MANUAL', 'ENROLLED')`,
+      [pe?.id, p.world.offerings.O2, pe?.student_id],
     );
     const o2Meeting = (
       await q<{ id: string }>(

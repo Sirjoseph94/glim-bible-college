@@ -21,6 +21,7 @@ import {
   type DomainError,
   type DomainResult,
 } from "@glim/shared";
+import { zonedToInstant } from "@glim/shared/time";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { QUIZ_GRACE_MS, deadlineFor, markResponse, shuffled } from "./domain/quiz";
@@ -91,10 +92,11 @@ export class QuizAttemptsService {
             "You sit this exam on paper in the Room. Ask your Lecturer if you need to take it online.",
           ),
         );
+      const window = await windowFor(tx.db, quiz, studentId);
       if (
         quiz.status !== "PUBLISHED" ||
-        (quiz.opensAt !== null && now < quiz.opensAt) ||
-        (quiz.closesAt !== null && now >= quiz.closesAt)
+        (window.opensAt !== null && now < window.opensAt) ||
+        (window.closesAt !== null && now >= window.closesAt)
       )
         return err(domainError("SUBMISSION_CLOSED", "This quiz isn't open now."));
       const [counted] = await tx.db
@@ -107,7 +109,7 @@ export class QuizAttemptsService {
           domainError("ATTEMPT_LIMIT_REACHED", "You've used all your attempts at this quiz."),
         );
       const snapshot = await this.snapshot(tx.db, quiz);
-      const deadlineAt = deadlineFor(now, quiz.timeLimitMinutes, quiz.closesAt);
+      const deadlineAt = deadlineFor(now, quiz.timeLimitMinutes, window.closesAt);
       const [attempt] = await tx.db
         .insert(a)
         .values({
@@ -158,10 +160,11 @@ export class QuizAttemptsService {
     const now = this.clock.now();
     const running = rows.some((r) => r.status === "IN_PROGRESS" && !this.pastGrace(r, now));
     const attemptsLeft = Math.max(0, quiz.maxAttempts - rows.length);
+    const window = await windowFor(this.db.read, quiz, studentId);
     const windowOpen =
       quiz.status === "PUBLISHED" &&
-      (quiz.opensAt === null || now >= quiz.opensAt) &&
-      (quiz.closesAt === null || now < quiz.closesAt);
+      (window.opensAt === null || now >= window.opensAt) &&
+      (window.closesAt === null || now < window.closesAt);
     return ok({
       attempts: rows.map((r) => ({
         id: r.id,
@@ -594,4 +597,42 @@ export class QuizAttemptsService {
       }),
     };
   }
+}
+
+/**
+ * When a student may attempt the quiz: its own window, except that a student with a makeup exam
+ * sits an online exam on their makeup day, all day in the institution's timezone (ADR-0005).
+ */
+async function windowFor(
+  db: Database,
+  quiz: {
+    assessmentId: string;
+    courseOfferingId: string;
+    opensAt: Date | null;
+    closesAt: Date | null;
+  },
+  studentId: string,
+): Promise<{ opensAt: Date | null; closesAt: Date | null }> {
+  const m = schema.examMakeups;
+  const [makeup] = await db
+    .select({ makeupOn: m.makeupOn, zone: schema.settings.timezone })
+    .from(m)
+    .innerJoin(schema.assessments, eq(schema.assessments.id, quiz.assessmentId))
+    .innerJoin(schema.settings, sql`true`)
+    .where(
+      and(
+        eq(m.courseOfferingId, quiz.courseOfferingId),
+        eq(m.studentId, studentId),
+        eq(schema.assessments.kind, "EXAM"),
+      ),
+    )
+    .limit(1);
+  if (makeup === undefined) return { opensAt: quiz.opensAt, closesAt: quiz.closesAt };
+  const nextDay = new Date(Date.parse(`${makeup.makeupOn}T00:00:00Z`) + 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return {
+    opensAt: new Date(zonedToInstant(makeup.makeupOn, "00:00", makeup.zone)),
+    closesAt: new Date(zonedToInstant(nextDay, "00:00", makeup.zone)),
+  };
 }

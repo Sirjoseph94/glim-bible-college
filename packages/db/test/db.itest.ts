@@ -35,18 +35,20 @@ describe("Db.withTx (INV-5: jobs commit or roll back with the change)", () => {
         .set({ name: "GLIM Bible College" })
         .where(eq(schema.settings.id, 1));
       await queue.publish(
-        "academic.session.activated",
-        { sessionId: "s1" },
+        "academic.offering.completed",
+        { offeringId: "o1" },
         { occurredAt: new Date() },
       );
     });
 
     expect(await institutionName()).toBe("GLIM Bible College");
-    const jobs = await boss.fetch<{ name: string; payload: { sessionId: string } }>("domain-event");
+    const jobs = await boss.fetch<{ name: string; payload: { offeringId: string } }>(
+      "domain-event",
+    );
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.data).toMatchObject({
-      name: "academic.session.activated",
-      payload: { sessionId: "s1" },
+      name: "academic.offering.completed",
+      payload: { offeringId: "o1" },
     });
   });
 

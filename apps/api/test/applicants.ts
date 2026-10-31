@@ -47,7 +47,7 @@ export const idempotencyKey = () => `test-key-${String(++keys).padStart(10, "0")
  * Drives the applicant's side of the API in tests: sign up from /apply, start, save, complete
  * and submit applications, and send queued emails.
  */
-export function applicantKit(t: TestApp, issuer: FakeOidcIssuer, defaultProgrammeId: () => string) {
+export function applicantKit(t: TestApp, issuer: FakeOidcIssuer) {
   /** Signs up (or back in) from /apply, returning headers that act as that applicant. */
   async function signUp(user: FakeGoogleUser): Promise<Record<string, string>> {
     const res = await viaGoogle(t, issuer, user, {
@@ -60,12 +60,13 @@ export function applicantKit(t: TestApp, issuer: FakeOidcIssuer, defaultProgramm
     return { cookie, "x-csrf-token": me.json<Me>().csrfToken };
   }
 
-  function start(headers: Record<string, string>, programmeId = defaultProgrammeId()) {
+  /** Starts an application to the open intake; GLIM's one programme is implied (ADR-0005). */
+  function start(headers: Record<string, string>) {
     return t.request({
       method: "POST",
       url: "/api/v1/applications",
       headers,
-      payload: { programmeId, studyMode: "ONLINE" },
+      payload: { studyMode: "ONLINE" },
     });
   }
 

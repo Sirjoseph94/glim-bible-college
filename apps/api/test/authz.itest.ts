@@ -1,6 +1,5 @@
 import { ENDPOINTS, type EndpointSpec } from "@glim/contracts";
 import {
-  CalendarService,
   CoursesService,
   CurriculaService,
   ProgrammesService,
@@ -26,6 +25,7 @@ import { unwrap } from "@glim/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "./harness";
 import {
+  createCohort,
   createPersonas,
   createUser,
   PERSONA_SPECS,
@@ -125,13 +125,7 @@ const SAMPLES: Record<string, Sample> = {
     n++;
     return Promise.resolve({
       url: "/api/v1/programmes",
-      payload: {
-        code: `P${String(n)}`,
-        name: "Programme",
-        awardType: "CERTIFICATE",
-        durationSemesters: 2,
-        levels: 1,
-      },
+      payload: { code: `P${String(n)}`, name: "Programme" },
     });
   },
   "PATCH /programmes/:id": async (t) => ({
@@ -186,38 +180,56 @@ const SAMPLES: Record<string, Sample> = {
     url: `/api/v1/course-results/${await finalizedResult(t)}/reopen`,
     payload: { reason: "Marking error" },
   }),
-  "GET /results/semesters": () =>
-    Promise.resolve({ url: `/api/v1/results/semesters?semesterId=${personas.world.semesterId}` }),
-  "POST /results/semesters/compute": () => {
+  "GET /results/cohorts/:id": () =>
+    Promise.resolve({ url: `/api/v1/results/cohorts/${personas.world.cohortId}` }),
+  // A fresh offering with nothing finalized: allowed callers approve nothing.
+  "POST /results/approve": async (t) => {
     n++;
-    return Promise.resolve({
-      url: "/api/v1/results/semesters/compute",
-      payload: { semesterId: personas.world.semesterId },
-      headers: { "idempotency-key": `authz-compute-${String(n).padStart(8, "0")}` },
-    });
-  },
-  "POST /results/semesters/approve": () => {
-    n++;
-    return Promise.resolve({
-      url: "/api/v1/results/semesters/approve",
-      payload: { semesterId: personas.world.semesterId },
+    return {
+      url: "/api/v1/results/approve",
+      payload: { offeringId: await freshOffering(t) },
       headers: { "idempotency-key": `authz-approve-${String(n).padStart(8, "0")}` },
-    });
-  },
-  "POST /results/semesters/publish": () => {
-    n++;
-    return Promise.resolve({
-      url: "/api/v1/results/semesters/publish",
-      payload: { semesterId: personas.world.semesterId },
-      headers: { "idempotency-key": `authz-publish-s-${String(n).padStart(8, "0")}` },
-    });
+    };
   },
   "GET /reports/results": () =>
-    Promise.resolve({ url: `/api/v1/reports/results?semesterId=${personas.world.semesterId}` }),
+    Promise.resolve({ url: `/api/v1/reports/results?cohortId=${personas.world.cohortId}` }),
+  "GET /cohorts": () => Promise.resolve({ url: "/api/v1/cohorts" }),
+  "GET /cohorts/:id/schedule": () =>
+    Promise.resolve({ url: `/api/v1/cohorts/${personas.world.cohortId}/schedule` }),
+  // The persona programme has no active curriculum, so allowed callers plan nothing.
+  "POST /cohorts/:id/schedule": () =>
+    Promise.resolve({
+      url: `/api/v1/cohorts/${personas.world.cohortId}/schedule`,
+      payload: { startsOn: "2099-01-01", weeksPerCourse: 1 },
+    }),
+  "GET /course-offerings/:id/makeup-exams": () =>
+    Promise.resolve({
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/makeup-exams`,
+      offering: "O1",
+    }),
+  "PUT /course-offerings/:id/makeup-exams/:studentId": async (t) => ({
+    url: `/api/v1/course-offerings/${personas.world.offerings.O1}/makeup-exams/${await studentOf(t, "sEnrolled")}`,
+    payload: { makeupOn: "2099-12-31", reason: "Was in hospital" },
+    offering: "O1",
+  }),
+  // A makeup to remove each time, so allowed callers get 204.
+  "DELETE /course-offerings/:id/makeup-exams/:studentId": async (t) => {
+    const studentId = await studentOf(t, "sEnrolled");
+    await t.db.pool.query(
+      `INSERT INTO exam_makeups (course_offering_id, student_id, makeup_on, reason, set_by)
+       VALUES ($1, $2, '2099-12-31', 'Fixture', $3) ON CONFLICT DO NOTHING`,
+      [personas.world.offerings.O1, studentId, personas.acadAdmin.userId],
+    );
+    return {
+      url: `/api/v1/course-offerings/${personas.world.offerings.O1}/makeup-exams/${studentId}`,
+      offering: "O1",
+    };
+  },
   "GET /awards/candidates": () => Promise.resolve({ url: "/api/v1/awards/candidates" }),
   "GET /awards": () => Promise.resolve({ url: "/api/v1/awards" }),
   "POST /programme-enrollments/:id/award/propose": async (t) => ({
     url: `/api/v1/programme-enrollments/${await diplomaEnrollment(t)}/award/propose`,
+    payload: { awardType: "CERTIFICATE" },
   }),
   // Nothing is published, so allowed callers get REQUIREMENTS_NOT_MET and nobody graduates.
   "POST /awards/:id/confirm": async (t) => {
@@ -332,7 +344,7 @@ const SAMPLES: Record<string, Sample> = {
   }),
   "PATCH /curricula/:id": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}`,
-    payload: { minElectiveCredits: "1" },
+    payload: { effectiveFrom: "2026-09-01" },
     headers: { "if-match": '"999"' },
   }),
   "PUT /curricula/:id/courses": async (t) => ({
@@ -344,58 +356,6 @@ const SAMPLES: Record<string, Sample> = {
   "POST /curricula/:id/activate": async (t) => ({
     url: `/api/v1/curricula/${(await fixtures(t)).curriculumId}/activate`,
   }),
-  "GET /academic-sessions": () => Promise.resolve({ url: "/api/v1/academic-sessions" }),
-  "POST /academic-sessions": () => {
-    n++;
-    const year = 2100 + n;
-    return Promise.resolve({
-      url: "/api/v1/academic-sessions",
-      payload: {
-        code: `${String(year)}/${String(year + 1)}`,
-        name: "Session",
-        startsOn: `${String(year)}-09-01`,
-        endsOn: `${String(year + 1)}-06-30`,
-      },
-    });
-  },
-  "PATCH /academic-sessions/:id": async (t) => ({
-    url: `/api/v1/academic-sessions/${(await calendarFixtures(t)).sessionId}`,
-    payload: { name: "Renamed" },
-    headers: { "if-match": '"999"' },
-  }),
-  "POST /academic-sessions/:id/activate": async (t) => ({
-    url: `/api/v1/academic-sessions/${(await calendarFixtures(t)).sessionId}/activate`,
-  }),
-  "POST /academic-sessions/:id/close": async (t) => ({
-    url: `/api/v1/academic-sessions/${(await calendarFixtures(t)).sessionId}/close`,
-  }),
-  "GET /semesters": () => Promise.resolve({ url: "/api/v1/semesters" }),
-  "POST /semesters": async (t) => ({
-    url: "/api/v1/semesters",
-    // Overlaps the fixture semester, so allowed callers get a 409 and change nothing.
-    payload: {
-      academicSessionId: (await calendarFixtures(t)).sessionId,
-      code: "SX",
-      name: "X",
-      sequence: 2,
-      startsOn: "2090-09-10",
-      endsOn: "2090-12-01",
-    },
-  }),
-  "PATCH /semesters/:id": async (t) => ({
-    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}`,
-    payload: { name: "Renamed" },
-    headers: { "if-match": '"999"' },
-  }),
-  "POST /semesters/:id/open-registration": async (t) => ({
-    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}/open-registration`,
-  }),
-  "POST /semesters/:id/activate": async (t) => ({
-    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}/activate`,
-  }),
-  "POST /semesters/:id/close": async (t) => ({
-    url: `/api/v1/semesters/${(await calendarFixtures(t)).semesterId}/close`,
-  }),
   "GET /rooms": () => Promise.resolve({ url: "/api/v1/rooms" }),
   "POST /rooms": () => {
     n++;
@@ -405,7 +365,7 @@ const SAMPLES: Record<string, Sample> = {
     });
   },
   "PATCH /rooms/:id": async (t) => ({
-    url: `/api/v1/rooms/${(await calendarFixtures(t)).roomId}`,
+    url: `/api/v1/rooms/${await roomFixture(t)}`,
     payload: { name: "Renamed" },
     headers: { "if-match": '"999"' },
   }),
@@ -431,9 +391,9 @@ const SAMPLES: Record<string, Sample> = {
     return {
       url: "/api/v1/course-offerings",
       payload: {
-        courseId: (await fixtures(t)).courseId,
-        semesterId: personas.world.semesterId,
-        sectionCode: `A${String(n)}`,
+        courseId: await freshCourse(t),
+        cohortId: await authzCohort(t),
+        ...freshDates(),
       },
     };
   },
@@ -479,12 +439,12 @@ const SAMPLES: Record<string, Sample> = {
   "GET /intakes": () => Promise.resolve({ url: "/api/v1/intakes" }),
   "POST /intakes": async (t) => ({
     url: "/api/v1/intakes",
-    // The fixture session already has an intake, so allowed callers get a 409.
+    // The fixture intake already has this code, so allowed callers get a 409.
     payload: {
-      code: "2090",
-      academicSessionId: (await intakeFixture(t)).sessionId,
-      opensOn: "2089-11-01",
-      closesOn: "2090-06-30",
+      code: (await intakeFixture(t)).code,
+      opensOn: "2087-01-01",
+      closesOn: "2087-02-01",
+      startsOn: "2087-03-01",
     },
   }),
   "PATCH /intakes/:id": async (t) => ({
@@ -534,21 +494,6 @@ const SAMPLES: Record<string, Sample> = {
   "GET /reports/referrals": () => Promise.resolve({ url: "/api/v1/reports/referrals" }),
   "GET /admissions/applications/export": () =>
     Promise.resolve({ url: "/api/v1/admissions/applications/export" }),
-  "GET /semester-enrollments/:id/registration": async (t) => ({
-    url: `/api/v1/semester-enrollments/${await semesterEnrollmentOf(t, "sEnrolled")}/registration`,
-    owner: "sEnrolled",
-  }),
-  // The persona semester is PLANNED, so the owner's window is closed (422) and nothing changes.
-  "POST /semester-enrollments/:id/electives": async (t) => ({
-    url: `/api/v1/semester-enrollments/${await semesterEnrollmentOf(t, "sEnrolled")}/electives`,
-    payload: { offeringId: personas.world.offerings.O2 },
-    owner: "sEnrolled",
-  }),
-  // O1 is compulsory for the owner, so dropping it is refused (422).
-  "DELETE /semester-enrollments/:id/electives/:courseEnrollmentId": async (t) => ({
-    url: `/api/v1/semester-enrollments/${await semesterEnrollmentOf(t, "sEnrolled")}/electives/${await courseEnrollmentOf(t, "sEnrolled")}`,
-    owner: "sEnrolled",
-  }),
   "GET /course-offerings/:id/enrollments": () =>
     Promise.resolve({
       url: `/api/v1/course-offerings/${personas.world.offerings.O1}/enrollments`,
@@ -1153,7 +1098,6 @@ const SAMPLES: Record<string, Sample> = {
   }),
 };
 
-/** A new draft offering of the fixture course in the persona world's semester. */
 let meetingShared: string | undefined;
 /** One Class Meeting on O1, for the read and change samples. */
 async function meetingFixture(t: TestApp): Promise<string> {
@@ -1408,10 +1352,10 @@ const SCHEME_SAMPLE = {
 async function finalizedResult(t: TestApp): Promise<string> {
   const scheme = await seededScheme(t);
   const { rows } = await t.db.pool.query<{ id: string }>(
-    `INSERT INTO course_results (course_enrollment_id, programme_enrollment_id, semester_id, course_offering_id,
+    `INSERT INTO course_results (course_enrollment_id, programme_enrollment_id, completed_on, course_offering_id,
        course_id, student_id, grading_scheme_id, credits_x10, final_pct_x100, letter, points_x100,
        quality_points_x1000, passed, status, finalized_at)
-     SELECT ce.id, ce.programme_enrollment_id, o.semester_id, o.id, o.course_id, ce.student_id, $3,
+     SELECT ce.id, ce.programme_enrollment_id, o.ends_on, o.id, o.course_id, ce.student_id, $3,
        30, 7200, 'A', 500, 15000, true, 'FINALIZED', now()
        FROM course_enrollments ce JOIN course_offerings o ON o.id = ce.course_offering_id
        JOIN students s ON s.id = ce.student_id
@@ -1477,8 +1421,9 @@ async function transcriptFixture(t: TestApp): Promise<string> {
 async function proposedAward(t: TestApp): Promise<string> {
   const pe = await diplomaEnrollment(t);
   const { rows } = await t.db.pool.query<{ id: string }>(
-    `INSERT INTO awards (programme_enrollment_id, cgpa_x100, credits_earned_x10)
-     VALUES ($1, 0, 0) ON CONFLICT (programme_enrollment_id) DO UPDATE SET status = 'DRAFT'
+    `INSERT INTO awards (programme_enrollment_id, award_type, cgpa_x100, credits_earned_x10)
+     VALUES ($1, 'CERTIFICATE', 0, 0)
+     ON CONFLICT (programme_enrollment_id, award_type) DO UPDATE SET status = 'DRAFT'
      RETURNING id`,
     [pe],
   );
@@ -1534,14 +1479,49 @@ async function announcementFixture(t: TestApp, key = "shared"): Promise<string> 
   return created.id;
 }
 
-async function freshOffering(t: TestApp): Promise<string> {
+let cohortShared: string | undefined;
+/** A cohort of its own for the offerings the samples create, from 2091. */
+async function authzCohort(t: TestApp): Promise<string> {
+  if (cohortShared !== undefined) return cohortShared;
+  ({ cohortId: cohortShared } = await createCohort(t, await fixtureProgramme(t), {
+    code: "2091-AUTHZ",
+    opensOn: "2088-01-01",
+    closesOn: "2088-02-01",
+    startsOn: "2091-01-01",
+  }));
+  return cohortShared;
+}
+
+/** A course of its own: a cohort takes each course once (ADR-0005). */
+async function freshCourse(t: TestApp): Promise<string> {
   n++;
+  return unwrap(
+    await t.app
+      .get(CoursesService)
+      .create(
+        { code: `AUTHZF${String(n)}`, title: "Fresh", description: null, credits: "2.0" },
+        SYSTEM_ACTOR,
+      ),
+  ).id;
+}
+
+let days = 0;
+/** Two days of the authz cohort's schedule that no other offering of it has. */
+function freshDates() {
+  const day = (d: number) =>
+    new Date(Date.parse("2091-01-01T00:00:00Z") + d * 86_400_000).toISOString().slice(0, 10);
+  days += 2;
+  return { startsOn: day(days), endsOn: day(days + 1), examOn: day(days + 1) };
+}
+
+/** A new draft offering in the authz cohort. */
+async function freshOffering(t: TestApp): Promise<string> {
   return unwrap(
     await t.app.get(AssignmentsService).createOfferingWithLecturers(
       {
-        courseId: (await fixtures(t)).courseId,
-        semesterId: personas.world.semesterId,
-        sectionCode: `F${String(n)}`,
+        courseId: await freshCourse(t),
+        cohortId: await authzCohort(t),
+        ...freshDates(),
         titleOverride: null,
         capacity: null,
         lecturers: [],
@@ -1572,12 +1552,10 @@ async function lecturerFixture(t: TestApp) {
   return lecturerShared;
 }
 
-/** A persona student's semester enrollment, course enrollment and Matric Number. */
-async function semesterEnrollmentOf(t: TestApp, name: PersonaName): Promise<string> {
+/** A persona student's student record, course enrollment and Matric Number. */
+async function studentOf(t: TestApp, name: PersonaName): Promise<string> {
   const { rows } = await t.db.pool.query<{ id: string }>(
-    `SELECT se.id FROM semester_enrollments se
-       JOIN programme_enrollments pe ON pe.id = se.programme_enrollment_id
-       JOIN students s ON s.id = pe.student_id WHERE s.user_id = $1`,
+    "SELECT id FROM students WHERE user_id = $1",
     [personas[name].userId],
   );
   return rows[0]?.id ?? "";
@@ -1651,57 +1629,35 @@ async function submittedApplicationFixture(t: TestApp): Promise<string> {
   return submittedShared;
 }
 
-let intakeShared: { sessionId: string; intakeId: string } | undefined;
+let intakeShared: { code: string; intakeId: string } | undefined;
 async function intakeFixture(t: TestApp) {
   if (intakeShared !== undefined) return intakeShared;
-  const { sessionId } = await calendarFixtures(t);
   const intake = unwrap(
     await t.app.get(IntakesService).create(
       {
         code: "2091",
-        academicSessionId: sessionId,
         opensOn: "2089-11-01",
         closesOn: "2090-06-30",
+        startsOn: "2090-09-01",
         offerAcceptanceDays: 21,
       },
       SYSTEM_ACTOR,
     ),
   );
-  intakeShared = { sessionId, intakeId: intake.id };
+  intakeShared = { code: intake.code, intakeId: intake.id };
   return intakeShared;
 }
 
-let calendarShared: { sessionId: string; semesterId: string; roomId: string } | undefined;
-/** A planned session (2090/2091) with one semester, and a Room, for the calendar samples. */
-async function calendarFixtures(t: TestApp) {
-  if (calendarShared !== undefined) return calendarShared;
-  const calendar = t.app.get(CalendarService);
-  const session = unwrap(
-    await calendar.createSession(
-      { code: "2090/2091", name: "Authz", startsOn: "2090-09-01", endsOn: "2091-06-30" },
-      SYSTEM_ACTOR,
-    ),
-  );
-  const semester = unwrap(
-    await calendar.createSemester(
-      {
-        academicSessionId: session.id,
-        code: "S1",
-        name: "First",
-        sequence: 1,
-        startsOn: "2090-09-04",
-        endsOn: "2091-01-26",
-      },
-      SYSTEM_ACTOR,
-    ),
-  );
-  const room = unwrap(
+let roomShared: string | undefined;
+/** A Room for the Room samples. */
+async function roomFixture(t: TestApp): Promise<string> {
+  if (roomShared !== undefined) return roomShared;
+  roomShared = unwrap(
     await t.app
       .get(RoomsService)
       .create({ code: "AUTHZ-R", name: "Authz Room", capacity: null }, SYSTEM_ACTOR),
-  );
-  calendarShared = { sessionId: session.id, semesterId: semester.id, roomId: room.id };
-  return calendarShared;
+  ).id;
+  return roomShared;
 }
 
 let shared: { programmeId: string; courseId: string; curriculumId: string } | undefined;
@@ -1709,12 +1665,7 @@ let shared: { programmeId: string; courseId: string; curriculumId: string } | un
 async function fixtures(t: TestApp) {
   if (shared !== undefined) return shared;
   const programme = unwrap(
-    await t.app
-      .get(ProgrammesService)
-      .create(
-        { code: "AUTHZ", name: "Authz", awardType: "DIPLOMA", durationSemesters: 4, levels: 2 },
-        SYSTEM_ACTOR,
-      ),
+    await t.app.get(ProgrammesService).create({ code: "AUTHZ", name: "Authz" }, SYSTEM_ACTOR),
   );
   const course = unwrap(
     await t.app
@@ -1724,13 +1675,16 @@ async function fixtures(t: TestApp) {
   const curriculum = unwrap(
     await t.app
       .get(CurriculaService)
-      .create(
-        { programmeId: programme.id, effectiveFrom: "2026-09-01", minElectiveCredits: "0.0" },
-        SYSTEM_ACTOR,
-      ),
+      .create({ programmeId: programme.id, effectiveFrom: "2026-09-01" }, SYSTEM_ACTOR),
   );
   shared = { programmeId: programme.id, courseId: course.id, curriculumId: curriculum.id };
   return shared;
+}
+
+/** The fixture programme as a cohort needs it. */
+async function fixtureProgramme(t: TestApp) {
+  const { programmeId } = await fixtures(t);
+  return { id: programmeId, code: "AUTHZ", name: "Authz" };
 }
 
 const key = (e: EndpointSpec) => `${e.method} ${e.path}`;

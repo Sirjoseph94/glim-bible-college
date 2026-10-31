@@ -208,8 +208,7 @@ export const adminVideoSchema = videoSchema.extend({
   origin: z.enum(ENUMS["videos.origin"]),
   courseCode: z.string(),
   courseTitle: z.string(),
-  semesterName: z.string(),
-  sessionCode: z.string(),
+  cohortCode: z.string(),
   /** Why YouTube stopped serving it, when UNAVAILABLE. */
   unavailableReason: z.string().nullable(),
   lastCheckedAt: z.iso.datetime().nullable(),

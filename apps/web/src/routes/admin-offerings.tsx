@@ -1,11 +1,4 @@
-import type {
-  academic,
-  calendar,
-  enrollment,
-  Offering,
-  offerings,
-  RosterItem,
-} from "@glim/contracts";
+import type { academic, enrollment, Offering, offerings, RosterItem } from "@glim/contracts";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useId, useState } from "react";
@@ -16,6 +9,7 @@ import { SetupHint } from "../components/app/setup-hint";
 import { useDetailBar } from "../components/app/shell-parts";
 import { formText } from "../components/form";
 import { OfferingStatusBadge } from "../components/app/offering-status";
+import { CalendarDate } from "../components/time";
 import { Badge, type Tone } from "../components/ui/badge";
 import { Banner } from "../components/ui/banner";
 import { Button } from "../components/ui/button";
@@ -26,6 +20,7 @@ import { EmptyState } from "../components/ui/empty-state";
 import { Select, TextField } from "../components/ui/field";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { useSubmit } from "../components/use-submit";
+import { cohortsQuery } from "./admin-cohorts";
 
 type Role = Offering["lecturers"][number]["role"];
 type RosterEntry = RosterItem;
@@ -39,34 +34,28 @@ const ROLE_LABELS: Record<Role, string> = {
 
 const ENROLLMENT_STATUS: Record<RosterEntry["status"], { tone: Tone; word: string }> = {
   ENROLLED: { tone: "success", word: "Enrolled" },
-  DROPPED: { tone: "neutral", word: "Dropped" },
   WITHDRAWN: { tone: "warning", word: "Withdrawn" },
   COMPLETED: { tone: "neutral", word: "Completed" },
 };
 
 const SELECTION_LABELS: Record<RosterEntry["selection"], string> = {
-  COMPULSORY: "Compulsory",
-  ELECTIVE: "Elective",
+  COHORT: "With the cohort",
   MANUAL: "Registered by the office",
 };
 
-const semestersQuery = queryOptions({
-  queryKey: ["semesters"],
-  queryFn: ({ signal }) => api<typeof calendar.listSemesters>("GET", "/semesters", { signal }),
-});
 const lecturersQuery = queryOptions({
   queryKey: ["lecturers"],
   queryFn: ({ signal }) => api<typeof offerings.listLecturers>("GET", "/lecturers", { signal }),
 });
-const offeringsQuery = (semesterId: string) =>
+const offeringsQuery = (cohortId: string) =>
   queryOptions({
-    queryKey: ["offerings", semesterId],
+    queryKey: ["offerings", cohortId],
     queryFn: ({ signal }) =>
       api<typeof offerings.listOfferings>("GET", "/course-offerings", {
         signal,
-        query: { semesterId },
+        query: { cohortId },
       }),
-    enabled: semesterId !== "",
+    enabled: cohortId !== "",
   });
 const offeringQuery = (id: string) =>
   queryOptions({
@@ -83,20 +72,20 @@ const coursesQuery = queryOptions({
     }),
 });
 
-/** Course Offerings per semester (TRD §9.2). */
+/** Course Offerings per cohort, in date order (TRD §9.2, ADR-0005). */
 export function AdminOfferingsPage() {
-  const semesters = useQuery(semestersQuery);
-  const [semesterId, setSemesterId] = useState("");
+  const cohorts = useQuery(cohortsQuery);
+  const [cohortId, setCohortId] = useState("");
   const [offering, setOffering] = useState(false);
-  const chosen = semesterId || (semesters.data?.items.find((s) => s.status !== "CLOSED")?.id ?? "");
+  const chosen = cohortId || (cohorts.data?.items.find((c) => c.status === "ACTIVE")?.id ?? "");
   const list = useQuery(offeringsQuery(chosen));
-  const semester = semesters.data?.items.find((s) => s.id === chosen);
+  const cohort = cohorts.data?.items.find((c) => c.id === chosen);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Course Offerings"
-        meta="The courses taught each semester, and who teaches them."
+        meta="Each cohort's courses, one after another, and who teaches them."
         actions={
           chosen === "" ? null : (
             <Button
@@ -106,34 +95,34 @@ export function AdminOfferingsPage() {
                 setOffering(true);
               }}
             >
-              Offer a course this semester
+              Offer a course to this cohort
             </Button>
           )
         }
       />
-      {semesters.isPending ? (
-        <SkeletonGroup label="Loading semesters">
+      {cohorts.isPending ? (
+        <SkeletonGroup label="Loading cohorts">
           <Skeleton className="h-control" />
           <Skeleton className="h-40" />
         </SkeletonGroup>
-      ) : semesters.isError ? (
-        <LoadFailed what="the semesters" onRetry={() => void semesters.refetch()} />
-      ) : semesters.data.items.length === 0 ? (
-        <EmptyState icon="calendar" title="No semesters yet">
-          Add a semester to an Academic Session on the Calendar page first.
+      ) : cohorts.isError ? (
+        <LoadFailed what="the cohorts" onRetry={() => void cohorts.refetch()} />
+      ) : cohorts.data.items.length === 0 ? (
+        <EmptyState icon="calendar" title="No cohorts yet">
+          A cohort is created when the first applicant of an intake accepts their offer.
         </EmptyState>
       ) : (
         <>
           <Select
-            label="Semester"
+            label="Cohort"
             value={chosen}
             onChange={(e) => {
-              setSemesterId(e.target.value);
+              setCohortId(e.target.value);
             }}
           >
-            {semesters.data.items.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code}) · {s.status.toLowerCase()}
+            {cohorts.data.items.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code} · {c.name}
               </option>
             ))}
           </Select>
@@ -144,8 +133,8 @@ export function AdminOfferingsPage() {
           ) : list.isError ? (
             <LoadFailed what="the Course Offerings" onRetry={() => void list.refetch()} />
           ) : list.data.items.length === 0 ? (
-            <EmptyState icon="book" title="No offerings in this semester yet">
-              Offer a course to put it on this semester's timetable.
+            <EmptyState icon="book" title="No offerings for this cohort yet">
+              Plan the cohort's courses on the Cohorts page, or offer one course here.
             </EmptyState>
           ) : (
             <DataTable caption="Course Offerings" minWidth="min-w-160">
@@ -155,7 +144,7 @@ export function AdminOfferingsPage() {
                     Course
                   </th>
                   <th scope="col" className={headCell}>
-                    Section
+                    Dates
                   </th>
                   <th scope="col" className={headCell}>
                     Primary Lecturer
@@ -177,7 +166,9 @@ export function AdminOfferingsPage() {
                         {o.courseCode} {o.title}
                       </Link>
                     </td>
-                    <td className={bodyCell}>{o.sectionCode}</td>
+                    <td className={bodyCell}>
+                      <CalendarDate value={o.startsOn} /> to <CalendarDate value={o.endsOn} />
+                    </td>
                     <td className={bodyCell}>
                       {o.lecturers.find((l) => l.role === "PRIMARY")?.lecturerName ?? (
                         <span className="text-ink-muted">No Primary yet</span>
@@ -197,8 +188,8 @@ export function AdminOfferingsPage() {
         <NewOffering
           open={offering}
           onOpenChange={setOffering}
-          semesterId={chosen}
-          semesterName={semester ? `${semester.name} (${semester.code})` : undefined}
+          cohortId={chosen}
+          cohortName={cohort?.name}
         />
       ) : null}
     </div>
@@ -208,13 +199,13 @@ export function AdminOfferingsPage() {
 function NewOffering({
   open,
   onOpenChange,
-  semesterId,
-  semesterName,
+  cohortId,
+  cohortName,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  semesterId: string;
-  semesterName: string | undefined;
+  cohortId: string;
+  cohortName: string | undefined;
 }) {
   const courses = useQuery({ ...coursesQuery, enabled: open });
   const lecturers = useQuery({ ...lecturersQuery, enabled: open });
@@ -227,8 +218,8 @@ function NewOffering({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Offer a course this semester"
-      description={semesterName}
+      title="Offer a course to this cohort"
+      description={cohortName}
       footer={
         <Button type="submit" form={formId} variant="primary" block loading={busy}>
           Create offering
@@ -249,8 +240,10 @@ function NewOffering({
               {
                 body: {
                   courseId: formText(d, "courseId"),
-                  semesterId,
-                  sectionCode: formText(d, "sectionCode") || "01",
+                  cohortId,
+                  startsOn: formText(d, "startsOn"),
+                  endsOn: formText(d, "endsOn"),
+                  examOn: formText(d, "examOn"),
                   lecturers: primary === "" ? [] : [{ lecturerId: primary, role: "PRIMARY" }],
                 },
               },
@@ -295,12 +288,7 @@ function NewOffering({
             </option>
           ))}
         </Select>
-        <TextField
-          name="sectionCode"
-          label="Section"
-          defaultValue="01"
-          error={fieldErrors.sectionCode}
-        />
+        <DateFields errors={fieldErrors} />
         <Select
           name="primary"
           label="Primary Lecturer"
@@ -363,13 +351,14 @@ function OfferingDetail({ offering: o }: { offering: Offering }) {
   return (
     <div className="space-y-5">
       <PageHeader
-        overline={`${o.courseCode} · Section ${o.sectionCode}`}
+        overline={`${o.courseCode} · ${o.cohortCode}`}
         title={o.title}
         meta={
           <span className="inline-flex flex-wrap items-center gap-2">
             <OfferingStatusBadge status={o.status} />
             <span>
-              {o.semesterName}, {o.sessionCode} · {o.credits} credits
+              <CalendarDate value={o.startsOn} /> to <CalendarDate value={o.endsOn} /> · exam{" "}
+              <CalendarDate value={o.examOn} /> · {o.credits} credits
             </span>
           </span>
         }
@@ -413,6 +402,8 @@ function OfferingDetail({ offering: o }: { offering: Offering }) {
           {problem.body}
         </Banner>
       ) : null}
+
+      {open ? <Dates offering={o} onSaved={set} /> : null}
 
       <section className="space-y-3">
         <h2 className="text-heading">Lecturers</h2>
@@ -606,7 +597,7 @@ function Roster({ offeringId, open }: { offeringId: string; open: boolean }) {
                 Matric Number
               </th>
               <th scope="col" className={headCell}>
-                Level
+                Cohort
               </th>
               <th scope="col" className={headCell}>
                 How
@@ -624,7 +615,7 @@ function Roster({ offeringId, open }: { offeringId: string; open: boolean }) {
               <tr key={r.courseEnrollmentId}>
                 <td className={`${bodyCell} ${stickyCell}`}>{r.studentName}</td>
                 <td className={`${bodyCell} font-mono text-code`}>{r.matricNumber}</td>
-                <td className={bodyCell}>Level {r.levelNo}</td>
+                <td className={`${bodyCell} font-mono text-code`}>{r.cohortCode}</td>
                 <td className={bodyCell}>{SELECTION_LABELS[r.selection]}</td>
                 <td className={bodyCell}>
                   <Badge tone={ENROLLMENT_STATUS[r.status].tone}>
@@ -864,5 +855,92 @@ export function AdminLecturersPage() {
         </form>
       </Sheet>
     </div>
+  );
+}
+
+/** An offering's start, end and exam dates; the exam falls within the offering (ADR-0005). */
+function DateFields({
+  errors,
+  value,
+}: {
+  errors: Record<string, string | undefined>;
+  value?: { startsOn: string; endsOn: string; examOn: string };
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      <TextField
+        name="startsOn"
+        type="date"
+        label="Starts"
+        required
+        defaultValue={value?.startsOn}
+        error={errors.startsOn}
+      />
+      <TextField
+        name="endsOn"
+        type="date"
+        label="Ends"
+        required
+        defaultValue={value?.endsOn}
+        error={errors.endsOn}
+      />
+      <TextField
+        name="examOn"
+        type="date"
+        label="Exam"
+        required
+        defaultValue={value?.examOn}
+        error={errors.examOn}
+      />
+    </div>
+  );
+}
+
+/** Moving an offering's dates: it can't overlap the cohort's others or leave its Class Meetings. */
+function Dates({
+  offering: o,
+  onSaved,
+}: {
+  offering: Offering;
+  onSaved: (next: Offering) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { busy, problem, fieldErrors, run } = useSubmit();
+  return (
+    <section className="space-y-3">
+      <h2 className="text-heading">Dates</h2>
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const d = new FormData(event.currentTarget);
+          void run(async () => {
+            onSaved(
+              await api<typeof offerings.updateOffering>("PATCH", "/course-offerings/:id", {
+                params: { id: o.id },
+                headers: { "if-match": `"${String(o.version)}"` },
+                body: {
+                  startsOn: formText(d, "startsOn"),
+                  endsOn: formText(d, "endsOn"),
+                  examOn: formText(d, "examOn"),
+                },
+              }),
+            );
+            await queryClient.invalidateQueries({ queryKey: ["offerings"] });
+            await queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+          });
+        }}
+      >
+        {problem ? (
+          <Banner tone="danger" title={problem.title}>
+            {problem.body}
+          </Banner>
+        ) : null}
+        <DateFields key={String(o.version)} errors={fieldErrors} value={o} />
+        <Button type="submit" variant="secondary" loading={busy}>
+          Save dates
+        </Button>
+      </form>
+    </section>
   );
 }

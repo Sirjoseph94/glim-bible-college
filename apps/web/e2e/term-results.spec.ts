@@ -74,17 +74,18 @@ test("a Lecturer finalizes results, the student sees them, the Registrar reopens
   await openArea(page, "Results");
   const gpa = page.getByRole("region", { name: "Grade point average" });
   await expect(gpa).toContainText("Provisional");
-  await expect(gpa).toContainText(/This semester\d\.\d\dCGPA\d\.\d\d/);
-  const semester = page.getByRole("region", { name: /2032\/2033/ });
-  await expect(semester).toContainText("PAS101");
-  await expect(semester).toContainText("Pastoral Care");
-  await expect(semester.locator("strong")).toHaveText(letter ?? "");
+  await expect(gpa).toContainText(/CGPA\d\.\d\d/);
+  const courses = page.getByRole("region", { name: "Course results" });
+  await expect(courses).toContainText("PAS101");
+  await expect(courses).toContainText("Pastoral Care");
+  await expect(courses.locator("strong")).toHaveText(letter ?? "");
   await signOut(page);
 
   await signIn(page, REGISTRAR);
   await openArea(page, "Results");
   await page.getByRole("link", { name: "Course results", exact: true }).click();
-  await page.getByRole("link", { name: "PAS101 Pastoral Care" }).click();
+  // The teaching cohort's offering; the academic spec planned another of PAS101.
+  await page.getByRole("link", { name: /PAS101 Pastoral Care\s*DMIN-2026-E2E/ }).click();
   const row = page.getByRole("row", { name: /Bola Online/ });
   await row.getByRole("button", { name: "Reopen Bola Online's result" }).click();
   const reopen = page.getByRole("dialog", { name: "Reopen Bola Online's result?" });

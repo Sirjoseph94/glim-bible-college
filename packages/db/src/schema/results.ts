@@ -14,7 +14,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { courseOfferings, courses, semesters } from "./academic";
+import { courses } from "./academic";
+import { courseOfferings } from "./offerings";
 import { enumCheck, std, stdRo, tstz } from "./columns";
 import { courseEnrollments, programmeEnrollments, students } from "./enrollment";
 import { gradingSchemes } from "./grading-schemes";
@@ -35,9 +36,8 @@ export const courseResults = pgTable(
     programmeEnrollmentId: uuid("programme_enrollment_id")
       .notNull()
       .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
-    semesterId: uuid("semester_id")
-      .notNull()
-      .references(() => semesters.id, { onDelete: "restrict" }),
+    /** When the course was completed: its offering's end date, or the imported date. */
+    completedOn: date("completed_on").notNull(),
     courseOfferingId: uuid("course_offering_id").references(() => courseOfferings.id, {
       onDelete: "restrict",
     }),
@@ -65,7 +65,6 @@ export const courseResults = pgTable(
     finalizedAt: tstz("finalized_at"),
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
     approvedAt: tstz("approved_at"),
-    publishedAt: tstz("published_at"),
     reopenedCount: integer("reopened_count").notNull().default(0),
   },
   (t) => [
@@ -85,12 +84,12 @@ export const courseResults = pgTable(
       "course_results_finalized_check",
       sql`${t.status} = 'DRAFT' OR (${t.finalizedAt} IS NOT NULL)`,
     ),
-    index("course_results_enrollment_semester").on(t.programmeEnrollmentId, t.semesterId),
+    index("course_results_enrollment_completed").on(t.programmeEnrollmentId, t.completedOn),
     index("course_results_student_course").on(t.studentId, t.courseId),
     index("course_results_offering").on(t.courseOfferingId),
     // A legacy result is identified by who, when and what: importing it again updates it.
     uniqueIndex("course_results_import_once")
-      .on(t.programmeEnrollmentId, t.semesterId, t.courseId)
+      .on(t.programmeEnrollmentId, t.courseId, t.completedOn)
       .where(sql`source = 'IMPORT'`),
   ],
 );
@@ -109,45 +108,6 @@ export const courseResultRevisions = pgTable("course_result_revisions", {
     .references(() => users.id, { onDelete: "restrict" }),
   reason: text().notNull(),
 });
-
-/**
- * Owner: results (TRD §6.8, §14.5). A programme enrollment's semester: its GPA and the CGPA up to
- * it, recomputed deterministically from course results; `calc_version` goes up only when a figure
- * changes. DRAFT → APPROVED → PUBLISHED by the Registrar.
- */
-export const semesterResults = pgTable(
-  "semester_results",
-  {
-    ...std(),
-    programmeEnrollmentId: uuid("programme_enrollment_id")
-      .notNull()
-      .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
-    semesterId: uuid("semester_id")
-      .notNull()
-      .references(() => semesters.id, { onDelete: "restrict" }),
-    creditsAttemptedX10: integer("credits_attempted_x10").notNull(),
-    creditsEarnedX10: integer("credits_earned_x10").notNull(),
-    qualityPointsX1000: bigint("quality_points_x1000", { mode: "number" }).notNull(),
-    gpaX100: integer("gpa_x100"),
-    cumCreditsAttemptedX10: integer("cum_credits_attempted_x10").notNull(),
-    cumCreditsEarnedX10: integer("cum_credits_earned_x10").notNull(),
-    cumQualityPointsX1000: bigint("cum_quality_points_x1000", { mode: "number" }).notNull(),
-    cgpaX100: integer("cgpa_x100"),
-    standing: text().notNull().default("UNKNOWN"),
-    status: text().notNull().default("DRAFT"),
-    computedAt: tstz("computed_at").notNull(),
-    calcVersion: integer("calc_version").notNull().default(1),
-    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
-    approvedAt: tstz("approved_at"),
-    publishedAt: tstz("published_at"),
-  },
-  (t) => [
-    enumCheck("semester_results.standing", t.standing),
-    enumCheck("semester_results.status", t.status),
-    unique("semester_results_once").on(t.programmeEnrollmentId, t.semesterId),
-    index("semester_results_semester").on(t.semesterId, t.status),
-  ],
-);
 
 /** One line of an award's requirements checklist (§14.6). */
 export interface AwardRequirement {
@@ -169,9 +129,9 @@ export const awardSequences = pgTable(
 );
 
 /**
- * Owner: results (TRD §6.8, §14.6). The Certificate or Diploma conferred on completing a
- * programme: proposed (DRAFT, with its checklist), then CONFERRED by the Registrar with a
- * certificate number.
+ * Owner: results (TRD §6.8, §14.6). The Certificate (half the curriculum's credits passed) or the
+ * Diploma (every course passed) of one programme enrollment (ADR-0005): proposed (DRAFT, with its
+ * checklist), then CONFERRED by the Registrar with a certificate number.
  */
 export const awards = pgTable(
   "awards",
@@ -179,8 +139,8 @@ export const awards = pgTable(
     ...std(),
     programmeEnrollmentId: uuid("programme_enrollment_id")
       .notNull()
-      .unique()
       .references(() => programmeEnrollments.id, { onDelete: "restrict" }),
+    awardType: text("award_type").notNull(),
     cgpaX100: integer("cgpa_x100").notNull(),
     awardClass: text("award_class"),
     creditsEarnedX10: integer("credits_earned_x10").notNull(),
@@ -193,7 +153,9 @@ export const awards = pgTable(
     approvedAt: tstz("approved_at"),
   },
   (t) => [
+    enumCheck("awards.award_type", t.awardType),
     enumCheck("awards.status", t.status),
+    unique("awards_once_per_type").on(t.programmeEnrollmentId, t.awardType),
     check(
       "awards_conferred_check",
       sql`${t.status} <> 'CONFERRED' OR (${t.certificateNo} IS NOT NULL AND ${t.awardedOn} IS NOT NULL AND ${t.awardClass} IS NOT NULL)`,

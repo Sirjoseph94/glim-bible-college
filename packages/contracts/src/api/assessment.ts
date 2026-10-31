@@ -972,3 +972,55 @@ export const useOnlineScore = endpoint({
   response: gradeSchema,
   successStatus: 200,
 });
+
+// ---- Makeup exams (GLOSSARY "Makeup Exam", ADR-0005) ----
+
+export const makeupExamSchema = z.object({
+  studentId: z.uuid(),
+  studentName: z.string(),
+  matricNumber: z.string().nullable(),
+  makeupOn: z.iso.date(),
+  reason: z.string(),
+  setAt: z.iso.datetime(),
+});
+
+export type MakeupExam = z.infer<typeof makeupExamSchema>;
+
+export const listMakeupExams = endpoint({
+  method: "GET",
+  path: "/course-offerings/:id/makeup-exams",
+  summary: "Students given a later exam date on this offering",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:read",
+  resource: { type: "course-offering", param: "id" },
+  params: idParams,
+  response: z.object({ items: z.array(makeupExamSchema) }),
+});
+
+export const setMakeupExam = endpoint({
+  method: "PUT",
+  path: "/course-offerings/:id/makeup-exams/:studentId",
+  summary:
+    "Give a student who missed the exam a makeup date (on or after the exam date), or change it, with a reason",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:update",
+  resource: { type: "course-offering", param: "id" },
+  params: z.object({ id: z.uuid(), studentId: z.uuid() }),
+  body: z.object({ makeupOn: z.iso.date(), reason: z.string().trim().min(3).max(500) }).strict(),
+  response: makeupExamSchema,
+});
+
+export const removeMakeupExam = endpoint({
+  method: "DELETE",
+  path: "/course-offerings/:id/makeup-exams/:studentId",
+  summary: "Remove a student's makeup exam date",
+  tag: "Assessment",
+  auth: "session",
+  permission: "assessment:grade:update",
+  resource: { type: "course-offering", param: "id" },
+  params: z.object({ id: z.uuid(), studentId: z.uuid() }),
+  response: z.object({}),
+  successStatus: 204,
+});

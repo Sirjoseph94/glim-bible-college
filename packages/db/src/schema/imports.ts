@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { enumCheck, std } from "./columns";
-import { files } from "./content";
+import { files } from "./files";
 import { users } from "./identity";
 
 export interface ImportStats {

@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { courseOfferings } from "./academic";
+import { courseOfferings } from "./offerings";
 import { enumCheck, std, tstz } from "./columns";
 import { users } from "./identity";
 import { classMeetings, conferenceRecords } from "./meetings";

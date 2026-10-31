@@ -14,10 +14,10 @@ const isoDate = z.iso.date();
 export const intakeSchema = z.object({
   id: z.uuid(),
   code: z.string(),
-  academicSessionId: z.uuid(),
-  academicSessionName: z.string(),
   opensOn: isoDate,
   closesOn: isoDate,
+  /** When its cohort starts: no offering of the cohort may start before it (ADR-0005). */
+  startsOn: isoDate,
   offerAcceptanceDays: z.number().int(),
   status: z.enum(ENUMS["intakes.status"]),
   version: z.number().int(),
@@ -38,7 +38,8 @@ export const listIntakes = endpoint({
 export const createIntake = endpoint({
   method: "POST",
   path: "/intakes",
-  summary: "Plan the yearly intake for an Academic Session",
+  summary:
+    "Plan an intake: its application dates (not overlapping another intake's) and its cohort's start date",
   tag: "Admissions",
   auth: "session",
   permission: "admissions:intake:manage",
@@ -47,10 +48,10 @@ export const createIntake = endpoint({
       code: z
         .string()
         .trim()
-        .regex(/^\d{4}$/, "Use the year students start, e.g. 2027"),
-      academicSessionId: z.uuid(),
+        .regex(/^\d{4}(-[A-Za-z0-9]{1,10})?$/, "Use the start year, e.g. 2027 or 2027-JAN"),
       opensOn: isoDate,
       closesOn: isoDate,
+      startsOn: isoDate,
       offerAcceptanceDays: z.number().int().min(1).max(90).default(21),
     })
     .strict(),
@@ -71,6 +72,7 @@ export const updateIntake = endpoint({
     .object({
       opensOn: isoDate.optional(),
       closesOn: isoDate.optional(),
+      startsOn: isoDate.optional(),
       offerAcceptanceDays: z.number().int().min(1).max(90).optional(),
     })
     .strict(),
@@ -104,9 +106,6 @@ export const publicProgrammeSchema = z.object({
   id: z.uuid(),
   code: z.string(),
   name: z.string(),
-  awardType: z.enum(ENUMS["programmes.award_type"]),
-  levels: z.number().int(),
-  durationSemesters: z.number().int(),
 });
 
 export const currentIntakeSchema = z.object({
@@ -114,9 +113,9 @@ export const currentIntakeSchema = z.object({
   intake: z
     .object({
       code: z.string(),
-      academicSessionName: z.string(),
       opensOn: isoDate,
       closesOn: isoDate,
+      startsOn: isoDate,
       status: z.enum(ENUMS["intakes.status"]),
     })
     .nullable(),

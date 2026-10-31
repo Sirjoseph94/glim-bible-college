@@ -37,7 +37,7 @@ test("the Registrar's results pages", async ({ page }) => {
   await signIn(page, REGISTRAR);
   for (const path of [
     "/results/courses",
-    "/results/semesters",
+    "/results/cohorts",
     "/results/awards",
     "/results/transcripts",
     "/admin/grading-schemes",
@@ -47,7 +47,14 @@ test("the Registrar's results pages", async ({ page }) => {
 
 test("the System Admin's pages", async ({ page }) => {
   await signIn(page, SYSTEM_ADMIN);
-  for (const path of ["/admin/users", "/admin/ops", "/admin/jobs", "/admin/audit"])
+  for (const path of [
+    "/admin/users",
+    "/admin/ops",
+    "/admin/jobs",
+    "/admin/audit",
+    "/admin/cohorts",
+    "/admin/rooms",
+  ])
     await expectAccessible(page, path);
 });
 
@@ -77,7 +84,7 @@ test.describe("in the dark theme", () => {
 
   test("the Registrar's results pages", async ({ page }) => {
     await signIn(page, REGISTRAR);
-    for (const path of ["/results/courses", "/results/semesters", "/results/transcripts"])
+    for (const path of ["/results/courses", "/results/cohorts", "/results/transcripts"])
       await expectAccessible(page, path);
   });
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ENUMS } from "../enums";
+import { ENUMS, STANDINGS } from "../enums";
 import { endpoint } from "../http";
 
 /**
@@ -12,6 +12,8 @@ const idParams = z.object({ id: z.uuid() });
 export const transcriptCourseSchema = z.object({
   code: z.string(),
   title: z.string(),
+  /** When it was completed: courses are listed in this order (ADR-0005). */
+  completedOn: z.iso.date(),
   creditsX10: z.number().int(),
   finalPctX100: z.number().int().nullable(),
   letter: z.string().nullable(),
@@ -21,42 +23,33 @@ export const transcriptCourseSchema = z.object({
   /** A later attempt replaced it in the CGPA (repeat policy). */
   repeated: z.boolean(),
   imported: z.boolean(),
+  /** Not yet approved by the Registrar (unofficial transcripts only). */
+  provisional: z.boolean(),
 });
 
 export const transcriptSnapshotSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   kind: z.enum(ENUMS["transcripts.kind"]),
   asOf: z.iso.date(),
   institution: z.object({ name: z.string() }),
-  programme: z.object({
-    code: z.string(),
-    name: z.string(),
-    awardType: z.enum(ENUMS["programmes.award_type"]),
-  }),
+  programme: z.object({ code: z.string(), name: z.string() }),
   student: z.object({ legalName: z.string(), matricNumber: z.string() }),
-  semesters: z.array(
-    z.object({
-      sessionCode: z.string(),
-      semesterName: z.string(),
-      /** Not yet approved by the Registrar (unofficial transcripts only). */
-      provisional: z.boolean(),
-      courses: z.array(transcriptCourseSchema),
-      creditsAttemptedX10: z.number().int(),
-      creditsEarnedX10: z.number().int(),
-      gpaX100: z.number().int().nullable(),
-      cgpaX100: z.number().int().nullable(),
-      standing: z.enum(ENUMS["semester_results.standing"]),
-    }),
-  ),
+  courses: z.array(transcriptCourseSchema),
   totals: z.object({
     creditsAttemptedX10: z.number().int(),
     creditsEarnedX10: z.number().int(),
     cgpaX100: z.number().int().nullable(),
-    standing: z.enum(ENUMS["semester_results.standing"]),
+    standing: z.enum(STANDINGS),
   }),
-  award: z
-    .object({ awardClass: z.string(), certificateNo: z.string(), awardedOn: z.iso.date() })
-    .nullable(),
+  /** Conferred awards: the Certificate, then the Diploma. */
+  awards: z.array(
+    z.object({
+      awardType: z.enum(ENUMS["awards.award_type"]),
+      awardClass: z.string(),
+      certificateNo: z.string(),
+      awardedOn: z.iso.date(),
+    }),
+  ),
   legend: z.object({
     bands: z.array(
       z.object({
@@ -188,7 +181,7 @@ export const issueTranscript = endpoint({
   method: "POST",
   path: "/transcript-requests/:id/issue",
   summary:
-    "Issue the transcript: snapshot, SHA-256, serial and verification code (official ones need approved semesters)",
+    "Issue the transcript: snapshot, SHA-256, serial and verification code (official ones need every result approved)",
   tag: "Transcripts",
   auth: "session",
   permission: "transcript:document:issue",

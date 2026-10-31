@@ -8,8 +8,8 @@ import { createTestApp, type TestApp } from "./harness";
 import { createPersonas, type PersonaName, type Personas } from "./personas";
 
 /**
- * Transcripts (TRD §14.7, AC-14). sEnrolled's O1 result (PBIB101, 80 ⇒ A) is finalized; its
- * semester isn't approved until the official transcript test approves and publishes it.
+ * Transcripts (TRD §14.7, AC-14). sEnrolled's O1 result (PBIB101, 80 ⇒ A) is finalized; it isn't
+ * approved until the official transcript test approves it.
  */
 
 let t: TestApp;
@@ -120,21 +120,25 @@ describe("unofficial transcripts", () => {
     );
     expect(doc.snapshotSha256).toBe(snapshotSha256(doc.snapshot));
     expect(doc.snapshot).toMatchObject({
-      version: 1,
+      version: 2,
       kind: "UNOFFICIAL",
       asOf: "2026-11-02",
-      programme: { code: "PDIP", name: "Persona Diploma", awardType: "DIPLOMA" },
+      programme: { code: "PDIP", name: "Persona Diploma" },
       student: { legalName: "sEnrolled Persona" },
       totals: { creditsAttemptedX10: 30, creditsEarnedX10: 30, cgpaX100: 500, standing: "GOOD" },
-      award: null,
+      awards: [],
     });
     expect(doc.snapshot.student.matricNumber).toMatch(/^GLIM\/PDIP\//);
-    expect(doc.snapshot.semesters).toHaveLength(1);
-    expect(doc.snapshot.semesters[0]).toMatchObject({
-      provisional: true,
-      gpaX100: 500,
-      courses: [{ code: "PBIB101", letter: "A", finalPctX100: 8000, repeated: false }],
-    });
+    expect(doc.snapshot.courses).toEqual([
+      expect.objectContaining({
+        code: "PBIB101",
+        completedOn: "2099-12-31",
+        letter: "A",
+        finalPctX100: 8000,
+        repeated: false,
+        provisional: true,
+      }),
+    ]);
     expect(doc.snapshot.legend.bands).toHaveLength(6);
     // The stored hash is of the stored snapshot, byte for byte.
     const stored = await q<{ snapshot: unknown; snapshot_sha256: string }>(
@@ -176,7 +180,7 @@ describe("unofficial transcripts", () => {
 });
 
 describe("official transcripts", () => {
-  it("need a purpose and recipient, the Registrar's approval and approved semesters", async () => {
+  it("need a purpose and recipient, the Registrar's approval and every result approved", async () => {
     expect((await ask({ kind: "OFFICIAL" })).statusCode).toBe(400);
     const res = await ask(official);
     expect(res.statusCode, res.body).toBe(201);
@@ -210,18 +214,10 @@ describe("official transcripts", () => {
     expect(notYet.statusCode).toBe(422);
     expect(notYet.json<ErrorBody>().error.code).toBe("TRANSCRIPT_NOT_ISSUABLE");
 
-    for (const step of ["compute", "approve"])
-      expect(
-        (
-          await send(
-            "registrar",
-            "POST",
-            `/results/semesters/${step}`,
-            { semesterId: p.world.semesterId },
-            key(),
-          )
-        ).statusCode,
-      ).toBe(200);
+    expect(
+      (await send("registrar", "POST", "/results/approve", { cohortId: p.world.cohortId }, key()))
+        .statusCode,
+    ).toBe(200);
     const issued = await send(
       "registrar",
       "POST",
@@ -235,7 +231,7 @@ describe("official transcripts", () => {
     const doc = (
       await send("sEnrolled", "GET", `/transcripts/${done.transcript?.id ?? ""}`)
     ).json<Transcript>();
-    expect(doc.snapshot.semesters[0]?.provisional).toBe(false);
+    expect(doc.snapshot.courses[0]?.provisional).toBe(false);
     // Issuing again returns the same transcript.
     const again = await send(
       "registrar",
@@ -456,7 +452,7 @@ describe("PDF, delivery and revocation (ticket 42)", () => {
     const statuses = await q<{ status: string; n: number }>(
       "SELECT status, count(*)::int AS n FROM transcripts GROUP BY status ORDER BY status",
     );
-    // Every transcript listed PBIB101 in that semester; the one revoked earlier stays revoked.
+    // Every transcript listed PBIB101 completed on that date; the one revoked earlier stays revoked.
     expect(statuses.rows).toEqual([
       { status: "REVOKED", n: 1 },
       { status: "SUPERSEDED", n: 5 },

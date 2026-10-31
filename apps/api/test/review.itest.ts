@@ -1,5 +1,4 @@
 import type {
-  AcademicSession,
   Application,
   ApplicationQueueItem,
   Intake,
@@ -16,7 +15,6 @@ import { createPersonas, type Personas } from "./personas";
 let issuer: FakeOidcIssuer;
 let t: TestApp;
 let p: Personas;
-let certificate: Programme;
 let diploma: Programme;
 let kit: ReturnType<typeof applicantKit>;
 
@@ -37,38 +35,17 @@ beforeAll(async () => {
     }),
   });
   p = await createPersonas(t);
-  kit = applicantKit(t, issuer, () => certificate.id);
+  kit = applicantKit(t, issuer);
   const acad = p.acadAdmin.headers;
-  const programme = async (code: string, awardType: string, levels: number) =>
-    (
-      await t.request({
-        method: "POST",
-        url: "/api/v1/programmes",
-        headers: acad,
-        payload: {
-          code,
-          name: `${code} programme`,
-          awardType,
-          durationSemesters: 2 * levels,
-          levels,
-        },
-      })
-    ).json<Programme>();
-  certificate = await programme("CERT", "CERTIFICATE", 1);
-  diploma = await programme("DIP", "DIPLOMA", 2);
-  const session = (
+  // The college's one programme (ADR-0005); the personas' is archived.
+  diploma = (
     await t.request({
       method: "POST",
-      url: "/api/v1/academic-sessions",
+      url: "/api/v1/programmes",
       headers: acad,
-      payload: {
-        code: "2027/2028",
-        name: "2027/2028 Session",
-        startsOn: "2027-09-01",
-        endsOn: "2028-06-30",
-      },
+      payload: { code: "DIP", name: "DIP programme" },
     })
-  ).json<AcademicSession>();
+  ).json<Programme>();
   const intake = (
     await t.request({
       method: "POST",
@@ -76,9 +53,9 @@ beforeAll(async () => {
       headers: p.admOfficer.headers,
       payload: {
         code: "2027",
-        academicSessionId: session.id,
         opensOn: "2026-11-01",
         closesOn: "2027-06-30",
+        startsOn: "2027-09-01",
       },
     })
   ).json<Intake>();
@@ -104,7 +81,7 @@ beforeAll(async () => {
     t.clock.advance({ minutes: 1 });
   };
   await submitAs("Ada", undefined, { bornAgainWhen: SECRET });
-  await submitAs("Bola", { studyMode: "ON_CAMPUS", programmeId: diploma.id });
+  await submitAs("Bola", { studyMode: "ON_CAMPUS" });
   await submitAs("Chidi", { feedback: { heardVia: ["STAFF"], referralCode: "abcd234" } });
   await submitAs("Dayo", { feedback: { heardVia: ["FRIEND"], referralCode: "ZZZZ999" } });
   // A draft that was never submitted stays private to its applicant.
@@ -147,7 +124,7 @@ describe("the officers' queue", () => {
     expect(page.items[0]).toMatchObject({
       referenceNo: "GLIM-APP-2027-00001",
       status: "SUBMITTED",
-      programme: { code: "CERT" },
+      programme: { code: "DIP" },
       studyMode: "ONLINE",
     });
     expect(JSON.stringify(page)).not.toContain(SECRET);
@@ -155,9 +132,7 @@ describe("the officers' queue", () => {
   });
 
   it("filters by programme, study mode and status, searches by name or reference, and pages", async () => {
-    expect((await queue(`?programmeId=${diploma.id}`)).items.map((i) => i.name)).toEqual([
-      "Bola Okafor",
-    ]);
+    expect((await queue(`?programmeId=${diploma.id}`)).items).toHaveLength(4);
     expect((await queue("?studyMode=ON_CAMPUS")).items.map((i) => i.name)).toEqual(["Bola Okafor"]);
     expect((await queue("?q=chidi")).items.map((i) => i.name)).toEqual(["Chidi Okafor"]);
     expect((await queue("?q=APP-2027-00004")).items.map((i) => i.name)).toEqual(["Dayo Okafor"]);

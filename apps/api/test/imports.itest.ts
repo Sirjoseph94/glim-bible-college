@@ -1,4 +1,4 @@
-import type { ImportJob, Offering, Semester } from "@glim/contracts";
+import type { ImportJob, Offering } from "@glim/contracts";
 import { drainQueues } from "@glim/db/testing";
 import { OBJECT_STORAGE, type ObjectStorage } from "@glim/integrations/storage/port";
 import { UserAdminService } from "@glim/modules/identity";
@@ -9,10 +9,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { admissionsWorld } from "./admissions-world";
 import { idempotencyKey } from "./applicants";
 import { createTestApp, type TestApp } from "./harness";
-import { createPersonas, type Personas } from "./personas";
+import { createCohort, createPersonas, type Personas } from "./personas";
 
 let t: TestApp;
 let p: Personas;
+let cohortId: string;
 
 const STUDENT_COLUMNS = [
   "email",
@@ -26,8 +27,7 @@ const STUDENT_COLUMNS = [
   "matric_number",
   "programme_code",
   "study_mode",
-  "level",
-  "entry_session_code",
+  "cohort_code",
 ];
 
 const studentRow = (n: number, overrides: Partial<Record<string, string>> = {}) => {
@@ -43,8 +43,7 @@ const studentRow = (n: number, overrides: Partial<Record<string, string>> = {}) 
     matric_number: `GLIM/DIP/2025/${String(n).padStart(4, "0")}`,
     programme_code: "DIP",
     study_mode: "Online",
-    level: "2",
-    entry_session_code: "2025/2026",
+    cohort_code: "DIP-2025-SEP",
     ...overrides,
   };
   return STUDENT_COLUMNS.map((c) => row[c] ?? "");
@@ -53,19 +52,14 @@ const studentRow = (n: number, overrides: Partial<Record<string, string>> = {}) 
 beforeAll(async () => {
   t = await createTestApp();
   p = await createPersonas(t);
-  await admissionsWorld(t, p);
-  const acad = p.acadAdmin.headers;
-  await t.request({
-    method: "POST",
-    url: "/api/v1/academic-sessions",
-    headers: acad,
-    payload: {
-      code: "2025/2026",
-      name: "2025/2026 Session",
-      startsOn: "2025-09-01",
-      endsOn: "2026-06-30",
-    },
-  });
+  const world = await admissionsWorld(t, p);
+  // The cohort current students already belong to: DIP-2025-SEP.
+  ({ cohortId } = await createCohort(t, world.diploma, {
+    code: "2025-SEP",
+    opensOn: "2025-03-01",
+    closesOn: "2025-06-30",
+    startsOn: "2025-09-01",
+  }));
 });
 
 afterAll(async () => {
@@ -130,10 +124,11 @@ describe("importing students", () => {
     fileId = await upload(
       toCsv(STUDENT_COLUMNS, [
         studentRow(1),
-        studentRow(2, { study_mode: "on campus", level: "1" }),
+        studentRow(2, { study_mode: "on campus" }),
         studentRow(3),
         studentRow(4, { email: "not-an-email" }),
         studentRow(5, { programme_code: "NOPE" }),
+        studentRow(6, { cohort_code: "DIP-1999" }),
       ]),
       "students.csv",
     );
@@ -146,9 +141,9 @@ describe("importing students", () => {
       dryRun: true,
       fileName: "students.csv",
       stats: {
-        total: 5,
+        total: 6,
         valid: 3,
-        invalid: 2,
+        invalid: 3,
         created: 3,
         updated: 0,
         unchanged: 0,
@@ -164,6 +159,7 @@ describe("importing students", () => {
     expect(rows.slice(1).map((r) => [r[0], r[1]])).toEqual([
       ["5", expect.stringContaining("email")],
       ["6", "No programme with code NOPE"],
+      ["7", "No DIP cohort with code DIP-1999"],
     ]);
   });
 
@@ -172,22 +168,25 @@ describe("importing students", () => {
     expect((await runImport("STUDENTS", other, false)).started.statusCode).toBe(400);
 
     const { job } = await runImport("STUDENTS", fileId, false);
-    expect(job?.stats).toMatchObject({ valid: 3, invalid: 2, created: 3 });
+    expect(job?.stats).toMatchObject({ valid: 3, invalid: 3, created: 3 });
     const { rows } = await t.db.pool.query<{
       status: string;
       referral_code: string;
       matric: string;
-      level: number;
+      cohort: string;
       mode: string;
+      started: string;
     }>(
-      `SELECT u.status, u.referral_code, pe.matric_number AS matric, pe.current_level AS level, pe.study_mode AS mode
+      `SELECT u.status, u.referral_code, pe.matric_number AS matric, c.code AS cohort, pe.study_mode AS mode,
+              pe.started_on::text AS started
          FROM users u JOIN students s ON s.user_id = u.id JOIN programme_enrollments pe ON pe.student_id = s.id
+         JOIN cohorts c ON c.id = pe.cohort_id
         WHERE u.email LIKE 'legacy%' ORDER BY pe.matric_number`,
     );
-    expect(rows.map((r) => [r.status, r.matric, r.level, r.mode])).toEqual([
-      ["INVITED", "GLIM/DIP/2025/0001", 2, "ONLINE"],
-      ["INVITED", "GLIM/DIP/2025/0002", 1, "ON_CAMPUS"],
-      ["INVITED", "GLIM/DIP/2025/0003", 2, "ONLINE"],
+    expect(rows.map((r) => [r.status, r.matric, r.cohort, r.mode, r.started])).toEqual([
+      ["INVITED", "GLIM/DIP/2025/0001", "DIP-2025-SEP", "ONLINE", "2025-09-01"],
+      ["INVITED", "GLIM/DIP/2025/0002", "DIP-2025-SEP", "ON_CAMPUS", "2025-09-01"],
+      ["INVITED", "GLIM/DIP/2025/0003", "DIP-2025-SEP", "ONLINE", "2025-09-01"],
     ]);
     for (const r of rows) expect(r.referral_code).toMatch(/^[A-HJ-NP-Z2-9]{7}$/);
   });
@@ -211,7 +210,7 @@ describe("importing students", () => {
   it("is idempotent: importing the same file again changes nothing", async () => {
     await runImport("STUDENTS", fileId, true);
     const { job } = await runImport("STUDENTS", fileId, false);
-    expect(job?.stats).toMatchObject({ created: 0, updated: 0, unchanged: 3, invalid: 2 });
+    expect(job?.stats).toMatchObject({ created: 0, updated: 0, unchanged: 3, invalid: 3 });
   });
 
   it("refuses to commit a file that changed after its dry run", async () => {
@@ -256,50 +255,30 @@ describe("importing Lecturers and course enrollments", () => {
     ).toBe(1);
   });
 
-  it("registers imported students on past offerings, by Matric Number and course", async () => {
-    const semester = (
-      await t.request({
-        method: "POST",
-        url: "/api/v1/semesters",
-        headers: acad(),
-        payload: {
-          academicSessionId: (
-            await t.db.pool.query<{ id: string }>(
-              "SELECT id FROM academic_sessions WHERE code = '2025/2026'",
-            )
-          ).rows[0]?.id,
-          code: "S1",
-          name: "First Semester",
-          sequence: 1,
-          startsOn: "2025-09-08",
-          endsOn: "2026-01-30",
-        },
-      })
-    ).json<Semester>();
+  it("registers imported students on their cohort's offerings, by Matric Number and course", async () => {
     const course = (
       await t.db.pool.query<{ id: string }>("SELECT id FROM courses WHERE code = 'BIB101'")
     ).rows[0]?.id;
-    await t
+    const offering = await t
       .request({
         method: "POST",
         url: "/api/v1/course-offerings",
         headers: acad(),
-        payload: { courseId: course, semesterId: semester.id },
+        payload: {
+          courseId: course,
+          cohortId,
+          startsOn: "2025-09-08",
+          endsOn: "2025-10-31",
+          examOn: "2025-10-31",
+        },
       })
       .then((r) => r.json<Offering>());
-    const columns = [
-      "matric_number",
-      "course_code",
-      "session_code",
-      "semester_code",
-      "section_code",
-      "status",
-    ];
+    const columns = ["matric_number", "course_code", "cohort_code", "status"];
     const file = await upload(
       toCsv(columns, [
-        ["glim/dip/2025/0001", "BIB101", "2025/2026", "S1", "", "COMPLETED"],
-        ["GLIM/DIP/2025/0002", "BIB101", "2025/2026", "s1", "01", ""],
-        ["GLIM/DIP/2025/0002", "NOPE101", "2025/2026", "S1", "", ""],
+        ["glim/dip/2025/0001", "BIB101", "", "COMPLETED"],
+        ["GLIM/DIP/2025/0002", "BIB101", "dip-2025-sep", ""],
+        ["GLIM/DIP/2025/0002", "NOPE101", "", ""],
       ]),
     );
     expect((await runImport("COURSE_ENROLLMENTS", file, true)).job?.stats).toMatchObject({
@@ -310,11 +289,68 @@ describe("importing Lecturers and course enrollments", () => {
       created: 2,
     });
     expect(
-      await count(
-        "SELECT count(*) AS n FROM course_enrollments WHERE course_offering_id IN (SELECT id FROM course_offerings WHERE semester_id = $1)",
-        [semester.id],
-      ),
+      await count("SELECT count(*) AS n FROM course_enrollments WHERE course_offering_id = $1", [
+        offering.id,
+      ]),
     ).toBe(2);
+  });
+
+  it("records past results by the date each course was completed, approved and counting (D-04)", async () => {
+    await t.db.pool.query(
+      "UPDATE programmes SET grading_scheme_id = (SELECT id FROM grading_schemes WHERE name = 'GLIM Diploma') WHERE code = 'DIP'",
+    );
+    const columns = [
+      "matric_number",
+      "course_code",
+      "completed_on",
+      "percent",
+      "credits",
+      "result_kind",
+    ];
+    const file = await upload(
+      toCsv(columns, [
+        ["GLIM/DIP/2025/0003", "BIB101", "2025-10-31", "35", "", ""],
+        ["GLIM/DIP/2025/0003", "BIB101", "2026-02-27", "72", "", ""],
+        ["GLIM/DIP/2025/0003", "THE101", "31/10/2025", "60", "", ""],
+      ]),
+    );
+    expect((await runImport("COURSE_RESULTS", file, true)).job?.stats).toMatchObject({
+      valid: 2,
+      invalid: 1,
+    });
+    expect((await runImport("COURSE_RESULTS", file, false)).job?.stats).toMatchObject({
+      created: 2,
+    });
+    const { rows } = await t.db.pool.query<Record<string, unknown>>(
+      `SELECT r.completed_on::text AS completed_on, r.attempt_no, r.letter, r.status, r.source
+         FROM course_results r JOIN programme_enrollments pe ON pe.id = r.programme_enrollment_id
+        WHERE pe.matric_number = 'GLIM/DIP/2025/0003' ORDER BY r.completed_on`,
+    );
+    // The retake is the second attempt because it was completed later.
+    expect(rows).toEqual([
+      {
+        completed_on: "2025-10-31",
+        attempt_no: 1,
+        letter: "F",
+        status: "APPROVED",
+        source: "IMPORT",
+      },
+      {
+        completed_on: "2026-02-27",
+        attempt_no: 2,
+        letter: "A",
+        status: "APPROVED",
+        source: "IMPORT",
+      },
+    ]);
+    // Importing the file again changes nothing.
+    const again = await upload(
+      toCsv(columns, [["GLIM/DIP/2025/0003", "BIB101", "2025-10-31", "35", "", ""]]),
+    );
+    await runImport("COURSE_RESULTS", again, true);
+    expect((await runImport("COURSE_RESULTS", again, false)).job?.stats).toMatchObject({
+      unchanged: 1,
+    });
   });
 });
 

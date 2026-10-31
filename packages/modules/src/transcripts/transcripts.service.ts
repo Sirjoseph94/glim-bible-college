@@ -373,23 +373,18 @@ export class TranscriptsService {
 
   /**
    * After a course result is reopened (§14.3), marks the programme enrollment's issued
-   * transcripts that list that course in that semester SUPERSEDED. Idempotent.
+   * transcripts that list that course completed on that date SUPERSEDED. Idempotent.
    */
   async supersedeFor(input: {
     programmeEnrollmentId: string;
     courseCode: string;
-    sessionCode: string;
-    semesterName: string;
+    completedOn: string;
     reason: string;
   }): Promise<string[]> {
     return this.db.withTx(async ({ db }) => {
       const t = schema.transcripts;
-      const path = `$.semesters[*] ? (@.sessionCode == $session && @.semesterName == $semester).courses[*] ? (@.code == $code)`;
-      const vars = JSON.stringify({
-        session: input.sessionCode,
-        semester: input.semesterName,
-        code: input.courseCode,
-      });
+      const path = `$.courses[*] ? (@.code == $code && @.completedOn == $completedOn)`;
+      const vars = JSON.stringify({ code: input.courseCode, completedOn: input.completedOn });
       const rows = await db
         .update(t)
         .set({ status: "SUPERSEDED" })

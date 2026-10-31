@@ -21,15 +21,21 @@ import { ConfirmDialog } from "../components/ui/dialog";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton, SkeletonGroup } from "../components/ui/skeleton";
 import { cn } from "../design/cn";
-import { hundredths } from "../design/format";
+import { credits, hundredths } from "../design/format";
 import { Icon } from "../design/icons";
 
 const candidatesKey = ["award-candidates"];
 const awardsKey = ["awards"];
 
+type AwardType = Award["awardType"];
+
+const AWARD_NAME: Record<AwardType, string> = { CERTIFICATE: "Certificate", DIPLOMA: "Diploma" };
+
 /**
- * The Registrar's awards (TRD §14.6): propose an award to see the final CGPA, award class and the
- * requirements checklist, then confer it, which numbers the certificate (and graduates the student unless they have another active programme).
+ * The Registrar's awards (TRD §14.6, ADR-0005): the Certificate once a student has passed courses
+ * worth half the curriculum's credits, the Diploma once they've passed every course. Propose one
+ * to see the CGPA, award class and requirements checklist, then confer it, which numbers the
+ * certificate; the Diploma also graduates the student unless they have another active programme.
  */
 export function AwardsPage() {
   const candidates = useQuery({
@@ -48,11 +54,12 @@ export function AwardsPage() {
       <PageHeader
         overline="Registrar"
         title="Awards"
-        meta="Propose an award to check the final CGPA, award class and requirements, then confer it."
+        meta="Propose the Certificate or the Diploma to check the CGPA, award class and requirements, then confer it."
       />
       {proposal !== null ? (
         <Proposal
-          key={`${proposal.id}:${String(proposal.version)}`}
+          // By award only: conferring updates the award in place, so its dialog can close cleanly.
+          key={proposal.id}
           award={proposal}
           onDone={(a) => {
             setProposal(a);
@@ -84,13 +91,16 @@ export function AwardsPage() {
                   Matric Number
                 </th>
                 <th scope="col" className={headCell}>
-                  Programme
+                  Cohort
+                </th>
+                <th scope="col" className={`${headCell} ${numericCell}`}>
+                  Credits passed
                 </th>
                 <th scope="col" className={`${headCell} ${numericCell}`}>
                   CGPA
                 </th>
                 <th scope="col" className={headCell}>
-                  Award
+                  Awards
                 </th>
                 <th scope="col" className={headCell}>
                   <span className="sr-only">Action</span>
@@ -134,7 +144,7 @@ export function AwardsPage() {
                   Student
                 </th>
                 <th scope="col" className={headCell}>
-                  Programme
+                  Award
                 </th>
                 <th scope="col" className={headCell}>
                   Award class
@@ -156,7 +166,7 @@ export function AwardsPage() {
                   <th scope="row" className={cn(bodyCell, stickyCell, "text-left font-normal")}>
                     {a.studentName}
                   </th>
-                  <td className={bodyCell}>{a.programmeCode}</td>
+                  <td className={bodyCell}>{AWARD_NAME[a.awardType]}</td>
                   <td className={bodyCell}>{a.awardClass}</td>
                   <td className={`${bodyCell} ${numericCell}`}>{hundredths(a.cgpaX100)}</td>
                   <td className={`${bodyCell} font-mono text-code`}>{a.certificateNo}</td>
@@ -198,36 +208,53 @@ function Candidate({
         ) : null}
       </th>
       <td className={`${bodyCell} font-mono text-code`}>{c.matricNumber}</td>
-      <td className={bodyCell}>{c.programmeCode}</td>
+      <td className={`${bodyCell} font-mono text-code`}>{c.cohortCode}</td>
+      <td className={`${bodyCell} ${numericCell}`}>
+        {credits(c.creditsEarnedX10)} of {credits(c.totalCreditsX10)}
+      </td>
       <td className={`${bodyCell} ${numericCell}`}>{hundredths(c.cgpaX100)}</td>
       <td className={bodyCell}>
-        {c.award === null ? (
-          <span className="text-ink-muted">Not proposed</span>
+        {c.awards.length === 0 ? (
+          <span className="text-ink-muted">None proposed</span>
         ) : (
-          <Badge tone={AWARD_STATUS[c.award.status].tone}>
-            {AWARD_STATUS[c.award.status].word}
-          </Badge>
+          <span className="flex flex-wrap gap-1">
+            {c.awards.map((a) => (
+              <Badge key={a.id} tone={AWARD_STATUS[a.status].tone}>
+                {AWARD_NAME[a.awardType]}: {AWARD_STATUS[a.status].word}
+              </Badge>
+            ))}
+          </span>
         )}
       </td>
       <td className={`${bodyCell} text-right`}>
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={busy}
-          onClick={() => {
-            void run(async () => {
-              onProposed(
-                await api<typeof results.proposeAward>(
-                  "POST",
-                  "/programme-enrollments/:id/award/propose",
-                  { params: { id: c.programmeEnrollmentId } },
-                ),
-              );
-            });
-          }}
-        >
-          {c.award === null ? "Propose award" : "Check award again"}
-        </Button>
+        <span className="flex justify-end gap-2">
+          {(["CERTIFICATE", "DIPLOMA"] as const).map((type) => {
+            const existing = c.awards.find((a) => a.awardType === type);
+            if (existing?.status === "CONFERRED") return null;
+            const eligible = type === "CERTIFICATE" ? c.certificateEligible : c.diplomaEligible;
+            return (
+              <Button
+                key={type}
+                variant={eligible ? "primary" : "secondary"}
+                size="sm"
+                loading={busy}
+                onClick={() => {
+                  void run(async () => {
+                    onProposed(
+                      await api<typeof results.proposeAward>(
+                        "POST",
+                        "/programme-enrollments/:id/award/propose",
+                        { params: { id: c.programmeEnrollmentId }, body: { awardType: type } },
+                      ),
+                    );
+                  });
+                }}
+              >
+                {existing === undefined ? "Propose" : "Check"} {AWARD_NAME[type]}
+              </Button>
+            );
+          })}
+        </span>
       </td>
     </tr>
   );
@@ -248,11 +275,11 @@ function Proposal({ award: a, onDone }: { award: Award; onDone: (a: Award) => vo
     >
       <div className="space-y-1">
         <h2 className="text-heading">
-          {a.studentName} · {a.programmeName}
+          {a.studentName} · {AWARD_NAME[a.awardType]}
         </h2>
         <p className="flex flex-wrap items-center gap-2 text-body-sm">
           <span>
-            Final CGPA <span className="tabular-nums">{hundredths(a.cgpaX100)}</span>
+            CGPA <span className="tabular-nums">{hundredths(a.cgpaX100)}</span>
           </span>
           {a.awardClass === null ? (
             <Badge tone="warning">No award (below the minimum CGPA)</Badge>
@@ -281,40 +308,42 @@ function Proposal({ award: a, onDone }: { award: Award; onDone: (a: Award) => vo
           <span className="font-mono text-code">{a.certificateNo}</span>.
         </Banner>
       ) : ready ? (
-        <>
-          <Button
-            onClick={() => {
-              setConfirming(true);
-            }}
-          >
-            Confer {a.awardClass}
-          </Button>
-          <ConfirmDialog
-            open={confirming}
-            onOpenChange={setConfirming}
-            title={`Confer the ${a.programmeName} on ${a.studentName}?`}
-            confirmLabel="Confer award"
-            onConfirm={async () => {
-              const done = await api<typeof results.confirmAward>("POST", "/awards/:id/confirm", {
-                params: { id: a.id },
-                headers: { "idempotency-key": crypto.randomUUID() },
-              });
-              await queryClient.invalidateQueries({ queryKey: candidatesKey });
-              await queryClient.invalidateQueries({ queryKey: awardsKey });
-              setConfirming(false);
-              onDone(done);
-            }}
-          >
-            {a.studentName} ({a.matricNumber}) is awarded {a.awardClass}, final CGPA{" "}
-            {hundredths(a.cgpaX100)}. The certificate is numbered now and the student leaves the
-            list of students on {a.programmeCode}.
-          </ConfirmDialog>
-        </>
+        <Button
+          onClick={() => {
+            setConfirming(true);
+          }}
+        >
+          Confer {a.awardClass}
+        </Button>
       ) : (
         <p className="text-body-sm text-ink-muted">
           It can be conferred once every requirement is met.
         </p>
       )}
+      {/* Always mounted: conferring swaps the button for the banner, and the dialog must close
+          itself rather than vanish while open. */}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Confer the ${AWARD_NAME[a.awardType]} on ${a.studentName}?`}
+        confirmLabel="Confer award"
+        onConfirm={async () => {
+          const done = await api<typeof results.confirmAward>("POST", "/awards/:id/confirm", {
+            params: { id: a.id },
+            headers: { "idempotency-key": crypto.randomUUID() },
+          });
+          await queryClient.invalidateQueries({ queryKey: candidatesKey });
+          await queryClient.invalidateQueries({ queryKey: awardsKey });
+          setConfirming(false);
+          onDone(done);
+        }}
+      >
+        {a.studentName} ({a.matricNumber}) is awarded the {AWARD_NAME[a.awardType]} with{" "}
+        {a.awardClass}, CGPA {hundredths(a.cgpaX100)}. The certificate is numbered now.
+        {a.awardType === "DIPLOMA"
+          ? ` The student completes the programme and leaves the list of students on ${a.programmeCode}.`
+          : " The student carries on towards the Diploma."}
+      </ConfirmDialog>
     </section>
   );
 }

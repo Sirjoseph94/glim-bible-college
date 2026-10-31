@@ -1,4 +1,4 @@
-import type { AcademicSession, Application, Intake, Me, Programme } from "@glim/contracts";
+import type { Application, Intake, Me } from "@glim/contracts";
 import { FakeOidcIssuer, type FakeGoogleUser } from "@glim/integrations/oidc/fake-issuer";
 import { OpenIdConnectProvider } from "@glim/integrations/oidc/openid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -12,8 +12,6 @@ let issuer: FakeOidcIssuer;
 let t: TestApp;
 let p: Personas;
 let intake: Intake;
-let certificate: Programme;
-let diploma: Programme;
 
 beforeAll(async () => {
   issuer = await new FakeOidcIssuer().start();
@@ -27,37 +25,13 @@ beforeAll(async () => {
     }),
   });
   p = await createPersonas(t);
-  const acad = p.acadAdmin.headers;
-  const programme = async (code: string, awardType: string, levels: number) =>
-    (
-      await t.request({
-        method: "POST",
-        url: "/api/v1/programmes",
-        headers: acad,
-        payload: {
-          code,
-          name: `${code} programme`,
-          awardType,
-          durationSemesters: 2 * levels,
-          levels,
-        },
-      })
-    ).json<Programme>();
-  certificate = await programme("CERT", "CERTIFICATE", 1);
-  diploma = await programme("DIP", "DIPLOMA", 2);
-  const session = (
-    await t.request({
-      method: "POST",
-      url: "/api/v1/academic-sessions",
-      headers: acad,
-      payload: {
-        code: "2027/2028",
-        name: "2027/2028 Session",
-        startsOn: "2027-09-01",
-        endsOn: "2028-06-30",
-      },
-    })
-  ).json<AcademicSession>();
+  // The college's one programme (ADR-0005); the personas' is archived.
+  await t.request({
+    method: "POST",
+    url: "/api/v1/programmes",
+    headers: p.acadAdmin.headers,
+    payload: { code: "DIP", name: "DIP programme" },
+  });
   intake = (
     await t.request({
       method: "POST",
@@ -65,9 +39,9 @@ beforeAll(async () => {
       headers: p.admOfficer.headers,
       payload: {
         code: "2027",
-        academicSessionId: session.id,
         opensOn: "2026-11-01",
         closesOn: "2027-06-30",
+        startsOn: "2027-09-01",
       },
     })
   ).json<Intake>();
@@ -78,10 +52,9 @@ afterAll(async () => {
   await issuer.stop();
 });
 
-const kit = () => applicantKit(t, issuer, () => certificate.id);
+const kit = () => applicantKit(t, issuer);
 const applicant = (user: FakeGoogleUser) => kit().signUp(user);
-const start = (headers: Record<string, string>, programmeId?: string) =>
-  kit().start(headers, programmeId);
+const start = (headers: Record<string, string>) => kit().start(headers);
 const save = (
   headers: Record<string, string>,
   application: { id: string; version: number },
@@ -138,7 +111,7 @@ describe("starting an application", () => {
     expect(res.json()).toMatchObject({ error: { code: "INTAKE_CLOSED" } });
   });
 
-  it("makes the user an Applicant, with their Google email filled in, once per intake", async () => {
+  it("makes the user an Applicant for the college's programme, with their Google email filled in, once per intake", async () => {
     await t.request({
       method: "POST",
       url: `/api/v1/intakes/${intake.id}/open`,
@@ -149,14 +122,14 @@ describe("starting an application", () => {
       email: "tunde@gmail.com",
       name: "Tunde",
     });
-    const res = await start(headers, diploma.id);
+    const res = await start(headers);
     expect(res.statusCode).toBe(201);
     const application = res.json<Application>();
     expect(application).toMatchObject({
       status: "DRAFT",
       referenceNo: null,
       studyMode: "ONLINE",
-      programme: { code: "DIP", awardType: "DIPLOMA" },
+      programme: { code: "DIP", name: "DIP programme" },
       intake: { code: "2027", startsOn: "2027-09-01", status: "OPEN" },
       contact: { email: "tunde@gmail.com" },
       minimumAgeYears: 18,
@@ -246,8 +219,8 @@ describe("saving the draft", () => {
     expect(draft.missing.consent).toEqual([]);
   });
 
-  it("refuses applicants under 18 when the Academic Session starts", async () => {
-    // 18 on 2 September 2027: one day too young for a session starting on 1 September.
+  it("refuses applicants under 18 when their cohort starts", async () => {
+    // 18 on 2 September 2027: one day too young for a cohort starting on 1 September.
     const young = await save(headers, draft, { personal: { dateOfBirth: "2009-09-02" } });
     expect(young.statusCode).toBe(422);
     expect(young.json()).toMatchObject({ error: { code: "APPLICANT_UNDER_AGE" } });

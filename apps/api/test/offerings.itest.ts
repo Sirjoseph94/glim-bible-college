@@ -1,11 +1,14 @@
-import type { Course, Lecturer, Me, Offering } from "@glim/contracts";
+import type { Course, Lecturer, Me, Offering, Programme } from "@glim/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "./harness";
-import { createPersonas, createUser, sessionFor, type Personas } from "./personas";
+import { createCohort, createPersonas, createUser, sessionFor, type Personas } from "./personas";
 
 let t: TestApp;
 let p: Personas;
 let course: Course;
+let other: Course;
+/** A cohort of its own, starting on 2081-01-05. */
+let cohortId: string;
 let ada: Lecturer;
 let bola: Lecturer;
 let chi: Lecturer;
@@ -20,7 +23,22 @@ beforeAll(async () => {
       credits: "3",
     })
   ).body;
+  other = (await post<Course>("/api/v1/courses", { code: "THE202", title: "Ethics", credits: "2" }))
+    .body;
+  const programme = (
+    await post<Programme>("/api/v1/programmes", { code: "ODIP", name: "Offerings Diploma" })
+  ).body;
+  ({ cohortId } = await createCohort(t, programme, {
+    code: "2081",
+    opensOn: "2080-07-01",
+    closesOn: "2080-08-31",
+    startsOn: "2081-01-05",
+  }));
 });
+
+/** Two months of the test cohort's schedule. */
+const FEB = { startsOn: "2081-02-02", endsOn: "2081-02-27", examOn: "2081-02-27" };
+const MARCH = { startsOn: "2081-03-02", endsOn: "2081-03-27", examOn: "2081-03-26" };
 
 afterAll(async () => {
   await t.close();
@@ -85,10 +103,11 @@ describe("Lecturers", () => {
 describe("Course Offerings", () => {
   let offering: Offering;
 
-  it("are created for a semester with their Lecturers, Primary first", async () => {
+  it("are created for a cohort between two dates with their Lecturers, Primary first", async () => {
     const created = await post<Offering>("/api/v1/course-offerings", {
       courseId: course.id,
-      semesterId: p.world.semesterId,
+      cohortId,
+      ...FEB,
       lecturers: [
         { lecturerId: bola.id, role: "GUEST_LECTURER" },
         { lecturerId: ada.id, role: "PRIMARY" },
@@ -99,7 +118,8 @@ describe("Course Offerings", () => {
     expect(offering).toMatchObject({
       courseCode: "THE201",
       title: "Christian Doctrine",
-      sectionCode: "01",
+      cohortId,
+      ...FEB,
       status: "DRAFT",
       credits: "3.0",
     });
@@ -108,15 +128,42 @@ describe("Course Offerings", () => {
       ["Bola Adeyemi", "GUEST_LECTURER"],
     ]);
 
+    // A cohort takes each course once, and one course at a time (ADR-0005).
     const duplicate = await post("/api/v1/course-offerings", {
       courseId: course.id,
-      semesterId: p.world.semesterId,
+      cohortId,
+      ...MARCH,
     });
     expect(duplicate.status).toBe(409);
+    const overlapping = await post("/api/v1/course-offerings", {
+      courseId: other.id,
+      cohortId,
+      startsOn: "2081-02-20",
+      endsOn: "2081-03-10",
+      examOn: "2081-03-10",
+    });
+    expect(overlapping.status).toBe(409);
+    expect(overlapping.body).toMatchObject({ error: { code: "OFFERING_OVERLAP" } });
+    const early = await post("/api/v1/course-offerings", {
+      courseId: other.id,
+      cohortId,
+      startsOn: "2081-01-01",
+      endsOn: "2081-01-20",
+      examOn: "2081-01-20",
+    });
+    expect(early.status).toBe(422);
+    expect(early.body).toMatchObject({ error: { code: "BEFORE_INTAKE_START" } });
+    const examOutside = await post("/api/v1/course-offerings", {
+      courseId: other.id,
+      cohortId,
+      ...MARCH,
+      examOn: "2081-04-01",
+    });
+    expect(examOutside.status).toBe(400);
     const twoPrimaries = await post("/api/v1/course-offerings", {
-      courseId: course.id,
-      semesterId: p.world.semesterId,
-      sectionCode: "02",
+      courseId: other.id,
+      cohortId,
+      ...MARCH,
       lecturers: [
         { lecturerId: ada.id, role: "PRIMARY" },
         { lecturerId: chi.id, role: "PRIMARY" },
@@ -128,9 +175,9 @@ describe("Course Offerings", () => {
   it("can't be published without an active Primary Lecturer", async () => {
     const unstaffed = (
       await post<Offering>("/api/v1/course-offerings", {
-        courseId: course.id,
-        semesterId: p.world.semesterId,
-        sectionCode: "03",
+        courseId: other.id,
+        cohortId,
+        ...MARCH,
       })
     ).body;
     const res = await post(`/api/v1/course-offerings/${unstaffed.id}/publish`);
@@ -202,10 +249,13 @@ describe("Course Offerings", () => {
     expect(other.statusCode).toBe(404);
 
     const all = await t.request({
-      url: `/api/v1/course-offerings?semesterId=${p.world.semesterId}`,
+      url: `/api/v1/course-offerings?cohortId=${cohortId}`,
       headers: p.registrar.headers,
     });
-    expect(all.json<{ items: Offering[] }>().items.length).toBeGreaterThanOrEqual(4);
+    expect(all.json<{ items: Offering[] }>().items.map((o) => o.courseCode)).toEqual([
+      "THE201",
+      "THE202",
+    ]);
 
     const nobody = await t.request({ url: "/api/v1/course-offerings", headers: p.noRole.headers });
     expect(nobody.json()).toEqual({ items: [] });

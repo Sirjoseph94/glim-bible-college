@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { institutionQuery } from "../api/institution";
-import { currentIntakeQuery, programmeLength } from "../api/intake";
+import { currentIntakeQuery, PROGRAMME_SHAPE } from "../api/intake";
 import { LoadFailed } from "../components/app/page-states";
 import { IntakeStatus } from "../components/app/intake-status";
 import { InstitutionName } from "../components/app/shell-parts";
@@ -37,7 +37,7 @@ const STUDY: { icon: IconName; title: string; body: string }[] = [
   {
     icon: "award",
     title: "Follow your results",
-    body: "See your grades as Lecturers release them, then your semester results, and request a transcript that anyone can verify.",
+    body: "See your grades as Lecturers release them, then each course result, and request a transcript that anyone can verify.",
   },
 ];
 
@@ -102,7 +102,7 @@ function Hero() {
       className="glim-gutter mx-auto grid w-full max-w-content gap-6 py-8 lg:grid-cols-2 lg:items-center lg:gap-8 lg:py-12"
     >
       <div className="space-y-4">
-        <p className="text-label text-brand">Certificate and Diploma programmes</p>
+        <p className="text-label text-brand">The Diploma, with a Certificate halfway</p>
         <h1 id="landing-title" className="text-display">
           Study theology on campus or online
         </h1>
@@ -156,7 +156,7 @@ function Admissions() {
           )}
         </div>
         <p className="text-body-sm text-ink-muted">
-          The college admits students once a year. Everyone admitted in an Intake starts together.
+          Everyone admitted in an Intake starts together and takes the courses one at a time.
         </p>
       </div>
     </section>
@@ -217,7 +217,7 @@ function Programmes() {
               <Card className="h-full space-y-1">
                 <p className="font-mono text-code text-brand">{p.code}</p>
                 <h3 className="text-heading">{p.name}</h3>
-                <p className="text-body-sm text-ink-muted">{programmeLength(p)}</p>
+                <p className="text-body-sm text-ink-muted">{PROGRAMME_SHAPE}</p>
               </Card>
             </li>
           ))}

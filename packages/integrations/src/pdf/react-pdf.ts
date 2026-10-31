@@ -127,38 +127,37 @@ type TextStyle = TextProps["style"];
 const text = (style: TextStyle, ...children: ReactNode[]) =>
   h(Text, style === undefined ? {} : { style }, ...children);
 
-function semester(sem: TranscriptSnapshot["semesters"][number], key: number): ReactElement {
+/** The courses in the order completed (ADR-0005); the header row repeats on each page. */
+function courses(list: TranscriptSnapshot["courses"]): ReactElement {
   return h(
     View,
-    { key, wrap: false },
-    text(
-      styles.h2,
-      `${sem.semesterName}, ${sem.sessionCode}`,
-      sem.provisional ? text(styles.provisional, "  PROVISIONAL") : "",
-    ),
+    {},
+    text(styles.h2, "Courses"),
     h(
       View,
-      { style: styles.head },
+      { style: styles.head, fixed: true },
       text(styles.code, "Course"),
       text(styles.title, "Title"),
+      text(styles.num, "Completed"),
       text(styles.num, "Credits"),
       text(styles.num, "%"),
       text(styles.num, "Grade"),
     ),
-    ...sem.courses.map((c, i) =>
+    ...list.map((c, i) =>
       h(
         View,
-        { key: i, style: styles.row },
+        { key: i, style: styles.row, wrap: false },
         text(styles.code, c.code),
-        text(styles.title, `${c.title}${c.repeated ? " (repeated)" : ""}`),
+        text(
+          styles.title,
+          `${c.title}${c.repeated ? " (repeated)" : ""}`,
+          c.provisional ? text(styles.provisional, "  PROVISIONAL") : "",
+        ),
+        text(styles.num, c.completedOn),
         text(styles.num, x10(c.creditsX10)),
         text(styles.num, x100(c.finalPctX100)),
         text(styles.num, c.letter ?? c.resultKind.toLowerCase()),
       ),
-    ),
-    text(
-      styles.small,
-      `Credits ${x10(sem.creditsEarnedX10)}/${x10(sem.creditsAttemptedX10)} · GPA ${x100(sem.gpaX100)} · CGPA ${x100(sem.cgpaX100)}`,
     ),
   );
 }
@@ -198,7 +197,7 @@ export function transcriptDocument(input: TranscriptRenderInput, qrDataUrl: stri
       text(undefined, `Matric Number ${s.student.matricNumber}`),
       text(undefined, `${s.programme.name} (${s.programme.code})`),
       text(styles.small, `Records as of ${s.asOf}`),
-      ...s.semesters.map((sem, i) => semester(sem, i)),
+      courses(s.courses),
       h(
         View,
         { wrap: false },
@@ -207,12 +206,13 @@ export function transcriptDocument(input: TranscriptRenderInput, qrDataUrl: stri
           undefined,
           `CGPA ${x100(s.totals.cgpaX100)} · credits earned ${x10(s.totals.creditsEarnedX10)} of ${x10(s.totals.creditsAttemptedX10)}`,
         ),
-        s.award === null
-          ? null
-          : text(
-              undefined,
-              `Awarded ${s.programme.awardType === "CERTIFICATE" ? "the Certificate" : "the Diploma"} with ${s.award.awardClass} on ${s.award.awardedOn} (${s.award.certificateNo})`,
-            ),
+        ...s.awards.map((a, i) =>
+          h(
+            Text,
+            { key: i },
+            `Awarded ${a.awardType === "CERTIFICATE" ? "the Certificate" : "the Diploma"} with ${a.awardClass} on ${a.awardedOn} (${a.certificateNo})`,
+          ),
+        ),
         text(
           styles.small,
           `Grades: ${s.legend.bands.map((b) => `${b.letter} ${x100(b.minX100)}–${x100(b.maxX100)} = ${x100(b.pointsX100)}`).join("; ")}`,

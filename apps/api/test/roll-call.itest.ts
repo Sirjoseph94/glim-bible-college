@@ -62,28 +62,23 @@ async function addStudent(given: string, family: string, mode: "ON_CAMPUS" | "ON
   ).rows[0]?.id;
   const pe = (
     await q<{ id: string }>(
-      `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, entry_session_id, matric_number, study_mode, started_on)
-       VALUES ($1, $2, $3, $4, $5, $6, '2080-09-01') RETURNING id`,
+      `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, intake_id, cohort_id, matric_number, study_mode, started_on)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, '2025-01-01') RETURNING id`,
       [
         studentId,
         p.world.programmeId,
         p.world.curriculumId,
-        p.world.sessionId,
+        p.world.intakeId,
+        p.world.cohortId,
         `GLIM/RC/2080/${family}`,
         mode,
       ],
     )
   ).rows[0]?.id;
-  const se = (
-    await q<{ id: string }>(
-      "INSERT INTO semester_enrollments (programme_enrollment_id, semester_id, level_no) VALUES ($1, $2, 1) RETURNING id",
-      [pe, p.world.semesterId],
-    )
-  ).rows[0]?.id;
   await q(
-    `INSERT INTO course_enrollments (semester_enrollment_id, programme_enrollment_id, course_offering_id, student_id, selection, status)
-     VALUES ($1, $2, $3, $4, 'COMPULSORY', 'ENROLLED')`,
-    [se, pe, p.world.offerings.O1, studentId],
+    `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status)
+     VALUES ($1, $2, $3, 'COHORT', 'ENROLLED')`,
+    [pe, p.world.offerings.O1, studentId],
   );
   return studentId ?? "";
 }

@@ -1,4 +1,4 @@
-import type { EnumValue, FieldError } from "@glim/contracts";
+import type { FieldError } from "@glim/contracts";
 import { Db, schema, type Database } from "@glim/db";
 import { AuditService, type AuditActor } from "@glim/modules/audit";
 import {
@@ -6,7 +6,9 @@ import {
   definedFields,
   domainError,
   err,
+  formatDecimal,
   ok,
+  parseDecimal,
   type Clock,
   type DomainResult,
 } from "@glim/shared";
@@ -14,30 +16,31 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, max, sql } from "drizzle-orm";
 
 export type CurriculumRow = typeof schema.curricula.$inferSelect;
-type CourseType = EnumValue<"curriculum_courses.course_type">;
 
+/** A course in the curriculum at its place in the default order (ADR-0005). */
 export interface Placement {
   courseId: string;
   courseCode: string;
   courseTitle: string;
-  levelNo: number;
-  semesterNo: number;
-  courseType: CourseType;
+  position: number;
   /** The override, or the course's own credits. */
   credits: string;
   creditOverride: string | null;
 }
 
+/** A placement as the editor sends it: its place is its index in the list. */
 export interface PlacementInput {
   courseId: string;
-  levelNo: number;
-  semesterNo: 1 | 2;
-  courseType: CourseType;
   creditOverride: string | null;
 }
 
-export interface CurriculumDetail extends CurriculumRow {
+export interface CurriculumSummary extends CurriculumRow {
   placementCount: number;
+  /** Every course's credits added up: the Certificate needs half of them passed. */
+  totalCredits: string;
+}
+
+export interface CurriculumDetail extends CurriculumSummary {
   locked: boolean;
   placements: Placement[];
 }
@@ -60,7 +63,10 @@ const versionMismatch = () =>
     domainError("VERSION_MISMATCH", "Someone else changed this curriculum. Reload and try again."),
   );
 
-/** Versioned curricula: DRAFT → ACTIVE → RETIRED, one ACTIVE per programme (TRD §9.1). */
+/**
+ * Versioned curricula: DRAFT → ACTIVE → RETIRED, one ACTIVE per programme (TRD §9.1). A curriculum
+ * is the programme's courses in their default order; each cohort's schedule starts from it.
+ */
 @Injectable()
 export class CurriculaService {
   private usage: CurriculumUsage = () => Promise.resolve(false);
@@ -86,17 +92,27 @@ export class CurriculaService {
     return row?.id ?? null;
   }
 
-  async list(programmeId?: string): Promise<(CurriculumRow & { placementCount: number })[]> {
+  async list(programmeId?: string): Promise<CurriculumSummary[]> {
     const c = schema.curricula;
     const cc = schema.curriculumCourses;
+    const course = schema.courses;
     const rows = await this.db.read
-      .select({ curriculum: c, placementCount: sql<number>`count(${cc.id})::int` })
+      .select({
+        curriculum: c,
+        placementCount: sql<number>`count(${cc.id})::int`,
+        totalCredits: sql<string>`coalesce(sum(coalesce(${cc.creditOverride}, ${course.credits})), 0)::numeric(6,1)::text`,
+      })
       .from(c)
       .leftJoin(cc, eq(cc.curriculumId, c.id))
+      .leftJoin(course, eq(course.id, cc.courseId))
       .where(programmeId === undefined ? undefined : eq(c.programmeId, programmeId))
       .groupBy(c.id)
       .orderBy(asc(c.programmeId), asc(c.curriculumVersion));
-    return rows.map((r) => ({ ...r.curriculum, placementCount: r.placementCount }));
+    return rows.map((r) => ({
+      ...r.curriculum,
+      placementCount: r.placementCount,
+      totalCredits: r.totalCredits,
+    }));
   }
 
   async get(id: string, db: Database = this.db.read): Promise<CurriculumDetail | null> {
@@ -106,13 +122,14 @@ export class CurriculaService {
     return {
       ...row,
       placementCount: placements.length,
+      totalCredits: totalCredits(placements),
       locked: await this.isLocked(db, row),
       placements,
     };
   }
 
   async create(
-    input: { programmeId: string; effectiveFrom: string; minElectiveCredits: string },
+    input: { programmeId: string; effectiveFrom: string },
     actor: AuditActor,
   ): Promise<DomainResult<CurriculumDetail>> {
     return this.db.withTxResult(async ({ db }) => {
@@ -141,7 +158,7 @@ export class CurriculaService {
   async update(
     id: string,
     expectedVersion: number,
-    change: { effectiveFrom?: string | undefined; minElectiveCredits?: string | undefined },
+    change: { effectiveFrom?: string | undefined },
     actor: AuditActor,
   ): Promise<DomainResult<CurriculumDetail>> {
     return this.db.withTxResult(async ({ db }) => {
@@ -159,7 +176,10 @@ export class CurriculaService {
     });
   }
 
-  /** Replaces every placement at once, so the editor's whole table is one consistent change. */
+  /**
+   * Replaces every placement at once, in the order given, so the editor's whole list (and its
+   * order) is one consistent change.
+   */
   async replacePlacements(
     id: string,
     expectedVersion: number,
@@ -169,7 +189,7 @@ export class CurriculaService {
     return this.db.withTxResult(async ({ db }) => {
       const current = await this.lockForChange(db, id, expectedVersion);
       if (!current.ok) return current;
-      const problems = await this.validatePlacements(db, current.value.programmeId, placements);
+      const problems = await this.validatePlacements(db, placements);
       if (problems.length > 0) {
         return err(
           domainError("VALIDATION_FAILED", "Some placements are invalid.", {
@@ -182,11 +202,15 @@ export class CurriculaService {
         .delete(schema.curriculumCourses)
         .where(eq(schema.curriculumCourses.curriculumId, id));
       if (placements.length > 0) {
-        await db
-          .insert(schema.curriculumCourses)
-          .values(
-            placements.map((p) => ({ ...p, curriculumId: id, createdAt: now, updatedAt: now })),
-          );
+        await db.insert(schema.curriculumCourses).values(
+          placements.map((p, i) => ({
+            ...p,
+            position: i + 1,
+            curriculumId: id,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
       }
       await this.bump(db, id, {});
       await this.audit.record(db, actor, {
@@ -208,7 +232,7 @@ export class CurriculaService {
       if (row.status !== "DRAFT")
         return err(domainError("CONFLICT", "Only a draft curriculum can be activated."));
       if ((await this.placementsOf(db, id)).length === 0) {
-        return err(domainError("CONFLICT", "Add at least one course placement before activating."));
+        return err(domainError("CONFLICT", "Add at least one course before activating."));
       }
       const retired = await db
         .update(c)
@@ -238,7 +262,6 @@ export class CurriculaService {
       const copyId = await this.insertVersion(db, {
         programmeId: source.programmeId,
         effectiveFrom,
-        minElectiveCredits: source.minElectiveCredits,
       });
       const now = this.clock.now();
       const placements = await db
@@ -250,9 +273,7 @@ export class CurriculaService {
           placements.map((p) => ({
             curriculumId: copyId,
             courseId: p.courseId,
-            levelNo: p.levelNo,
-            semesterNo: p.semesterNo,
-            courseType: p.courseType,
+            position: p.position,
             creditOverride: p.creditOverride,
             createdAt: now,
             updatedAt: now,
@@ -271,7 +292,7 @@ export class CurriculaService {
 
   private async insertVersion(
     db: Database,
-    input: { programmeId: string; effectiveFrom: string; minElectiveCredits: string },
+    input: { programmeId: string; effectiveFrom: string },
   ): Promise<string> {
     const c = schema.curricula;
     // Serialise version numbering per programme.
@@ -340,14 +361,12 @@ export class CurriculaService {
       .from(cc)
       .innerJoin(course, eq(course.id, cc.courseId))
       .where(eq(cc.curriculumId, curriculumId))
-      .orderBy(asc(cc.levelNo), asc(cc.semesterNo), asc(cc.courseType), asc(course.code));
+      .orderBy(asc(cc.position));
     return rows.map((r) => ({
       courseId: r.placement.courseId,
       courseCode: r.code,
       courseTitle: r.title,
-      levelNo: r.placement.levelNo,
-      semesterNo: r.placement.semesterNo,
-      courseType: r.placement.courseType as CourseType,
+      position: r.placement.position,
       credits: r.placement.creditOverride ?? r.credits,
       creditOverride: r.placement.creditOverride,
     }));
@@ -355,14 +374,9 @@ export class CurriculaService {
 
   private async validatePlacements(
     db: Database,
-    programmeId: string,
     placements: PlacementInput[],
   ): Promise<FieldError[]> {
     const problems: FieldError[] = [];
-    const [programme] = await db
-      .select({ levels: schema.programmes.levels })
-      .from(schema.programmes)
-      .where(eq(schema.programmes.id, programmeId));
     const ids = [...new Set(placements.map((p) => p.courseId))];
     const known =
       ids.length === 0
@@ -382,18 +396,17 @@ export class CurriculaService {
       if (seen.has(p.courseId))
         problems.push(field(at("courseId"), "duplicate", "A course can be placed only once."));
       seen.add(p.courseId);
-      if (programme !== undefined && p.levelNo > programme.levels) {
-        problems.push(
-          field(
-            at("levelNo"),
-            "too_high",
-            `This programme has ${String(programme.levels)} Level(s).`,
-          ),
-        );
-      }
     });
     return problems;
   }
+}
+
+/** Exact: credits are one-decimal values (INV-14). */
+function totalCredits(placements: Placement[]): string {
+  return formatDecimal(
+    placements.reduce((sum, p) => sum + parseDecimal(p.credits, 1), 0),
+    1,
+  );
 }
 
 function field(path: string, code: string, message: string): FieldError {

@@ -24,7 +24,7 @@ import {
 
 /**
  * Attendance records (TRD §12.5–12.6; v1: computed from roll call alone). O1 is taught by
- * l1Primary and taken by sEnrolled; Ada (on campus), Bola, a student who dropped before the class
+ * l1Primary and taken by sEnrolled; Ada (on campus), Bola, a student withdrawn before the class
  * and one who joined the course during it are added here. The class is 09:00–11:00 on 3 Nov.
  */
 
@@ -61,26 +61,22 @@ async function addStudent(
     [user.id, given],
   );
   const pe = await one(
-    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, entry_session_id, matric_number, study_mode, started_on)
-     VALUES ($1, $2, $3, $4, $5, $6, '2080-09-01') RETURNING id`,
+    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, intake_id, cohort_id, matric_number, study_mode, started_on)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, '2025-01-01') RETURNING id`,
     [
       studentId,
       p.world.programmeId,
       p.world.curriculumId,
-      p.world.sessionId,
+      p.world.intakeId,
+      p.world.cohortId,
       `GLIM/AT/${given}`,
       mode,
     ],
   );
-  const se = await one(
-    "INSERT INTO semester_enrollments (programme_enrollment_id, semester_id, level_no) VALUES ($1, $2, 1) RETURNING id",
-    [pe, p.world.semesterId],
-  );
   await q(
-    `INSERT INTO course_enrollments (semester_enrollment_id, programme_enrollment_id, course_offering_id, student_id, selection, status, enrolled_at, dropped_at)
-     VALUES ($1, $2, $3, $4, 'ELECTIVE', $5, $6, $7)`,
+    `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status, enrolled_at, dropped_at)
+     VALUES ($1, $2, $3, 'MANUAL', $4, $5, $6)`,
     [
-      se,
       pe,
       p.world.offerings.O1,
       studentId,
@@ -137,7 +133,7 @@ beforeAll(async () => {
     enrolledAt: "2026-09-01T00:00:00Z",
   });
   people.dropped = await addStudent("Dayo", "ONLINE", {
-    status: "DROPPED",
+    status: "WITHDRAWN",
     enrolledAt: "2026-09-01T00:00:00Z",
     droppedAt: "2026-11-02T12:00:00Z",
   });
@@ -186,7 +182,7 @@ describe("recomputing from roll call", () => {
       late: true,
     });
     expect(await record(people.bola)).toMatchObject({ status: "ABSENT", attendance_mode: "NONE" });
-    // Joined the course during the class: evaluated. Dropped before it: no record.
+    // Joined the course during the class: evaluated. Withdrawn before it: no record.
     expect(await record(people.joined)).toMatchObject({ status: "ABSENT" });
     expect(await record(people.dropped)).toBeUndefined();
     const state = await q<{ attendance_state: string }>(

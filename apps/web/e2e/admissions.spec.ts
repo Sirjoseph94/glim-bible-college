@@ -19,15 +19,13 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await openArea(page, "Admissions");
   await page.getByRole("link", { name: "Intakes" }).click();
   await page.getByRole("button", { name: "Plan an intake" }).click();
-  await page.getByLabel("Intake (year students start, e.g. 2027)").fill("2030");
-  await page
-    .getByLabel("Academic Session students start in")
-    .selectOption({ label: "2030/2031 Session" });
-  await page.getByLabel("Applications open (November)").fill("2029-11-01");
-  await page.getByLabel("Applications close (June)").fill("2030-06-30");
+  await page.getByLabel("Intake (start year, e.g. 2027 or 2027-JAN)").fill("2030");
+  await page.getByLabel("Applications open").fill("2029-11-01");
+  await page.getByLabel("Applications close").fill("2030-06-30");
+  await page.getByLabel("Cohort starts").fill("2030-09-02");
   await page.getByRole("button", { name: "Plan intake" }).click();
-  await expect(page.getByText("Intake 2030 · 2030/2031 Session")).toBeVisible();
   const intake2030 = page.getByRole("listitem", { name: "Intake 2030" });
+  await expect(intake2030).toContainText("starts Mon, 2 Sept 2030");
   await intake2030.getByRole("button", { name: "Open now" }).click();
   await page
     .getByRole("dialog", { name: "Open Intake 2030 now?" })
@@ -41,7 +39,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   ).newPage();
   await applicant.goto("/apply");
   await expect(
-    applicant.getByText("Applications for the 2030/2031 Session are open until"),
+    applicant.getByText("Applications for the 2030 Intake are open until"),
   ).toBeVisible();
   await expect(applicant.getByText("Sun, 30 Jun 2030")).toBeVisible();
   await expect(applicant.getByRole("link", { name: "Create one free" })).toBeVisible();
@@ -54,7 +52,8 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   });
   await applicant.getByRole("link", { name: "Apply with Google" }).click();
   await expect(applicant.getByRole("heading", { name: "Start your application" })).toBeVisible();
-  await applicant.getByLabel("Diploma in Ministry").check();
+  // GLIM has one programme (ADR-0005): the applicant is told it, not asked.
+  await expect(applicant.getByText("Diploma in Ministry", { exact: true })).toBeVisible();
   await applicant.getByLabel("Online").check();
   await applicant.getByRole("button", { name: "Start my application" }).click();
   await expect(applicant.getByRole("heading", { name: "1. Personal information" })).toBeVisible();
@@ -199,12 +198,10 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
       timeout: 15_000,
     })
     .toBe("Welcome to GLIM Online Bible College: your Matric Number is GLIM/DMIN/2030/0001");
-  // As a student, their registration page waits for the semester to open.
+  // As a student, their course schedule waits for their cohort's first course.
   await openArea(applicant, "Courses");
-  await applicant.getByRole("link", { name: "Registration" }).click();
-  await expect(
-    applicant.getByText("Registration hasn't opened yet.", { exact: false }),
-  ).toBeVisible();
+  await applicant.getByRole("link", { name: "Course schedule" }).click();
+  await expect(applicant.getByText("Nothing scheduled yet")).toBeVisible();
 
   // As a student they have a personal referral code to share.
   await openArea(applicant, "Profile");
@@ -229,7 +226,5 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
     page.getByRole("listitem", { name: "Intake 2030" }).getByText("Closed", { exact: true }),
   ).toBeVisible();
   await applicant.goto("/apply");
-  await expect(
-    applicant.getByText("Applications for the 2030/2031 Session are closed."),
-  ).toBeVisible();
+  await expect(applicant.getByText("Applications for the 2030 Intake are closed.")).toBeVisible();
 });

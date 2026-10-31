@@ -162,9 +162,6 @@ describe("managing schemes", () => {
     const programme = await send("acadAdmin", "POST", "/programmes", {
       code: "LOCKP",
       name: "Lock programme",
-      awardType: "DIPLOMA",
-      durationSemesters: 4,
-      levels: 2,
     });
     expect(programme.statusCode, programme.body).toBe(201);
     const programmeId = programme.json<Programme>().id;

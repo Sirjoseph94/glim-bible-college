@@ -193,11 +193,27 @@ const adminGradingRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/admin-grading"), "AdminGradingPage"),
 });
 
+const adminCohortsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/cohorts",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-cohorts"), "AdminCohortsPage"),
+});
+
+const adminRoomsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/rooms",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/admin-cohorts"), "AdminRoomsPage"),
+});
+
+/** The term calendar became Cohort Schedules (ADR-0005); old links land there. */
 const adminCalendarRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin/calendar",
-  beforeLoad: requireRole("SYSTEM_ADMIN", "ACADEMIC_ADMIN"),
-  component: lazyRouteComponent(() => import("./routes/admin-calendar"), "AdminCalendarPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/cohorts" });
+  },
 });
 
 const adminOfferingsRoute = createRoute({
@@ -397,11 +413,20 @@ const resultsCoursesRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/registrar-results"), "ResultsCoursesPage"),
 });
 
+const cohortResultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/results/cohorts",
+  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
+  component: lazyRouteComponent(() => import("./routes/registrar-results"), "CohortResultsPage"),
+});
+
+/** Semester results became cohort results (ADR-0005); old links land there. */
 const semesterResultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/semesters",
-  beforeLoad: requireRole("SYSTEM_ADMIN", "REGISTRAR", "ACADEMIC_ADMIN"),
-  component: lazyRouteComponent(() => import("./routes/registrar-results"), "SemesterResultsPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/results/cohorts" });
+  },
 });
 
 const awardsRoute = createRoute({
@@ -437,12 +462,12 @@ const transcriptRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/transcripts"), "TranscriptPage"),
 });
 
-/** Transcript requests are on the semester results page now (decision UI-Q8). */
+/** Transcript requests are on the cohort results page now (decision UI-Q8). */
 const registrarTranscriptsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/results/transcripts",
   beforeLoad: () => {
-    throw redirect({ to: "/results/semesters" });
+    throw redirect({ to: "/results/cohorts" });
   },
 });
 
@@ -553,6 +578,7 @@ const routeTree = rootRoute.addChildren([
   teachCourseRoute,
   courseResultsRoute,
   resultsCoursesRoute,
+  cohortResultsRoute,
   semesterResultsRoute,
   awardsRoute,
   myTranscriptsRoute,
@@ -579,6 +605,8 @@ const routeTree = rootRoute.addChildren([
   adminSettingsRoute,
   adminAcademicRoute,
   adminCurriculumRoute,
+  adminCohortsRoute,
+  adminRoomsRoute,
   adminCalendarRoute,
   adminOfferingsRoute,
   adminOfferingRoute,

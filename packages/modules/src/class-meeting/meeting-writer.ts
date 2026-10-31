@@ -14,6 +14,7 @@ import {
   type DomainError,
   type DomainResult,
 } from "@glim/shared";
+import { toLocalDate } from "@glim/shared/time";
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import { ProvisioningService } from "./provisioning.service";
@@ -64,6 +65,14 @@ export function checkTimes(start: Date, end: Date, now: Date): DomainError | nul
   if (start.getTime() <= now.getTime())
     return invalid("scheduledStart", "Choose a start time in the future.");
   return null;
+}
+
+/** A Class Meeting must fall within its offering's dates (ADR-0005). */
+export function outsideOffering(offering: { startsOn: string; endsOn: string }): DomainError {
+  return domainError(
+    "OUTSIDE_OFFERING_DATES",
+    `Class Meetings for this offering must fall between ${offering.startsOn} and ${offering.endsOn}.`,
+  );
 }
 
 export function roomConflict(conflicts: ScheduleConflict[]): DomainError {
@@ -169,6 +178,35 @@ export class MeetingWriter {
           "CONFLICT",
           `Class Meetings can't be scheduled for a ${offering.status.toLowerCase()} offering.`,
         );
+  }
+
+  /**
+   * Every slot falls within the offering's dates, read in the institution's timezone (ADR-0005):
+   * `OUTSIDE_OFFERING_DATES` otherwise.
+   */
+  async checkWithinOffering(
+    offeringId: string,
+    slots: { start: Date; end: Date }[],
+  ): Promise<DomainError | null> {
+    const offering = await this.offeringDates(offeringId);
+    if (offering === null) return domainError("NOT_FOUND", "Not found.");
+    const zone = await this.zone();
+    const outside = slots.some(
+      (slot) =>
+        toLocalDate(slot.start, zone) < offering.startsOn ||
+        toLocalDate(slot.end, zone) > offering.endsOn,
+    );
+    return outside ? outsideOffering(offering) : null;
+  }
+
+  /** The offering's first and last days. */
+  async offeringDates(offeringId: string): Promise<{ startsOn: string; endsOn: string } | null> {
+    const o = schema.courseOfferings;
+    const [row] = await this.db.read
+      .select({ startsOn: o.startsOn, endsOn: o.endsOn })
+      .from(o)
+      .where(eq(o.id, offeringId));
+    return row ?? null;
   }
 
   async checkRoom(roomId: string | null): Promise<DomainError | null> {

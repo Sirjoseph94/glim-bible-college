@@ -23,15 +23,11 @@ export const ENUMS = {
   "integration_configs.provider": ["google_workspace", "video_host", "sendgrid"],
   "integration_configs.status": ["UNVERIFIED", "VERIFIED", "DEGRADED", "DISABLED"],
   // M02 academic core
-  "programmes.award_type": ["CERTIFICATE", "DIPLOMA"],
   "programmes.status": ["ACTIVE", "ARCHIVED"],
-  "academic_sessions.status": ["PLANNED", "ACTIVE", "CLOSED"],
-  "semesters.status": ["PLANNED", "REGISTRATION", "ACTIVE", "CLOSED"],
   "intakes.status": ["PLANNED", "OPEN", "CLOSED"],
   "cohorts.status": ["ACTIVE", "CLOSED"],
   "curricula.status": ["DRAFT", "ACTIVE", "RETIRED"],
   "courses.status": ["ACTIVE", "ARCHIVED"],
-  "curriculum_courses.course_type": ["COMPULSORY", "ELECTIVE"],
   "rooms.status": ["ACTIVE", "ARCHIVED"],
   "students.status": ["ACTIVE", "SUSPENDED", "GRADUATED", "WITHDRAWN"],
   "students.gender": ["MALE", "FEMALE"],
@@ -39,11 +35,10 @@ export const ENUMS = {
   "lecturers.status": ["ACTIVE", "INACTIVE"],
   "programme_enrollments.study_mode": ["ON_CAMPUS", "ONLINE"],
   "programme_enrollments.status": ["ACTIVE", "DEFERRED", "WITHDRAWN", "COMPLETED"],
-  "semester_enrollments.status": ["REGISTERED", "WITHDRAWN", "COMPLETED"],
   "course_offerings.status": ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED"],
-  "course_enrollments.selection": ["COMPULSORY", "ELECTIVE", "MANUAL"],
+  "course_enrollments.selection": ["COHORT", "MANUAL"],
   "course_enrollments.enrollment_type": ["CREDIT", "AUDIT"],
-  "course_enrollments.status": ["ENROLLED", "DROPPED", "WITHDRAWN", "COMPLETED"],
+  "course_enrollments.status": ["ENROLLED", "WITHDRAWN", "COMPLETED"],
   "lecturer_assignments.role": ["PRIMARY", "CO_LECTURER", "ASSISTANT", "GUEST_LECTURER"],
   "lecturer_assignments.status": ["ACTIVE", "ENDED"],
   // M03 Class Meetings and attendance
@@ -129,9 +124,8 @@ export const ENUMS = {
   "grading_schemes.repeat_policy": ["KEEP_ALL", "REPLACE_LATEST", "BEST"],
   "course_results.source": ["GRADEBOOK", "IMPORT"],
   "course_results.result_kind": ["GRADED", "INCOMPLETE", "WITHDRAWN", "EXEMPT", "AUDIT"],
-  "course_results.status": ["DRAFT", "FINALIZED", "APPROVED", "PUBLISHED"],
-  "semester_results.standing": ["GOOD", "PROBATION", "WITHDRAW_REQUIRED", "UNKNOWN"],
-  "semester_results.status": ["DRAFT", "APPROVED", "PUBLISHED"],
+  "course_results.status": ["DRAFT", "FINALIZED", "APPROVED"],
+  "awards.award_type": ["CERTIFICATE", "DIPLOMA"],
   "awards.status": ["DRAFT", "APPROVED", "CONFERRED"],
   "transcript_requests.kind": ["UNOFFICIAL", "OFFICIAL"],
   "transcript_requests.status": ["REQUESTED", "APPROVED", "REJECTED", "ISSUED", "CANCELLED"],
@@ -178,6 +172,10 @@ export const ENUMS = {
 } as const;
 
 export type EnumKey = keyof typeof ENUMS;
+
+/** Academic standing, worked out from the CGPA (§14.4); not stored. */
+export const STANDINGS = ["GOOD", "PROBATION", "WITHDRAW_REQUIRED", "UNKNOWN"] as const;
+export type Standing = (typeof STANDINGS)[number];
 export type EnumValue<K extends EnumKey> = (typeof ENUMS)[K][number];
 
 // Named aliases for the enumerations used across modules.

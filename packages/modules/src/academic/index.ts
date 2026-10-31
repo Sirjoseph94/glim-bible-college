@@ -1,11 +1,4 @@
 export { AcademicModule } from "./academic.module";
-export {
-  CalendarService,
-  type AcademicSessionRow,
-  type SemesterDates,
-  type SemesterCloseStep,
-  type SemesterRow,
-} from "./calendar.service";
 export { CohortsService } from "./cohorts.service";
 export {
   CoursesService,
@@ -30,7 +23,12 @@ export {
 export { RoomsService, type RoomRow } from "./rooms.service";
 export {
   OfferingsService,
+  type CompleteStep,
+  type DatesCheck,
+  type OfferingChange,
+  type OfferingDates,
   type OfferingInput,
   type OfferingRow,
   type PublishRequirement,
+  type PublishStep,
 } from "./offerings.service";

@@ -25,7 +25,7 @@ beforeAll(async () => {
   });
   p = await createPersonas(t);
   world = await admissionsWorld(t, p);
-  kit = applicantKit(t, issuer, () => world.certificate.id);
+  kit = applicantKit(t, issuer);
 });
 
 afterAll(async () => {
@@ -36,12 +36,9 @@ afterAll(async () => {
 /** An applicant whose application has been admitted: submitted, reviewed and offered a place. */
 async function admitted(
   name: string,
-  programmeId = world.certificate.id,
 ): Promise<{ headers: Record<string, string>; application: Application }> {
   const ready = await kit.complete(name, { spiritual: { bornAgainWhen: "SECRET-WHEN" } });
-  let application = ready.application;
-  if (programmeId !== world.certificate.id)
-    application = (await kit.save(ready.headers, application, { programmeId })).json<Application>();
+  const application = ready.application;
   expect((await kit.submit(ready.headers, application.id)).statusCode).toBe(200);
   await kit.admit(application.id, p.admOfficer.headers);
   return { headers: ready.headers, application };
@@ -66,7 +63,7 @@ describe("accepting an offer", () => {
     expect(res.statusCode).toBe(200);
     const accepted = res.json<Application>();
     expect(accepted.status).toBe("ACCEPTED");
-    expect(accepted.enrollment).toEqual({ matricNumber: "GLIM/CERT/2027/0001" });
+    expect(accepted.enrollment).toEqual({ matricNumber: "GLIM/DIP/2027/0001" });
     expect(accepted.timeline.map((e) => e.status).at(-1)).toBe("ACCEPTED");
     expect((await accept(headers, application.id, key)).json()).toEqual(accepted);
     const again = await accept(headers, application.id);
@@ -99,20 +96,19 @@ describe("accepting an offer", () => {
     expect(JSON.stringify(rows[0])).not.toContain("SECRET-WHEN");
   });
 
-  it("enrolls them on the active curriculum, in the intake's cohort, at Level 1", async () => {
+  it("enrolls them on the active curriculum, in the intake's cohort", async () => {
     const { rows } = await t.db.pool.query<Record<string, unknown>>(
       `SELECT pe.*, pe.started_on::text AS started_on, c.code AS cohort_code, cu.status AS curriculum_status
          FROM programme_enrollments pe
          JOIN cohorts c ON c.id = pe.cohort_id
          JOIN curricula cu ON cu.id = pe.curriculum_id
-        WHERE pe.matric_number = 'GLIM/CERT/2027/0001'`,
+        WHERE pe.matric_number = 'GLIM/DIP/2027/0001'`,
     );
     expect(rows[0]).toMatchObject({
-      cohort_code: "CERT-2027",
+      cohort_code: "DIP-2027",
       curriculum_status: "ACTIVE",
-      entry_session_id: world.session.id,
+      intake_id: world.intake.id,
       study_mode: "ONLINE",
-      current_level: 1,
       status: "ACTIVE",
       started_on: "2027-09-01",
     });
@@ -130,7 +126,7 @@ describe("accepting an offer", () => {
       (m) => m.to === "ngozi.mail@gmail.com" && m.subject.startsWith("Welcome"),
     );
     expect(welcome?.subject).toBe(
-      "Welcome to GLIM Online Bible College: your Matric Number is GLIM/CERT/2027/0001",
+      "Welcome to GLIM Online Bible College: your Matric Number is GLIM/DIP/2027/0001",
     );
     expect(welcome?.text).toContain(code);
 
@@ -140,7 +136,7 @@ describe("accepting an offer", () => {
     );
     expect(told).toEqual([
       {
-        title: "Ngozi Okafor accepted a place on the Certificate in Theology",
+        title: "Ngozi Okafor accepted a place on the Diploma in Theology",
         // In-app, and in the Academic Admin's daily digest (not critical, §15.1).
         email_status: "DIGEST",
       },
@@ -161,16 +157,15 @@ describe("accepting an offer", () => {
 
   it("numbers concurrent acceptances consecutively, per programme and year, with no gaps", async () => {
     const offers = [];
-    for (const name of ["Uche", "Vera", "Wale", "Xena", "Yemi"])
-      offers.push(await admitted(name, world.diploma.id));
+    for (const name of ["Uche", "Vera", "Wale", "Xena", "Yemi"]) offers.push(await admitted(name));
     const results = await Promise.all(offers.map((o) => accept(o.headers, o.application.id)));
     expect(results.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200]);
     expect(results.map((r) => r.json<Application>().enrollment?.matricNumber).sort()).toEqual([
-      "GLIM/DIP/2027/0001",
       "GLIM/DIP/2027/0002",
       "GLIM/DIP/2027/0003",
       "GLIM/DIP/2027/0004",
       "GLIM/DIP/2027/0005",
+      "GLIM/DIP/2027/0006",
     ]);
   });
 

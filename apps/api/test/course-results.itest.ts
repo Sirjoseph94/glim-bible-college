@@ -178,7 +178,7 @@ describe("finalizing", () => {
       `SELECT r.credits_x10, r.final_pct_x100, r.letter, r.points_x100, r.quality_points_x1000::int AS qp,
               r.passed, r.counts_in_gpa, r.result_kind, r.attempt_no,
               r.programme_enrollment_id = ce.programme_enrollment_id AS same_enrollment,
-              r.semester_id = o.semester_id AS same_semester,
+              r.completed_on = o.ends_on AS completed_when_offering_ends,
               r.grading_scheme_id = (SELECT id FROM grading_schemes WHERE name = 'GLIM Diploma') AS same_scheme
          FROM course_results r JOIN course_enrollments ce ON ce.id = r.course_enrollment_id
          JOIN course_offerings o ON o.id = r.course_offering_id
@@ -196,7 +196,7 @@ describe("finalizing", () => {
       result_kind: "GRADED",
       attempt_no: 1,
       same_enrollment: true,
-      same_semester: true,
+      completed_when_offering_ends: true,
       same_scheme: true,
     });
     const scheme = await q<{ locked_at: Date | null }>(
@@ -236,27 +236,27 @@ describe("finalizing", () => {
     expect(again.rowCount).toBe(1);
   });
 
-  it("shows students their results at once, with GPA and CGPA Provisional", async () => {
+  it("shows students their results at once, with the CGPA Provisional until approved", async () => {
     const mine = (await send("sEnrolled", "GET", "/me/results")).json<MyResults>();
     const programme = mine.programmes[0];
     expect(programme?.programmeName).toBe("Persona Diploma");
-    expect(programme?.semesters).toHaveLength(1);
-    expect(programme?.semesters[0]).toMatchObject({
+    expect(programme?.summary).toEqual({
       creditsAttemptedX10: 30,
       creditsEarnedX10: 30,
-      gpaX100: 500,
       cgpaX100: 500,
       standing: "GOOD",
       provisional: true,
     });
-    expect(programme?.semesters[0]?.results[0]).toMatchObject({
+    expect(programme?.results).toHaveLength(1);
+    expect(programme?.results[0]).toMatchObject({
       courseCode: "PBIB101",
+      completedOn: "2099-12-31",
       letter: "A",
       finalPctX100: 7200,
       status: "FINALIZED",
     });
     const other = (await send("sOther", "GET", "/me/results")).json<MyResults>();
-    expect(other.programmes.flatMap((x) => x.semesters)).toEqual([]);
+    expect(other.programmes.flatMap((x) => x.results)).toEqual([]);
     expect((await send("l1Primary", "GET", "/me/results")).json<MyResults>().programmes).toEqual(
       [],
     );
@@ -303,7 +303,7 @@ describe("reopening", () => {
     });
     // The student no longer sees it; their grades open up, the other student's stay locked.
     const mine = (await send("sCompleted", "GET", "/me/results")).json<MyResults>();
-    expect(mine.programmes.flatMap((x) => x.semesters)).toEqual([]);
+    expect(mine.programmes.flatMap((x) => x.results)).toEqual([]);
     expect((await grade(exam, "sEnrolled", { score: "90", reason: "x" }, 1)).statusCode).toBe(409);
     // The missing exam grade now counts 0: (15/20 × 20 + 0) ÷ 70 = 21.43 % ⇒ F.
     const cleared = await grade(exam, "sCompleted", { score: null }, 1);

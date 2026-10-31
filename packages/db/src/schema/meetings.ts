@@ -14,7 +14,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { courseOfferings, rooms } from "./academic";
+import { rooms } from "./academic";
+import { courseOfferings } from "./offerings";
 import { citext, enumCheck, std, stdRo, tstz } from "./columns";
 import { users } from "./identity";
 import { lecturers } from "./lecturing";

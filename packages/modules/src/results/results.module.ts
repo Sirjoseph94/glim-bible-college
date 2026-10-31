@@ -6,16 +6,11 @@ import { Module } from "@nestjs/common";
 import { AwardsService } from "./awards.service";
 import { CourseResultsService } from "./course-results.service";
 import { GradingSchemesService } from "./grading-schemes.service";
-import { SemesterResultsService } from "./semester-results.service";
+import { CohortResultsService } from "./cohort-results.service";
 
-const services = [
-  GradingSchemesService,
-  CourseResultsService,
-  SemesterResultsService,
-  AwardsService,
-];
+const services = [GradingSchemesService, CourseResultsService, CohortResultsService, AwardsService];
 
-/** Results (TRD §14.3–14.5): grading schemes, course results and the results arithmetic. */
+/** Results (TRD §14.3–14.6): grading schemes, course results, approval, awards and the arithmetic. */
 @Module({
   imports: [AuditModule, AssessmentModule, IdentityModule, NotificationsModule],
   providers: services,

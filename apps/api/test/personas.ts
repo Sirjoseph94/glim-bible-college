@@ -1,11 +1,12 @@
 import type { StaffRole } from "@glim/contracts";
 import { schema } from "@glim/db";
 import {
-  CalendarService,
+  CohortsService,
   CoursesService,
   CurriculaService,
   ProgrammesService,
 } from "@glim/modules/academic";
+import { IntakesService } from "@glim/modules/admissions";
 import { SYSTEM_ACTOR } from "@glim/modules/audit";
 import { RoleService } from "@glim/modules/authorization";
 import { SessionService } from "@glim/modules/identity";
@@ -70,9 +71,11 @@ export interface Persona {
 export interface PersonaWorld {
   programmeId: string;
   curriculumId: string;
+  /** The course both O1 and O2 teach. */
   courseId: string;
-  sessionId: string;
-  semesterId: string;
+  /** The persona cohort's intake and cohort, which persona students belong to (O1's). */
+  intakeId: string;
+  cohortId: string;
   offerings: Record<OfferingKey, string>;
 }
 
@@ -107,19 +110,19 @@ export async function createUser(
   });
 }
 
-/** A programme, course, active session and semester, and two draft offerings O1 and O2. */
+/**
+ * An archived programme (so applicants only ever see the admissions world's), its course, and two
+ * cohorts from closed intakes, each with a draft offering of the course: O1 for the persona cohort
+ * and O2 for a second one. Both span 2025–2099, so tests can schedule Class Meetings on whatever
+ * day their clock shows (ADR-0005: meetings fall within their offering).
+ */
 async function createWorld(t: TestApp): Promise<PersonaWorld> {
+  const programmes = t.app.get(ProgrammesService);
   const programme = unwrap(
-    await t.app.get(ProgrammesService).create(
-      {
-        code: "PDIP",
-        name: "Persona Diploma",
-        awardType: "DIPLOMA",
-        durationSemesters: 4,
-        levels: 2,
-      },
-      SYSTEM_ACTOR,
-    ),
+    await programmes.create({ code: "PDIP", name: "Persona Diploma" }, SYSTEM_ACTOR),
+  );
+  unwrap(
+    await programmes.update(programme.id, programme.version, { status: "ARCHIVED" }, SYSTEM_ACTOR),
   );
   const course = unwrap(
     await t.app
@@ -129,35 +132,21 @@ async function createWorld(t: TestApp): Promise<PersonaWorld> {
         SYSTEM_ACTOR,
       ),
   );
-  const calendar = t.app.get(CalendarService);
-  // Far in the future and left PLANNED, so tests that run the real calendar aren't disturbed.
-  const session = unwrap(
-    await calendar.createSession(
-      { code: "2080/2081", name: "Persona Session", startsOn: "2080-09-01", endsOn: "2081-06-30" },
-      SYSTEM_ACTOR,
-    ),
-  );
-  const semester = unwrap(
-    await calendar.createSemester(
-      {
-        academicSessionId: session.id,
-        code: "S1",
-        name: "First Semester",
-        sequence: 1,
-        startsOn: "2080-09-04",
-        endsOn: "2081-01-26",
-      },
-      SYSTEM_ACTOR,
-    ),
-  );
+  // Closed and long past, so the intakes tests plan and see their own.
+  const cohort = (code: string, opensOn: string, closesOn: string) =>
+    createCohort(t, programme, { code, opensOn, closesOn, startsOn: "2025-01-01" });
+  const first = await cohort("2025", "2024-11-01", "2024-12-31");
+  const second = await cohort("2025-B", "2024-10-01", "2024-10-31");
   const assignments = t.app.get(AssignmentsService);
-  const offering = async (sectionCode: string) =>
+  const offering = async (cohortId: string) =>
     unwrap(
       await assignments.createOfferingWithLecturers(
         {
           courseId: course.id,
-          semesterId: semester.id,
-          sectionCode,
+          cohortId,
+          startsOn: "2025-01-01",
+          endsOn: "2099-12-31",
+          examOn: "2099-12-31",
           titleOverride: null,
           capacity: null,
           lecturers: [],
@@ -169,19 +158,40 @@ async function createWorld(t: TestApp): Promise<PersonaWorld> {
   const curriculum = unwrap(
     await t.app
       .get(CurriculaService)
-      .create(
-        { programmeId: programme.id, effectiveFrom: "2080-09-01", minElectiveCredits: "0.0" },
-        SYSTEM_ACTOR,
-      ),
+      .create({ programmeId: programme.id, effectiveFrom: "2025-01-01" }, SYSTEM_ACTOR),
   );
   return {
     programmeId: programme.id,
     curriculumId: curriculum.id,
     courseId: course.id,
-    sessionId: session.id,
-    semesterId: semester.id,
-    offerings: { O1: await offering("O1"), O2: await offering("O2") },
+    intakeId: first.intakeId,
+    cohortId: first.cohortId,
+    offerings: { O1: await offering(first.cohortId), O2: await offering(second.cohortId) },
   };
+}
+
+/**
+ * A closed intake and its cohort of the programme, made through the services (a cohort is
+ * otherwise only created by an acceptance). The intake's application window must not overlap
+ * another intake's.
+ */
+export async function createCohort(
+  t: TestApp,
+  programme: { id: string; code: string; name: string },
+  intake: { code: string; opensOn: string; closesOn: string; startsOn: string },
+): Promise<{ intakeId: string; cohortId: string }> {
+  const intakes = t.app.get(IntakesService);
+  const created = unwrap(
+    await intakes.create({ ...intake, offerAcceptanceDays: 21 }, SYSTEM_ACTOR),
+  );
+  unwrap(await intakes.transition(created.id, "CLOSED", SYSTEM_ACTOR));
+  const cohortId = await t.db.withTx(({ db }) =>
+    t.app.get(CohortsService).getOrCreate(db, {
+      programme,
+      intake: { id: created.id, code: created.code },
+    }),
+  );
+  return { intakeId: created.id, cohortId };
 }
 
 export async function createPersonas(t: TestApp): Promise<Personas> {
@@ -229,8 +239,8 @@ export async function createPersonas(t: TestApp): Promise<Personas> {
 
 let matric = 0;
 /**
- * Makes a persona a student of the persona programme, with a semester enrollment in the persona
- * semester and course enrollments on its offerings, written directly (no admissions needed).
+ * Makes a persona a student of the persona programme in the persona cohort, with course
+ * enrollments on its offerings, written directly (no admissions needed).
  */
 export async function enrollStudent(
   t: TestApp,
@@ -247,27 +257,24 @@ export async function enrollStudent(
   );
   const studentId = student.rows[0]?.id;
   const enrollment = await q(
-    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, entry_session_id, matric_number, study_mode, started_on, status)
-     VALUES ($1, $2, $3, $4, $5, 'ONLINE', '2080-09-01', $6) RETURNING id`,
+    `INSERT INTO programme_enrollments (student_id, programme_id, curriculum_id, intake_id, cohort_id, matric_number, study_mode, started_on, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'ONLINE', '2080-09-01', $7) RETURNING id`,
     [
       studentId,
       world.programmeId,
       world.curriculumId,
-      world.sessionId,
+      world.intakeId,
+      world.cohortId,
       `GLIM/PDIP/2080/${String(matric).padStart(4, "0")}`,
       spec.studentStatus === "GRADUATED" ? "COMPLETED" : "ACTIVE",
     ],
   );
   const programmeEnrollmentId = enrollment.rows[0]?.id;
-  const semester = await q(
-    "INSERT INTO semester_enrollments (programme_enrollment_id, semester_id, level_no) VALUES ($1, $2, 1) RETURNING id",
-    [programmeEnrollmentId, world.semesterId],
-  );
   for (const [key, status] of Object.entries(spec.studies ?? {}) as [OfferingKey, StudyStatus][]) {
     await q(
-      `INSERT INTO course_enrollments (semester_enrollment_id, programme_enrollment_id, course_offering_id, student_id, selection, status)
-       VALUES ($1, $2, $3, $4, 'COMPULSORY', $5) RETURNING id`,
-      [semester.rows[0]?.id, programmeEnrollmentId, world.offerings[key], studentId, status],
+      `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status)
+       VALUES ($1, $2, $3, 'COHORT', $4) RETURNING id`,
+      [programmeEnrollmentId, world.offerings[key], studentId, status],
     );
   }
 }

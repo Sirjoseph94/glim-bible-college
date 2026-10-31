@@ -27,7 +27,7 @@ beforeAll(async () => {
   });
   p = await createPersonas(t);
   world = await admissionsWorld(t, p);
-  kit = applicantKit(t, issuer, () => world.certificate.id);
+  kit = applicantKit(t, issuer);
 
   // A member of staff invited now gets a referral code.
   const invited = await t.request({
@@ -59,7 +59,6 @@ beforeAll(async () => {
     { bornAgainWhen: SECRET },
   );
   await submitAs("Kwame", {
-    programmeId: world.diploma.id,
     studyMode: "ON_CAMPUS",
     address: { country: "Ghana" },
     feedback: { heardVia: ["FACEBOOK"], referralCode: "ZZZZ999" },
@@ -106,10 +105,8 @@ describe("the admissions report", () => {
       Object.fromEntries(list.map((c) => [c.label, c.count]));
     expect(report).toMatchObject({ intake: { code: "2027" }, total: 3, draftsInProgress: 1 });
     expect(counts(report.byStatus)).toEqual({ Accepted: 1, Submitted: 2 });
-    expect(counts(report.byProgramme)).toEqual({
-      "Certificate in Theology": 2,
-      "Diploma in Theology": 1,
-    });
+    // One programme (ADR-0005).
+    expect(counts(report.byProgramme)).toEqual({ "Diploma in Theology": 3 });
     expect(counts(report.byStudyMode)).toEqual({ Online: 2, "On campus": 1 });
     expect(counts(report.byCountry)).toEqual({ Nigeria: 2, Ghana: 1 });
     expect(counts(report.byHeardVia)).toEqual({

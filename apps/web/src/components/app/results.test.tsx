@@ -9,32 +9,26 @@ const text = (html: string) =>
     .trim();
 
 describe("GpaSummary (handoff §9.17)", () => {
-  it("shows this semester's GPA and the CGPA to two decimals, with the semester's status", () => {
+  it("shows the CGPA to two decimals and the credits earned, with the results' status", () => {
     const html = renderToStaticMarkup(
-      <GpaSummary gpaX100={420} cgpaX100={395} provisional earnedX10={180} attemptedX10={180} />,
+      <GpaSummary cgpaX100={395} provisional earnedX10={180} attemptedX10={180} />,
     );
-    expect(text(html)).toContain("This semester 4.20 CGPA 3.95");
+    expect(text(html)).toContain("CGPA 3.95");
     expect(text(html)).toContain("Provisional");
     expect(text(html)).toContain("18 of 18 credits earned");
   });
 
-  it("says Approved once the Registrar has published the semester", () => {
+  it("says Approved once the Registrar has approved every result", () => {
     const html = renderToStaticMarkup(
-      <GpaSummary
-        gpaX100={500}
-        cgpaX100={500}
-        provisional={false}
-        earnedX10={30}
-        attemptedX10={30}
-      />,
+      <GpaSummary cgpaX100={500} provisional={false} earnedX10={30} attemptedX10={30} />,
     );
     expect(text(html)).toContain("Approved");
     expect(text(html)).not.toContain("Provisional");
   });
 
-  it("shows dashes and No results yet before any result is finalized", () => {
-    const html = renderToStaticMarkup(<GpaSummary gpaX100={null} cgpaX100={null} />);
-    expect(text(html)).toContain("This semester — CGPA —");
+  it("shows a dash and No results yet before any result is finalized", () => {
+    const html = renderToStaticMarkup(<GpaSummary cgpaX100={null} />);
+    expect(text(html)).toContain("CGPA —");
     expect(text(html)).toContain("No results yet");
   });
 });

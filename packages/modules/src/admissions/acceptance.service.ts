@@ -12,7 +12,7 @@ import { UserService } from "@glim/modules/identity";
 import { NotificationsService } from "@glim/modules/notifications";
 import { CLOCK, domainError, err, type Clock, type DomainResult } from "@glim/shared";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { selectApplications } from "./application-query";
 import { ApplicationsService } from "./applications.service";
 import { recordTransition } from "./transitions";
@@ -107,7 +107,7 @@ export class AcceptanceService {
         .select({
           id: schema.intakes.id,
           code: schema.intakes.code,
-          sessionId: schema.intakes.academicSessionId,
+          startsOn: schema.intakes.startsOn,
         })
         .from(schema.intakes)
         .where(eq(schema.intakes.id, current.intakeId));
@@ -129,33 +129,17 @@ export class AcceptanceService {
         userId: current.applicantUserId,
         profile: studentProfile(current),
         programme: found.programme,
-        intake: { id: intake.id, year: Number(intake.code) },
+        intake: { id: intake.id, year: Number(intake.startsOn.slice(0, 4)) },
         cohortId,
         curriculumId,
-        entrySessionId: intake.sessionId,
-        startedOn: found.intake.startsOn,
+        startedOn: intake.startsOn,
         applicationId: id,
         studyMode: current.studyMode as StudyMode,
       });
       if (!admitted.ok) return admitted;
       const { matricNumber, enrollmentId } = admitted.value;
-      // §10.4 step 5: if the entry session's first semester is already open, register now.
-      const [firstSemester] = await db
-        .select({ id: schema.semesters.id, status: schema.semesters.status })
-        .from(schema.semesters)
-        .where(
-          and(
-            eq(schema.semesters.academicSessionId, intake.sessionId),
-            eq(schema.semesters.sequence, 1),
-          ),
-        );
-      if (firstSemester !== undefined && ["REGISTRATION", "ACTIVE"].includes(firstSemester.status))
-        await this.registration.registerEnrollment(
-          tx,
-          firstSemester.id,
-          enrollmentId,
-          actor.userId,
-        );
+      // §10.4 step 5: the cohort's published and running offerings register the student now.
+      await this.registration.registerEnrollment(tx, enrollmentId, actor.userId);
       const referralCode = await this.users.ensureReferralCode(db, current.applicantUserId);
 
       await db
@@ -187,8 +171,7 @@ export class AcceptanceService {
           matricNumber,
           referralCode,
           programmeName: found.programme.name,
-          academicSessionName: found.intake.academicSessionName,
-          sessionStartsOn: found.intake.startsOn,
+          startsOn: found.intake.startsOn,
           ...(current.email === null ? {} : { emailTo: current.email }),
         },
         email: true,

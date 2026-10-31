@@ -12,30 +12,27 @@ function Figure({ label, value }: { label: string; value: number | null }) {
 }
 
 /**
- * The student's standing at a glance (§9.17): this semester's GPA and the CGPA, always to two
- * decimals from exact integers, the semester's status and the credits earned.
+ * The student's standing at a glance (§9.17): the CGPA, always to two decimals from exact
+ * integers, whether it's still provisional, and the credits earned (ADR-0005: no semester GPA).
  */
 export function GpaSummary({
-  gpaX100,
   cgpaX100,
   provisional,
   earnedX10,
   attemptedX10,
 }: {
-  gpaX100: number | null;
   cgpaX100: number | null;
   provisional?: boolean;
   earnedX10?: number;
   attemptedX10?: number;
 }) {
-  const none = gpaX100 === null && cgpaX100 === null;
+  const none = cgpaX100 === null;
   return (
     <section
       aria-label="Grade point average"
       className="overflow-hidden rounded-md border border-line bg-surface-raised"
     >
       <div className="flex divide-x divide-line">
-        <Figure label="This semester" value={gpaX100} />
         <Figure label="CGPA" value={cgpaX100} />
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">

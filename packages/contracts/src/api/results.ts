@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ENUMS } from "../enums";
+import { ENUMS, STANDINGS } from "../enums";
 import { endpoint } from "../http";
 
 /**
@@ -138,6 +138,12 @@ export const courseResultRowSchema = z.object({
   passed: z.boolean().nullable(),
   attemptNo: z.number().int(),
   finalizedAt: z.iso.datetime().nullable(),
+  approvedAt: z.iso.datetime().nullable(),
+  /**
+   * The student's makeup exam date, if the Lecturer set one. While they have no exam grade,
+   * finalizing leaves them out (ADR-0005).
+   */
+  makeupOn: z.iso.date().nullable(),
   reopenedCount: z.number().int(),
   version: z.number().int(),
 });
@@ -148,6 +154,8 @@ export const courseResultsSchema = z.object({
   /** Why finalizing can't run now (weights, a missing scheme, missing grades), or null. */
   blocker: z.string().nullable(),
   finalized: z.number().int(),
+  /** Students waiting on a makeup exam, whom finalizing leaves out for now. */
+  awaitingMakeup: z.number().int(),
   items: z.array(courseResultRowSchema),
 });
 
@@ -169,7 +177,7 @@ export const finalizeCourseResults = endpoint({
   method: "POST",
   path: "/course-offerings/:id/results/finalize",
   summary:
-    "Finalize the course: freeze each student's result (weights must total 100) and lock the gradebook",
+    "Finalize the course: freeze each student's result (weights must total 100) and lock their grades; students awaiting a makeup exam are left out",
   tag: "Results",
   auth: "session",
   permission: "results:course-result:finalize",
@@ -198,6 +206,8 @@ export const myCourseResultSchema = z.object({
   id: z.uuid(),
   courseCode: z.string(),
   courseTitle: z.string(),
+  /** When the course was completed: results are listed in this order. */
+  completedOn: z.iso.date(),
   creditsX10: z.number().int(),
   finalPctX100: z.number().int().nullable(),
   letter: z.string().nullable(),
@@ -209,27 +219,26 @@ export const myCourseResultSchema = z.object({
   status: z.enum(ENUMS["course_results.status"]),
 });
 
+/** Credits, CGPA and standing over a programme enrollment's results so far (§14.4). */
+export const resultSummarySchema = z.object({
+  creditsAttemptedX10: z.number().int(),
+  creditsEarnedX10: z.number().int(),
+  cgpaX100: z.number().int().nullable(),
+  standing: z.enum(STANDINGS),
+  /** True while any result it counts isn't approved by the Registrar yet. */
+  provisional: z.boolean(),
+});
+
+export type ResultSummary = z.infer<typeof resultSummarySchema>;
+
 export const myResultsSchema = z.object({
   programmes: z.array(
     z.object({
       programmeEnrollmentId: z.uuid(),
       programmeName: z.string(),
       matricNumber: z.string(),
-      semesters: z.array(
-        z.object({
-          semesterId: z.uuid(),
-          semesterName: z.string(),
-          sessionCode: z.string(),
-          results: z.array(myCourseResultSchema),
-          creditsAttemptedX10: z.number().int(),
-          creditsEarnedX10: z.number().int(),
-          gpaX100: z.number().int().nullable(),
-          cgpaX100: z.number().int().nullable(),
-          standing: z.enum(ENUMS["semester_results.standing"]),
-          /** True until the Registrar approves and publishes the semester. */
-          provisional: z.boolean(),
-        }),
-      ),
+      results: z.array(myCourseResultSchema),
+      summary: resultSummarySchema,
     }),
   ),
 });
@@ -240,128 +249,98 @@ export const getMyResults = endpoint({
   method: "GET",
   path: "/me/results",
   summary:
-    "The caller's finalized course results by semester, with GPA and CGPA (Provisional until published)",
+    "The caller's finalized course results in the order completed, with CGPA (Provisional until approved)",
   tag: "Results",
   auth: "session",
   response: myResultsSchema,
 });
 
-// ---- semester results (§14.5) ----
+// ---- cohort results and approval (§14.5, ADR-0005) ----
 
-export const semesterResultRowSchema = z.object({
-  id: z.uuid(),
+export const cohortResultRowSchema = z.object({
   programmeEnrollmentId: z.uuid(),
   studentName: z.string(),
   matricNumber: z.string(),
-  programmeCode: z.string(),
-  semesterId: z.uuid(),
-  creditsAttemptedX10: z.number().int(),
-  creditsEarnedX10: z.number().int(),
-  gpaX100: z.number().int().nullable(),
-  cumCreditsAttemptedX10: z.number().int(),
-  cumCreditsEarnedX10: z.number().int(),
-  cgpaX100: z.number().int().nullable(),
-  standing: z.enum(ENUMS["semester_results.standing"]),
-  status: z.enum(ENUMS["semester_results.status"]),
-  calcVersion: z.number().int(),
-  computedAt: z.iso.datetime(),
-  /** Course results in the semester still in draft (reopened): approving waits for them. */
-  draftCourseResults: z.number().int(),
-  /** Their course codes, sorted ("Waiting on GRK 301"). */
-  draftCourseCodes: z.array(z.string()),
-  /** The student's level in this semester (Year 1, 2…); null for imported past results. */
-  levelNo: z.number().int().nullable(),
+  /** The student's latest result in each of the cohort's offerings, by offering id. */
+  results: z.record(
+    z.uuid(),
+    z.object({
+      id: z.uuid(),
+      letter: z.string().nullable(),
+      resultKind: z.enum(ENUMS["course_results.result_kind"]),
+      status: z.enum(ENUMS["course_results.status"]),
+    }),
+  ),
+  summary: resultSummarySchema,
 });
 
-export type SemesterResultRow = z.infer<typeof semesterResultRowSchema>;
+export type CohortResultRow = z.infer<typeof cohortResultRowSchema>;
 
-const semesterScope = z.object({
-  semesterId: z.uuid(),
-  programmeId: z.uuid().optional(),
-  cohortId: z.uuid().optional(),
+export const cohortOfferingResultsSchema = z.object({
+  offeringId: z.uuid(),
+  courseCode: z.string(),
+  title: z.string(),
+  endsOn: z.iso.date(),
+  status: z.enum(ENUMS["course_offerings.status"]),
+  enrolled: z.number().int(),
+  finalized: z.number().int(),
+  approved: z.number().int(),
 });
 
-export const listSemesterResults = endpoint({
+export const cohortResultsSchema = z.object({
+  cohort: z.object({ id: z.uuid(), code: z.string(), name: z.string() }),
+  /** The cohort's live offerings in date order. */
+  offerings: z.array(cohortOfferingResultsSchema),
+  items: z.array(cohortResultRowSchema),
+});
+
+export type CohortResults = z.infer<typeof cohortResultsSchema>;
+
+export const getCohortResults = endpoint({
   method: "GET",
-  path: "/results/semesters",
-  summary: "Semester results for a semester, optionally one programme or cohort",
+  path: "/results/cohorts/:id",
+  summary: "A cohort's results: each offering's progress, and each student's results and CGPA",
   tag: "Results",
   auth: "session",
   permission: "results:record:read",
-  query: semesterScope,
-  response: z.object({
-    items: z.array(semesterResultRowSchema),
-    /**
-     * Per programme in the result: the Course Offerings its students take this semester, and how
-     * many have every student's course result finalized ("Courses finalized 8 of 8").
-     */
-    courses: z.array(
-      z.object({
-        programmeId: z.uuid(),
-        programmeCode: z.string(),
-        offerings: z.number().int(),
-        offeringsFinalized: z.number().int(),
-      }),
-    ),
-  }),
+  resource: { type: "cohort", param: "id" },
+  params: idParams,
+  response: cohortResultsSchema,
 });
 
-export const computeSemesterResults = endpoint({
+export const approveResults = endpoint({
   method: "POST",
-  path: "/results/semesters/compute",
+  path: "/results/approve",
   summary:
-    "Recompute semester results (and later semesters' CGPA) from course results; unchanged ones stay as they are",
+    "Approve the FINALIZED course results of one offering or of a whole cohort; draft (reopened) ones are skipped",
   tag: "Results",
   auth: "session",
-  permission: "results:semester:compute",
+  permission: "results:course-result:approve",
   idempotent: true,
-  body: z.object({ semesterId: z.uuid(), programmeId: z.uuid().optional() }).strict(),
-  response: z.object({ computed: z.number().int(), changed: z.number().int() }),
-  successStatus: 200,
-});
-
-export const approveSemesterResults = endpoint({
-  method: "POST",
-  path: "/results/semesters/approve",
-  summary:
-    "Approve DRAFT semester results and their course results in bulk (skipping students with a reopened course result)",
-  tag: "Results",
-  auth: "session",
-  permission: "results:semester:approve",
-  idempotent: true,
-  body: semesterScope.strict(),
+  body: z.union([
+    z.object({ offeringId: z.uuid() }).strict(),
+    z.object({ cohortId: z.uuid() }).strict(),
+  ]),
   response: z.object({ approved: z.number().int(), skipped: z.number().int() }),
   successStatus: 200,
 });
 
-export const publishSemesterResults = endpoint({
-  method: "POST",
-  path: "/results/semesters/publish",
-  summary: "Publish APPROVED semester results: the Provisional label goes and students are told",
-  tag: "Results",
-  auth: "session",
-  permission: "results:semester:publish",
-  idempotent: true,
-  body: semesterScope.strict(),
-  response: z.object({ published: z.number().int() }),
-  successStatus: 200,
-});
-
 export const broadsheetSchema = z.object({
-  semester: z.object({ id: z.uuid(), name: z.string(), sessionCode: z.string() }),
-  items: z.array(semesterResultRowSchema),
+  cohort: z.object({ id: z.uuid(), code: z.string(), name: z.string() }),
+  offerings: z.array(cohortOfferingResultsSchema),
+  items: z.array(cohortResultRowSchema),
 });
 
 export const getResultsBroadsheet = endpoint({
   method: "GET",
   path: "/reports/results",
-  summary: "The results broadsheet (credits, GPA, CGPA, standing), as JSON or (`format=csv`) CSV",
+  summary:
+    "A cohort's results broadsheet (each course's letter, credits, CGPA, standing), as JSON or (`format=csv`) CSV",
   tag: "Results",
   auth: "session",
   permission: "results:record:read",
   query: z.object({
-    semesterId: z.uuid(),
-    programmeId: z.uuid().optional(),
+    cohortId: z.uuid(),
     format: z.enum(["json", "csv"]).default("json"),
   }),
   response: broadsheetSchema,
@@ -378,6 +357,7 @@ export const awardRequirementSchema = z.object({
 
 export const awardSchema = z.object({
   id: z.uuid(),
+  awardType: z.enum(ENUMS["awards.award_type"]),
   programmeEnrollmentId: z.uuid(),
   studentName: z.string(),
   matricNumber: z.string(),
@@ -401,10 +381,22 @@ export const awardCandidateSchema = z.object({
   studentName: z.string(),
   matricNumber: z.string(),
   programmeCode: z.string(),
-  /** From the latest semester result, if any. */
+  cohortCode: z.string(),
   cgpaX100: z.number().int().nullable(),
   creditsEarnedX10: z.number().int(),
-  award: z.object({ id: z.uuid(), status: z.enum(ENUMS["awards.status"]) }).nullable(),
+  /** The curriculum's total credits: the Certificate needs half of them passed. */
+  totalCreditsX10: z.number().int(),
+  /** Half the credits passed (ADR-0005). */
+  certificateEligible: z.boolean(),
+  /** Every curriculum course passed. */
+  diplomaEligible: z.boolean(),
+  awards: z.array(
+    z.object({
+      id: z.uuid(),
+      awardType: z.enum(ENUMS["awards.award_type"]),
+      status: z.enum(ENUMS["awards.status"]),
+    }),
+  ),
 });
 
 export type AwardCandidate = z.infer<typeof awardCandidateSchema>;
@@ -416,7 +408,7 @@ export const listAwardCandidates = endpoint({
   tag: "Results",
   auth: "session",
   permission: "results:award:confirm",
-  query: z.object({ programmeId: z.uuid().optional() }),
+  query: z.object({ cohortId: z.uuid().optional() }),
   response: z.object({ items: z.array(awardCandidateSchema) }),
 });
 
@@ -435,11 +427,12 @@ export const proposeAward = endpoint({
   method: "POST",
   path: "/programme-enrollments/:id/award/propose",
   summary:
-    "Work out the award: final CGPA, credits, award class and a checklist of requirements (unmet ones don't block the proposal)",
+    "Work out the Certificate or Diploma: CGPA, credits, award class and a checklist of requirements (unmet ones don't block the proposal)",
   tag: "Results",
   auth: "session",
   permission: "results:award:confirm",
   params: idParams,
+  body: z.object({ awardType: z.enum(ENUMS["awards.award_type"]) }).strict(),
   response: awardSchema,
   successStatus: 200,
 });
@@ -448,7 +441,7 @@ export const confirmAward = endpoint({
   method: "POST",
   path: "/awards/:id/confirm",
   summary:
-    "Confer the award: a certificate number, the programme enrollment COMPLETED and the student GRADUATED (REQUIREMENTS_NOT_MET, NO_AWARD)",
+    "Confer the award with a certificate number; conferring the Diploma also completes the programme enrollment and graduates the student (REQUIREMENTS_NOT_MET, NO_AWARD)",
   tag: "Results",
   auth: "session",
   permission: "results:award:confirm",

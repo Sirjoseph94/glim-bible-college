@@ -125,7 +125,7 @@ export function AdmissionsApplicationPage() {
           title={[a.personal.firstName, a.personal.middleName, a.personal.lastName]
             .filter(Boolean)
             .join(" ")}
-          meta={`${a.referenceNo ?? ""} · ${a.programme.name} · ${a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${a.intake.academicSessionName}`}
+          meta={`${a.referenceNo ?? ""} · ${a.programme.name} · ${a.studyMode === "ON_CAMPUS" ? "On campus" : "Online"} · ${a.intake.code} Intake`}
         />
         <p className="text-body">
           Status: <ApplicationStatusBadge status={a.status} />

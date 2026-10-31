@@ -20,7 +20,13 @@ import { toLocalDate, zonedToInstant } from "@glim/shared/time";
 import { LOGGER, type Logger } from "@glim/telemetry";
 import { Inject, Injectable } from "@nestjs/common";
 import { ClassMeetingsService } from "./class-meetings.service";
-import { invalid, MeetingWriter, normaliseLink, type MeetingSlot } from "./meeting-writer";
+import {
+  invalid,
+  MeetingWriter,
+  normaliseLink,
+  outsideOffering,
+  type MeetingSlot,
+} from "./meeting-writer";
 
 /** Occurrences are generated this far ahead, and the horizon moves on daily (§11.9). */
 export const HORIZON_DAYS = 56;
@@ -84,9 +90,18 @@ export class SeriesService {
     const zone = await this.writer.zone();
     const now = this.writer.now();
     const today = toLocalDate(now, zone);
-    const untilOn = input.untilOn ?? null;
+    // A series stays within its offering's dates, ending on its last day at the latest (ADR-0005).
+    const offering = await this.writer.offeringDates(offeringId);
+    if (offering === null) return err(domainError("NOT_FOUND", "Not found."));
+    if (
+      input.startsOn < offering.startsOn ||
+      input.startsOn > offering.endsOn ||
+      (input.untilOn != null && input.untilOn > offering.endsOn)
+    )
+      return err(outsideOffering(offering));
+    const untilOn = input.untilOn ?? offering.endsOn;
     if (input.startsOn < today) return err(invalid("startsOn", "Start the series today or later."));
-    if (untilOn !== null && untilOn < input.startsOn)
+    if (untilOn < input.startsOn)
       return err(invalid("untilOn", "The series must end on or after its first day."));
     const rule: WeeklyRule = {
       startsOn: input.startsOn,
@@ -94,7 +109,7 @@ export class SeriesService {
       weekdays: input.weekdays,
       interval: input.interval ?? 1,
     };
-    if (untilOn !== null && weeklyOccurrences(rule, untilOn).length === 0)
+    if (weeklyOccurrences(rule, untilOn).length === 0)
       return err(invalid("weekdays", "None of those weekdays fall between the start and end."));
     const through = minDate(addDays(today, HORIZON_DAYS), untilOn);
     const planned = this.occurrences(rule, through, input.startTime, input.durationMinutes, zone);
@@ -141,7 +156,7 @@ export class SeriesService {
           roomId,
           onlineLink: link.value ?? null,
           generatedThrough: through,
-          status: untilOn !== null && through >= untilOn ? "ENDED" : "ACTIVE",
+          status: through >= untilOn ? "ENDED" : "ACTIVE",
           createdBy: actor.userId,
         });
         const meetingIds: string[] = [];

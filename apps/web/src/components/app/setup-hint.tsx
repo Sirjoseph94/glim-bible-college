@@ -5,9 +5,9 @@ import type { StaffRole } from "../../api/users";
 
 /** Where each kind of set-up happens, and who may open that page (the guards in router.tsx). */
 const PLACES = {
-  calendar: {
-    to: "/admin/calendar",
-    page: "Academic calendar",
+  rooms: {
+    to: "/admin/rooms",
+    page: "Rooms",
     roles: ["SYSTEM_ADMIN", "ACADEMIC_ADMIN"],
     owner: "an Academic Admin",
   },
@@ -39,7 +39,7 @@ export function SetupHint({
   fix,
   place,
 }: {
-  /** What isn't there yet, as a sentence: "No upcoming Academic Session yet." */
+  /** What isn't there yet, as a sentence: "No Rooms yet." */
   missing: string;
   /** What to do, lower-case: "create one". */
   fix: string;

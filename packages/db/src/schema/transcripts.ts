@@ -1,6 +1,6 @@
 import { date, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { citext, enumCheck, std, stdRo, tstz } from "./columns";
-import { files } from "./content";
+import { files } from "./files";
 import { programmeEnrollments, students } from "./enrollment";
 import { users } from "./identity";
 

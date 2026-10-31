@@ -20,34 +20,26 @@ export type IntakeStatus = EnumValue<"intakes.status">;
 export interface IntakeView {
   id: string;
   code: string;
-  academicSessionId: string;
-  academicSessionName: string;
   opensOn: string;
   closesOn: string;
+  startsOn: string;
   offerAcceptanceDays: number;
   status: IntakeStatus;
   version: number;
 }
 
 export interface CurrentIntake {
-  intake: Pick<
-    IntakeView,
-    "code" | "academicSessionName" | "opensOn" | "closesOn" | "status"
-  > | null;
-  programmes: {
-    id: string;
-    code: string;
-    name: string;
-    awardType: string;
-    levels: number;
-    durationSemesters: number;
-  }[];
+  intake: Pick<IntakeView, "code" | "opensOn" | "closesOn" | "startsOn" | "status"> | null;
+  programmes: { id: string; code: string; name: string }[];
   statementOfFaithUrl: string | null;
 }
 
 const notFound = () => err(domainError("NOT_FOUND", "Not found."));
 
-/** The yearly intake (owner: admissions, TRD §10.1, C-33): PLANNED → OPEN → CLOSED. */
+/**
+ * Intakes (owner: admissions, TRD §10.1, ADR-0005): PLANNED → OPEN → CLOSED. Each has its own
+ * application window, never overlapping another's, and the date its cohort starts.
+ */
 @Injectable()
 export class IntakesService {
   constructor(
@@ -79,13 +71,10 @@ export class IntakesService {
         id: schema.programmes.id,
         code: schema.programmes.code,
         name: schema.programmes.name,
-        awardType: schema.programmes.awardType,
-        levels: schema.programmes.levels,
-        durationSemesters: schema.programmes.durationSemesters,
       })
       .from(schema.programmes)
       .where(eq(schema.programmes.status, "ACTIVE"))
-      .orderBy(asc(schema.programmes.levels), asc(schema.programmes.code));
+      .orderBy(asc(schema.programmes.code));
     const settings = await this.settings.get();
     return {
       intake:
@@ -93,9 +82,9 @@ export class IntakesService {
           ? null
           : {
               code: intake.code,
-              academicSessionName: intake.academicSessionName,
               opensOn: intake.opensOn,
               closesOn: intake.closesOn,
+              startsOn: intake.startsOn,
               status: intake.status,
             },
       programmes,
@@ -106,44 +95,16 @@ export class IntakesService {
   create(
     input: {
       code: string;
-      academicSessionId: string;
       opensOn: string;
       closesOn: string;
+      startsOn: string;
       offerAcceptanceDays: number;
     },
     actor: AuditActor,
   ): Promise<DomainResult<IntakeView>> {
-    if (input.closesOn <= input.opensOn) {
-      return Promise.resolve(
-        err(domainError("VALIDATION_FAILED", "The intake must close after it opens.")),
-      );
-    }
+    const invalid = checkDates(input);
+    if (invalid !== null) return Promise.resolve(err(invalid));
     return this.guarded(async (db) => {
-      const [session] = await db
-        .select({ startsOn: schema.academicSessions.startsOn })
-        .from(schema.academicSessions)
-        .where(eq(schema.academicSessions.id, input.academicSessionId));
-      if (session === undefined) {
-        return err(
-          domainError("VALIDATION_FAILED", "That Academic Session doesn't exist.", {
-            fieldErrors: [
-              {
-                path: "body.academicSessionId",
-                code: "not_found",
-                message: "That Academic Session doesn't exist.",
-              },
-            ],
-          }),
-        );
-      }
-      if (input.closesOn >= session.startsOn) {
-        return err(
-          domainError(
-            "VALIDATION_FAILED",
-            "Applications must close before the Academic Session starts.",
-          ),
-        );
-      }
       const now = this.clock.now();
       const [row] = await db
         .insert(schema.intakes)
@@ -163,7 +124,12 @@ export class IntakesService {
   update(
     id: string,
     expectedVersion: number,
-    change: Patch<{ opensOn: string; closesOn: string; offerAcceptanceDays: number }>,
+    change: Patch<{
+      opensOn: string;
+      closesOn: string;
+      startsOn: string;
+      offerAcceptanceDays: number;
+    }>,
     actor: AuditActor,
   ): Promise<DomainResult<IntakeView>> {
     return this.guarded(async (db) => {
@@ -180,6 +146,35 @@ export class IntakesService {
       if (current.status === "CLOSED")
         return err(domainError("CONFLICT", "A closed intake can't change."));
       const fields = definedFields(change);
+      const invalid = checkDates({
+        opensOn: change.opensOn ?? current.opensOn,
+        closesOn: change.closesOn ?? current.closesOn,
+        startsOn: change.startsOn ?? current.startsOn,
+      });
+      if (invalid !== null) return err(invalid);
+      if (change.startsOn !== undefined && change.startsOn > current.startsOn) {
+        // The cohort's offerings may not start before it does (ADR-0005).
+        const o = schema.courseOfferings;
+        const [early] = await db
+          .select({ id: o.id })
+          .from(o)
+          .innerJoin(schema.cohorts, eq(schema.cohorts.id, o.cohortId))
+          .where(
+            and(
+              eq(schema.cohorts.intakeId, id),
+              ne(o.status, "CANCELLED"),
+              lt(o.startsOn, change.startsOn),
+            ),
+          )
+          .limit(1);
+        if (early !== undefined)
+          return err(
+            domainError(
+              "BEFORE_INTAKE_START",
+              "This intake's cohort has offerings starting before that date. Move them first.",
+            ),
+          );
+      }
       await db
         .update(i)
         .set({ ...fields, updatedAt: this.clock.now(), version: sql`${i.version} + 1` })
@@ -263,13 +258,17 @@ export class IntakesService {
       return await this.db.withTxResult(({ db }) => fn(db));
     } catch (error) {
       const pg = pgError(error);
-      if (pg?.code === PG.UNIQUE_VIOLATION) {
+      if (pg?.code === PG.UNIQUE_VIOLATION)
+        return err(domainError("CONFLICT", "There's already an intake with that code."));
+      if (pg?.code === PG.EXCLUSION_VIOLATION)
         return err(
-          domainError("CONFLICT", "That intake code or Academic Session already has an intake."),
+          domainError(
+            "INTAKE_OVERLAP",
+            "Another intake takes applications on some of those days. Intakes' application dates can't overlap.",
+          ),
         );
-      }
       if (pg?.code === PG.CHECK_VIOLATION)
-        return err(domainError("VALIDATION_FAILED", "The intake must close after it opens."));
+        return err(domainError("VALIDATION_FAILED", "The intake's dates don't fit together."));
       throw error;
     }
   }
@@ -293,23 +292,32 @@ export class IntakesService {
     db: Database = this.db.read,
   ): Promise<IntakeView[]> {
     const i = schema.intakes;
-    const s = schema.academicSessions;
     const rows = await db
-      .select({ intake: i, sessionName: s.name })
+      .select()
       .from(i)
-      .innerJoin(s, eq(s.id, i.academicSessionId))
       .where(where)
       .orderBy(...order);
     return rows.map((r) => ({
-      id: r.intake.id,
-      code: r.intake.code,
-      academicSessionId: r.intake.academicSessionId,
-      academicSessionName: r.sessionName,
-      opensOn: r.intake.opensOn,
-      closesOn: r.intake.closesOn,
-      offerAcceptanceDays: r.intake.offerAcceptanceDays,
-      status: r.intake.status as IntakeStatus,
-      version: r.intake.version,
+      id: r.id,
+      code: r.code,
+      opensOn: r.opensOn,
+      closesOn: r.closesOn,
+      startsOn: r.startsOn,
+      offerAcceptanceDays: r.offerAcceptanceDays,
+      status: r.status as IntakeStatus,
+      version: r.version,
     }));
   }
+}
+
+/** Applications close after they open, and the cohort can't start before they open. */
+function checkDates(dates: { opensOn: string; closesOn: string; startsOn: string }) {
+  if (dates.closesOn <= dates.opensOn)
+    return domainError("VALIDATION_FAILED", "The intake must close after it opens.");
+  if (dates.startsOn < dates.opensOn)
+    return domainError(
+      "VALIDATION_FAILED",
+      "The cohort can't start before the intake opens for applications.",
+    );
+  return null;
 }

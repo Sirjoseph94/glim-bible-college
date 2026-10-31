@@ -12,7 +12,6 @@ export const NOTIFICATION_KINDS = [
   { kind: "admissions.application.rejected", label: "Application decision", critical: true },
   { kind: "meeting.cancelled", label: "Class Meeting cancelled", critical: true },
   { kind: "meeting.rescheduled", label: "Class Meeting moved", critical: true },
-  { kind: "results.semester-published", label: "Semester results published", critical: true },
   { kind: "transcript.issued", label: "Transcript issued", critical: true },
   { kind: "transcript.revoked", label: "Transcript revoked", critical: true },
   { kind: "video.unavailable", label: "Recording unavailable (staff)", critical: true },
@@ -47,14 +46,11 @@ export const NOTIFICATION_KINDS = [
   { kind: "assessment.grade-released", label: "Grades released", critical: false },
   { kind: "results.course-finalized", label: "Course result out", critical: false },
   { kind: "results.course-reopened", label: "Course result under review", critical: false },
+  { kind: "results.course-approved", label: "Course result approved", critical: false },
+  { kind: "assessment.makeup-exam", label: "Makeup exam date", critical: true },
   { kind: "results.award-conferred", label: "Award conferred", critical: false },
   { kind: "transcript.request-rejected", label: "Transcript request declined", critical: false },
   { kind: "enrollment.student.admitted", label: "Student record created", critical: false },
-  {
-    kind: "enrollment.registration.offering-missing",
-    label: "Registration problems (staff)",
-    critical: false,
-  },
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]["kind"];

@@ -48,7 +48,7 @@ export class ApplicationsService {
 
   /** Starts a draft in the open intake; that makes the user an Applicant (§7.1). */
   async start(
-    input: { programmeId: string; studyMode: "ON_CAMPUS" | "ONLINE" },
+    input: { studyMode: "ON_CAMPUS" | "ONLINE" },
     actor: AuditActor & { userId: string },
   ): Promise<DomainResult<Application>> {
     const user = await this.users.findById(actor.userId);
@@ -64,19 +64,16 @@ export class ApplicationsService {
           .limit(1);
         if (intake === undefined)
           return err(domainError("INTAKE_CLOSED", "Applications aren't open at the moment."));
+        // GLIM has one programme, the Diploma (ADR-0005): applicants don't choose.
         const pr = schema.programmes;
         const [programme] = await db
           .select({ id: pr.id })
           .from(pr)
-          .where(and(eq(pr.id, input.programmeId), eq(pr.status, "ACTIVE")));
+          .where(eq(pr.status, "ACTIVE"))
+          .orderBy(asc(pr.code))
+          .limit(1);
         if (programme === undefined)
-          return err(
-            domainError("VALIDATION_FAILED", "Choose a programme that's taking applications.", {
-              fieldErrors: [
-                { path: "programmeId", code: "invalid", message: "Not an open programme." },
-              ],
-            }),
-          );
+          return err(domainError("INTAKE_CLOSED", "Applications aren't open at the moment."));
         const now = this.clock.now();
         const [row] = await db
           .insert(schema.applications)
@@ -172,18 +169,6 @@ export class ApplicationsService {
         return err(
           domainError("APPLICATION_STATE_INVALID", "A submitted application can't be edited."),
         );
-
-      if (change.programmeId !== undefined) {
-        const pr = schema.programmes;
-        const [programme] = await db
-          .select({ id: pr.id })
-          .from(pr)
-          .where(and(eq(pr.id, change.programmeId), eq(pr.status, "ACTIVE")));
-        if (programme === undefined)
-          return err(
-            domainError("VALIDATION_FAILED", "Choose a programme that's taking applications."),
-          );
-      }
 
       const photoFileId = change.photo?.fileId;
       if (
@@ -308,7 +293,7 @@ export class ApplicationsService {
           name: [current.firstName, current.lastName].filter(Boolean).join(" "),
           programmeName: found.programme.name,
           studyMode: current.studyMode === "ON_CAMPUS" ? "on campus" : "online",
-          academicSessionName: found.intake.academicSessionName,
+          startsOn: found.intake.startsOn,
           ...(current.email === null ? {} : { emailTo: current.email }),
         },
         email: true,
@@ -370,26 +355,24 @@ export class ApplicationsService {
     return `GLIM-APP-${intakeCode}-${String(sequence.nextValue).padStart(5, "0")}`;
   }
 
-  /** APPLICANT_UNDER_AGE unless they reach the minimum age by the day the Academic Session starts (Q-15). */
+  /** APPLICANT_UNDER_AGE unless they reach the minimum age by the day their cohort starts (Q-15). */
   private async tooYoung(db: Database, intakeId: string, dateOfBirth: string) {
-    const s = schema.academicSessions;
-    const [session] = await db
-      .select({ startsOn: s.startsOn })
+    const [intake] = await db
+      .select({ startsOn: schema.intakes.startsOn })
       .from(schema.intakes)
-      .innerJoin(s, eq(s.id, schema.intakes.academicSessionId))
       .where(eq(schema.intakes.id, intakeId));
-    if (session === undefined) throw new Error("intake without an Academic Session");
+    if (intake === undefined) throw new Error("application without an intake");
     const { config } = await this.policies.current("ADMISSIONS", db);
-    if (ageOn(dateOfBirth, session.startsOn) >= config.minimumAgeYears) return null;
+    if (ageOn(dateOfBirth, intake.startsOn) >= config.minimumAgeYears) return null;
     return domainError(
       "APPLICANT_UNDER_AGE",
-      `Applicants must be at least ${String(config.minimumAgeYears)} when the session starts on ${session.startsOn}.`,
+      `Applicants must be at least ${String(config.minimumAgeYears)} when studies start on ${intake.startsOn}.`,
       {
         fieldErrors: [
           {
             path: "personal.dateOfBirth",
             code: "under_age",
-            message: `You must be at least ${String(config.minimumAgeYears)} when the session starts.`,
+            message: `You must be at least ${String(config.minimumAgeYears)} when studies start.`,
           },
         ],
       },
@@ -417,7 +400,6 @@ export class ApplicationsService {
         ? { admissionsPolicyVersion: (await this.policies.current("ADMISSIONS", db)).version }
         : {};
     return definedFields({
-      programmeId: change.programmeId,
       studyMode: change.studyMode,
       ...change.personal,
       ...change.contact,

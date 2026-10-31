@@ -19,13 +19,10 @@ export type ProgrammeRow = typeof schema.programmes.$inferSelect;
 export interface ProgrammeInput {
   code: string;
   name: string;
-  awardType: EnumValue<"programmes.award_type">;
-  durationSemesters: number;
-  levels: number;
 }
 
 export type ProgrammeChange = Patch<
-  Omit<ProgrammeInput, "code" | "awardType"> & { status: EnumValue<"programmes.status"> }
+  Omit<ProgrammeInput, "code"> & { status: EnumValue<"programmes.status"> }
 >;
 
 const versionMismatch = () =>
@@ -33,7 +30,7 @@ const versionMismatch = () =>
     domainError("VERSION_MISMATCH", "Someone else changed this programme. Reload and try again."),
   );
 
-/** Programmes: the Certificate and the Diploma (owner: academic, TRD §6.3). */
+/** Programmes: GLIM has the Diploma (owner: academic, TRD §6.3, ADR-0005). */
 @Injectable()
 export class ProgrammesService {
   constructor(

@@ -78,6 +78,13 @@ export const updateLecturer = endpoint({
 
 // ---- Course Offerings ----
 
+/** Start, exam and end dates: the exam falls within the offering (ADR-0005). */
+const offeringDates = {
+  startsOn: z.iso.date(),
+  endsOn: z.iso.date(),
+  examOn: z.iso.date(),
+};
+
 export const assignmentSchema = z.object({
   id: z.uuid(),
   lecturerId: z.uuid(),
@@ -93,10 +100,12 @@ export const offeringSchema = z.object({
   /** The offering's title override, or the course title. */
   title: z.string(),
   credits: z.string(),
-  semesterId: z.uuid(),
-  semesterName: z.string(),
-  sessionCode: z.string(),
-  sectionCode: z.string(),
+  cohortId: z.uuid(),
+  cohortCode: z.string(),
+  startsOn: z.iso.date(),
+  endsOn: z.iso.date(),
+  /** The exam date (a date only, Lagos; ADR-0005). */
+  examOn: z.iso.date(),
   capacity: z.number().int().nullable(),
   status: z.enum(ENUMS["course_offerings.status"]),
   version: z.number().int(),
@@ -113,7 +122,7 @@ export const listOfferings = endpoint({
   tag: "Offerings",
   auth: "session",
   query: z.object({
-    semesterId: z.uuid().optional(),
+    cohortId: z.uuid().optional(),
     status: z.enum(ENUMS["course_offerings.status"]).optional(),
   }),
   response: z.object({ items: z.array(offeringSchema) }),
@@ -122,19 +131,16 @@ export const listOfferings = endpoint({
 export const createOffering = endpoint({
   method: "POST",
   path: "/course-offerings",
-  summary: "Offer a course in a semester, optionally with its Lecturers",
+  summary:
+    "Offer a course to a cohort between two dates, optionally with its Lecturers; it may not overlap the cohort's other offerings",
   tag: "Offerings",
   auth: "session",
   permission: "academic:course-offering:manage",
   body: z
     .object({
       courseId: z.uuid(),
-      semesterId: z.uuid(),
-      sectionCode: z
-        .string()
-        .trim()
-        .regex(/^[A-Za-z0-9]{1,8}$/)
-        .default("01"),
+      cohortId: z.uuid(),
+      ...offeringDates,
       titleOverride: z.string().trim().min(1).max(200).nullable().default(null),
       capacity: z.number().int().positive().max(10_000).nullable().default(null),
       lecturers: z
@@ -161,7 +167,7 @@ export const getOffering = endpoint({
 export const updateOffering = endpoint({
   method: "PATCH",
   path: "/course-offerings/:id",
-  summary: "Change an offering's title or capacity",
+  summary: "Change an offering's dates, title or capacity (dates not once it's completed)",
   tag: "Offerings",
   auth: "session",
   permission: "academic:course-offering:manage",
@@ -170,6 +176,9 @@ export const updateOffering = endpoint({
   params: idParams,
   body: z
     .object({
+      startsOn: z.iso.date().optional(),
+      endsOn: z.iso.date().optional(),
+      examOn: z.iso.date().optional(),
       titleOverride: z.string().trim().min(1).max(200).nullable().optional(),
       capacity: z.number().int().positive().max(10_000).nullable().optional(),
     })
@@ -180,7 +189,8 @@ export const updateOffering = endpoint({
 export const publishOffering = endpoint({
   method: "POST",
   path: "/course-offerings/:id/publish",
-  summary: "Publish a draft offering; it needs an active Primary Lecturer",
+  summary:
+    "Publish a draft offering (it needs an active Primary Lecturer); every active student in its cohort is registered",
   tag: "Offerings",
   auth: "session",
   permission: "academic:course-offering:manage",
