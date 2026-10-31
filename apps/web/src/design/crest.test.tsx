@@ -13,6 +13,7 @@ describe("Crest", () => {
   });
 
   it("scales the chip's padding and corners with the crest (§7.3)", () => {
+    expect(renderToStaticMarkup(<Crest size={32} />)).toMatch(/padding:2px;border-radius:6px/);
     expect(renderToStaticMarkup(<Crest size={36} />)).toMatch(/padding:3px;border-radius:8px/);
     expect(renderToStaticMarkup(<Crest size={72} />)).toMatch(/padding:6px;border-radius:12px/);
   });

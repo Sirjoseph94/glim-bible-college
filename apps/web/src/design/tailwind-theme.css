@@ -117,6 +117,15 @@
   --text-figure: 32px;
   --text-figure--line-height: 36px;
   --text-figure--font-weight: 600;
+  /* The landing page's headline (D-UI-02): 40/44 on phones, 56/60 from lg. */
+  --text-hero: 40px;
+  --text-hero--line-height: 44px;
+  --text-hero--font-weight: 700;
+  --text-hero--letter-spacing: -0.02em;
+  --text-hero-lg: 56px;
+  --text-hero-lg--line-height: 60px;
+  --text-hero-lg--font-weight: 700;
+  --text-hero-lg--letter-spacing: -0.025em;
 }
 
 /* §4.2 z-index scale. */

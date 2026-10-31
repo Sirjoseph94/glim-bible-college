@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import { LEGAL_CONTACT, LEGAL_NAME } from "../components/app/legal-links";
 
 /**
  * The privacy policy, terms of service and contact page, public at /privacy, /terms and /contact. Every statement about
  * data follows docs/compliance/ropa.md and the code it cites (cookies, device storage, retention);
  * change them together. Legal review is a launch gate (TRD C-41).
  */
-export const LEGAL_NAME = "GLIM Bible College";
-export const LEGAL_CONTACT = "online@glimbiblecollege.com";
+export { LEGAL_CONTACT, LEGAL_NAME };
 const UPDATED = "29 October 2026";
 
 const LINK = "text-brand underline";

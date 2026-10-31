@@ -9,11 +9,12 @@ const ASPECT = 500 / 515;
  */
 const CHIP = {
   28: { padding: 2, borderRadius: 6 },
+  32: { padding: 2, borderRadius: 6 },
   36: { padding: 3, borderRadius: 8 },
   72: { padding: 6, borderRadius: 12 },
 } as const;
 
-/** The GLIM crest: 28 in the phone top bar, 36 in the desktop rail, 72 on sign-in. */
+/** The GLIM crest: 28 in the phone top bar, 32 in the landing page's header, 36 in the desktop rail, 72 on sign-in. */
 export function Crest({ size = 28 }: { size?: keyof typeof CHIP }) {
   return (
     <span className="glim-chip inline-flex shrink-0" style={CHIP[size]}>
