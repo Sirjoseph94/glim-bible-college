@@ -1,5 +1,9 @@
 import { Link } from "@tanstack/react-router";
 
+/** Here rather than in routes/legal.tsx so the landing page can name the college without the texts. */
+export const LEGAL_NAME = "GLIM Bible College";
+export const LEGAL_CONTACT = "online@glimbiblecollege.com";
+
 const LINK = "inline-flex min-h-tap items-center text-body-sm text-brand underline";
 
 /**
