@@ -156,7 +156,7 @@ function NavLinks({ onNavigate, className }: { onNavigate?: () => void; classNam
         </li>
       ))}
       <li>
-        <Link to="/contact" className={NAV_LINK} onClick={onNavigate}>
+        <Link to="/contact" reloadDocument className={NAV_LINK} onClick={onNavigate}>
           Contact
         </Link>
       </li>
@@ -757,7 +757,7 @@ function Footer() {
               </Link>
             </li>
             <li>
-              <Link to="/contact" className={FOOTER_LINK}>
+              <Link to="/contact" reloadDocument className={FOOTER_LINK}>
                 Contact
               </Link>
             </li>
@@ -767,12 +767,12 @@ function Footer() {
               </a>
             </li>
             <li>
-              <Link to="/privacy" className={FOOTER_LINK}>
+              <Link to="/privacy" reloadDocument className={FOOTER_LINK}>
                 Privacy policy
               </Link>
             </li>
             <li>
-              <Link to="/terms" className={FOOTER_LINK}>
+              <Link to="/terms" reloadDocument className={FOOTER_LINK}>
                 Terms of service
               </Link>
             </li>

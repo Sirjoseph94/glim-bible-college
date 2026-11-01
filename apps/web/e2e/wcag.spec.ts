@@ -63,15 +63,12 @@ test.describe("in the dark theme", () => {
   test.use({ colorScheme: "dark" });
 
   test("public pages", async ({ page }) => {
-    for (const path of [
-      "/",
-      "/login",
-      "/apply",
-      "/forgot",
-      "/verify/NOTACODE",
-      "/privacy",
-      "/terms",
-    ])
+    // Static pages have no script to set data-theme; their CSS follows the device instead.
+    for (const path of ["/privacy", "/terms", "/contact"]) {
+      await expectAccessible(page, path);
+      await expect(page.locator("body")).toHaveCSS("background-color", "rgb(16, 21, 19)");
+    }
+    for (const path of ["/", "/login", "/apply", "/forgot", "/verify/NOTACODE"])
       await expectAccessible(page, path);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
