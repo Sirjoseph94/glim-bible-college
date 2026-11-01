@@ -8,13 +8,14 @@ describe("Crest", () => {
     expect(html).toContain('alt="GLIM crest"');
     expect(html).toContain('height="28"');
     expect(html).toContain("glim-chip");
-    expect(html).toContain("padding:2px");
-    expect(html).toContain("border-radius:6px");
+    expect(html).toContain("p-0.5 rounded-sm");
+    // No style attribute: `style-src 'self'` would drop it on the static pages.
+    expect(html).not.toContain("style=");
   });
 
   it("scales the chip's padding and corners with the crest (§7.3)", () => {
-    expect(renderToStaticMarkup(<Crest size={32} />)).toMatch(/padding:2px;border-radius:6px/);
-    expect(renderToStaticMarkup(<Crest size={36} />)).toMatch(/padding:3px;border-radius:8px/);
-    expect(renderToStaticMarkup(<Crest size={72} />)).toMatch(/padding:6px;border-radius:12px/);
+    expect(renderToStaticMarkup(<Crest size={32} />)).toContain("p-0.5 rounded-sm");
+    expect(renderToStaticMarkup(<Crest size={36} />)).toContain("p-[3px] rounded-[8px]");
+    expect(renderToStaticMarkup(<Crest size={72} />)).toContain("p-1.5 rounded-[12px]");
   });
 });

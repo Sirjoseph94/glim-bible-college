@@ -14,17 +14,17 @@ export function LegalLinks({ className }: { className?: string }) {
   return (
     <ul className={`flex flex-wrap gap-x-5 ${className ?? ""}`}>
       <li>
-        <Link to="/privacy" className={LINK}>
+        <Link to="/privacy" reloadDocument className={LINK}>
           Privacy policy
         </Link>
       </li>
       <li>
-        <Link to="/terms" className={LINK}>
+        <Link to="/terms" reloadDocument className={LINK}>
           Terms of service
         </Link>
       </li>
       <li>
-        <Link to="/contact" className={LINK}>
+        <Link to="/contact" reloadDocument className={LINK}>
           Contact
         </Link>
       </li>

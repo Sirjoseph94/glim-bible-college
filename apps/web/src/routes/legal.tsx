@@ -323,7 +323,7 @@ export function TermsPage() {
             API Services User Data Policy
           </a>{" "}
           and our{" "}
-          <Link to="/privacy" className={LINK}>
+          <Link to="/privacy" reloadDocument className={LINK}>
             Privacy Policy
           </Link>
           .
@@ -421,11 +421,11 @@ export function ContactPage() {
       <Part id="contact-data" title="Your data and these terms">
         <p>
           To see, correct or erase the data the college holds about you, or with questions about our{" "}
-          <Link to="/privacy" className={LINK}>
+          <Link to="/privacy" reloadDocument className={LINK}>
             Privacy Policy
           </Link>{" "}
           or{" "}
-          <Link to="/terms" className={LINK}>
+          <Link to="/terms" reloadDocument className={LINK}>
             Terms of Service
           </Link>
           , write to the same address.

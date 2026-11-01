@@ -84,3 +84,18 @@ test("anyone can check a transcript's verification code from the landing page", 
   await verify.getByRole("button", { name: "Check transcript" }).click();
   await expect(page).toHaveURL(/\/verify\/NOTACODE$/);
 });
+
+test("the privacy policy and terms open as static pages, with no scripts", async ({ page }) => {
+  await page.goto("/");
+  const footer = page.getByRole("contentinfo");
+  await footer.getByRole("link", { name: "Privacy policy" }).click();
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Privacy policy");
+  await expect(page.locator("script")).toHaveCount(0);
+
+  await page.goBack();
+  await footer.getByRole("link", { name: "Terms of service" }).click();
+  await expect(page).toHaveURL(/\/terms$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Terms of Service");
+  await expect(page.locator("script")).toHaveCount(0);
+});

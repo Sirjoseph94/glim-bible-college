@@ -711,7 +711,7 @@ function SectionIntro({
           </p>
           <p className="text-body-sm text-ink-muted">
             Our{" "}
-            <Link to="/privacy" className="text-brand underline">
+            <Link to="/privacy" reloadDocument className="text-brand underline">
               privacy policy
             </Link>{" "}
             explains how the college uses and protects your answers.
