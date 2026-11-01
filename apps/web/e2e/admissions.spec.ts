@@ -17,7 +17,7 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
   await expect(page.getByRole("heading", { name: "Welcome, Amaka Admissions" })).toBeVisible();
 
   await openArea(page, "Admissions");
-  await page.getByRole("link", { name: "Intakes" }).click();
+  await page.getByRole("link", { name: "Intakes", exact: true }).click();
   await page.getByRole("button", { name: "Plan an intake" }).click();
   await page.getByLabel("Intake (start year, e.g. 2027 or 2027-JAN)").fill("2030");
   await page.getByLabel("Applications open").fill("2029-11-01");
@@ -209,11 +209,11 @@ test("an Admissions Officer opens the intake, an applicant starts applying, and 
 
   // The officer's reports count the application.
   await openArea(page, "Admissions");
-  await page.getByRole("link", { name: "Reports" }).click();
+  await page.getByRole("link", { name: "Reports", exact: true }).click();
   await expect(page.getByText("submitted applications")).toContainText("1");
 
   await openArea(page, "Admissions");
-  await page.getByRole("link", { name: "Intakes" }).click();
+  await page.getByRole("link", { name: "Intakes", exact: true }).click();
   await page
     .getByRole("listitem", { name: "Intake 2030" })
     .getByRole("button", { name: "Close now" })
