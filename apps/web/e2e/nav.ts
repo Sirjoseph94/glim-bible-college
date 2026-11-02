@@ -26,6 +26,9 @@ export async function signOut(page: Page): Promise<void> {
   if (!(await account.isVisible())) await page.goto("/");
   await account.click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  // The app goes to /login once the session has ended. Until then /login would send a caller
+  // who goes there next back to Home, still signed in.
+  await page.waitForURL((url) => url.pathname === "/login");
 }
 
 /** Opens one of the student's courses from My courses, at the given tab (§11.3). */
