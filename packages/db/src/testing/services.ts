@@ -41,7 +41,12 @@ export async function startTestServices(): Promise<TestServices & { stop: () => 
         MINIO_DEFAULT_BUCKETS: "glim-files,glim-backups",
       })
       .withExposedPorts(9000)
-      .withWaitStrategy(Wait.forHttp("/minio/health/live", 9000))
+      // The image starts MinIO once to create the buckets, stops it, then starts it for good.
+      // The health check can pass against the first one; only the last prints its API address,
+      // so wait for that too, or the first requests hit the restart (ECONNRESET in CI).
+      .withWaitStrategy(
+        Wait.forAll([Wait.forLogMessage(/^API: http/m), Wait.forHttp("/minio/health/live", 9000)]),
+      )
       .start();
     stops.push(() => minio.stop());
     s3 = { ...s3, endpoint: `http://${minio.getHost()}:${String(minio.getMappedPort(9000))}` };
