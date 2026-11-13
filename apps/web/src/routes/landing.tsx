@@ -471,10 +471,7 @@ function Courses() {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="course-list">
           {current.data.courses.map((course) => (
-            <li
-              key={course.code}
-              className="rounded-md border border-line bg-surface-raised p-4"
-            >
+            <li key={course.code} className="rounded-md border border-line bg-surface-raised p-4">
               <p className="font-mono text-code text-brand">{course.code}</p>
               <h3 className="mt-1 text-heading">{course.title}</h3>
             </li>
@@ -648,7 +645,10 @@ function Questions() {
       question: "How much does it cost to study?",
       answer: (
         <p>
-          See the <a href="#fees" className="text-brand underline">Fees and course access</a>{" "}
+          See the{" "}
+          <a href="#fees" className="text-brand underline">
+            Fees and course access
+          </a>{" "}
           section for annual fees and installment information.
         </p>
       ),
@@ -695,8 +695,8 @@ function Questions() {
       question: "Do I need a Google account?",
       answer: (
         <p>
-          Yes. You sign in with Google to apply. A Google account is free, and you can create one
-          at accounts.google.com.
+          Yes. You sign in with Google to apply. A Google account is free, and you can create one at
+          accounts.google.com.
         </p>
       ),
     },
