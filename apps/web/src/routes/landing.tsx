@@ -26,7 +26,6 @@ import { Icon, type IconName } from "../design/icons";
  * that the data or the glossary doesn't, so these show as placeholders until the owner gives them.
  */
 const TO_CONFIRM = {
-  fees: "[FEES]",
   entryRequirements: "[ENTRY REQUIREMENTS]",
   phone: "[PHONE NUMBER]",
   address: "[POSTAL ADDRESS]",
@@ -37,6 +36,8 @@ const APPLY_LABEL = "See the Intake and apply";
 /** The header's in-page links, in the order the sections appear. */
 const NAV: { href: string; label: string }[] = [
   { href: "#programmes", label: "Programmes" },
+  { href: "#courses", label: "Courses" },
+  { href: "#fees", label: "Fees and access" },
   { href: "#how-to-apply", label: "How to apply" },
   { href: "#study-online", label: "Study online" },
 ];
@@ -75,7 +76,7 @@ const MODES: { icon: IconName; title: string; intro: string; points: string[] }[
     title: "Online",
     intro: "Study from wherever you are, on your phone or a computer.",
     points: [
-      "Join each Class Meeting live on Google Meet.",
+      "Join live classes online on your devices.",
       "Take your exams online, with a time limit.",
       "Hand in assignments and take quizzes from your phone.",
     ],
@@ -89,13 +90,8 @@ const MODES: { icon: IconName; title: string; intro: string; points: string[] }[
 const LOW_DATA: { icon: IconName; title: string; body: string }[] = [
   {
     icon: "video",
-    title: "Join live from your phone",
-    body: "When your class starts, tap Join live class. It opens in Google Meet.",
-  },
-  {
-    icon: "phone",
-    title: "Dial in when the signal is weak",
-    body: "If your data can't carry the call, join by phone with the number and PIN on the class card, where Google provides one.",
+    title: "Join lessons online",
+    body: "Students can join classes online on their devices.",
   },
   {
     icon: "play",
@@ -121,7 +117,7 @@ const LOW_DATA: { icon: IconName; title: string; body: string }[] = [
 
 /**
  * The public landing page at / for people who aren't signed in (decision D-UI-02). It uses only
- * public data: the institution's name and the current Intake with its Programmes. The headline
+ * public data: the institution's name and the current Intake, Programmes and Courses. The headline
  * doesn't wait for either, so the largest text paints with the first chunk (§14).
  */
 export function LandingPage() {
@@ -132,7 +128,9 @@ export function LandingPage() {
         <Hero />
         <HowToApply />
         <Programmes />
-        <TwoWaysToStudy />
+        <Courses />
+        <Tuition />
+        <LiveTeaching />
         <WeakSignals />
         <Questions />
         <FinalCall />
@@ -445,13 +443,90 @@ function Programmes() {
   );
 }
 
-function TwoWaysToStudy() {
+function Courses() {
+  const current = useQuery(currentIntakeQuery);
+  return (
+    <Section
+      id="landing-courses"
+      anchor="courses"
+      title="Courses"
+      intro="Explore the courses currently offered by the college."
+    >
+      {current.isPending ? (
+        <SkeletonGroup label="Loading the courses">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-20 rounded-md" />
+            <Skeleton className="h-20 rounded-md" />
+            <Skeleton className="h-20 rounded-md" />
+          </div>
+        </SkeletonGroup>
+      ) : current.isError ? (
+        <LoadFailed what="the courses" onRetry={() => void current.refetch()} />
+      ) : current.data.courses.length === 0 ? (
+        <Card>
+          <EmptyState icon="book" title="No courses to show yet">
+            The course list will appear here when courses are available.
+          </EmptyState>
+        </Card>
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="course-list">
+          {current.data.courses.map((course) => (
+            <li
+              key={course.code}
+              className="rounded-md border border-line bg-surface-raised p-4"
+            >
+              <p className="font-mono text-code text-brand">{course.code}</p>
+              <h3 className="mt-1 text-heading">{course.title}</h3>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function Tuition() {
+  return (
+    <Section
+      id="landing-tuition"
+      anchor="fees"
+      title="Fees and course access"
+      intro="Fees are charged annually. Installment payments are accepted for your convenience."
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <article className="rounded-md border border-line bg-surface-raised p-5">
+          <h3 className="text-heading">Nigerian students</h3>
+          <p className="mt-2 text-title">₦100,000 per year</p>
+        </article>
+        <article className="rounded-md border border-line bg-surface-raised p-5">
+          <h3 className="text-heading">Diaspora students</h3>
+          <ul className="mt-2 space-y-1 text-body">
+            <li>€300 per year for a single student</li>
+            <li>€500 per year for a couple (two students)</li>
+          </ul>
+        </article>
+      </div>
+      <div className="rounded-md border border-line bg-brand-soft p-5">
+        <h3 className="text-heading">Missed a course?</h3>
+        <p className="mt-2 max-w-prose text-body">
+          Students can access missed courses on the website using a code provided by the
+          institution. A separate fee applies; contact the college for details.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+function LiveTeaching() {
   return (
     <Section
       id="landing-modes"
-      title="Two ways to study"
-      intro="You take the same courses either way, one at a time, and your work goes into the same gradebook."
+      title="Live teaching in every course"
+      intro="Students participate in live teaching with our Lecturers in all courses. Online students can join classes online on their devices."
     >
+      <div className="rounded-md border border-brand bg-brand-soft p-4 text-body">
+        <strong>School days:</strong> Tuesdays and Thursdays, 9:00 pm to 11:00 pm Nigerian time.
+      </div>
       <ul className="grid gap-4 md:grid-cols-2">
         {MODES.map(({ icon, title, intro, points }) => (
           <li
@@ -541,8 +616,8 @@ function PhoneMockup() {
               Join live class
             </span>
             <p className="flex items-center gap-2 text-body-sm text-ink-muted">
-              <Icon name="phone" size={16} />
-              Weak signal? Dial in by phone
+              <Icon name="video" size={16} />
+              Join online on your device
             </p>
           </div>
           <div className={cn(cardClass(), "space-y-3")}>
@@ -573,8 +648,8 @@ function Questions() {
       question: "How much does it cost to study?",
       answer: (
         <p>
-          {TO_CONFIRM.fees} Fees aren't paid on this website. To ask about them, write to{" "}
-          <MailLink />.
+          See the <a href="#fees" className="text-brand underline">Fees and course access</a>{" "}
+          section for annual fees and installment information.
         </p>
       ),
     },
@@ -620,8 +695,8 @@ function Questions() {
       question: "Do I need a Google account?",
       answer: (
         <p>
-          Yes. You sign in with Google to apply, and online students use it to join Class Meetings
-          on Google Meet. A Google account is free, and you can create one at accounts.google.com.
+          Yes. You sign in with Google to apply. A Google account is free, and you can create one
+          at accounts.google.com.
         </p>
       ),
     },
@@ -662,14 +737,6 @@ function FinalCall() {
         </Button>
       </div>
     </section>
-  );
-}
-
-function MailLink() {
-  return (
-    <a href={`mailto:${LEGAL_CONTACT}`} className="text-brand underline">
-      {LEGAL_CONTACT}
-    </a>
   );
 }
 
@@ -739,6 +806,16 @@ function Footer() {
             <li>
               <a href="#programmes" className={FOOTER_LINK}>
                 Programmes
+              </a>
+            </li>
+            <li>
+              <a href="#courses" className={FOOTER_LINK}>
+                Courses
+              </a>
+            </li>
+            <li>
+              <a href="#fees" className={FOOTER_LINK}>
+                Fees and access
               </a>
             </li>
             <li>

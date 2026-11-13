@@ -120,6 +120,7 @@ export const currentIntakeSchema = z.object({
     })
     .nullable(),
   programmes: z.array(publicProgrammeSchema),
+  courses: z.array(z.object({ code: z.string(), title: z.string() })),
   statementOfFaithUrl: z.string().nullable(),
 });
 
@@ -128,7 +129,8 @@ export type CurrentIntake = z.infer<typeof currentIntakeSchema>;
 export const getCurrentIntake = endpoint({
   method: "GET",
   path: "/public/intakes/current",
-  summary: "What an applicant needs before starting: programmes, intake dates, Statement of Faith",
+  summary:
+    "What an applicant needs before starting: programmes, courses, intake dates, Statement of Faith",
   tag: "Public",
   auth: "public",
   response: currentIntakeSchema,
