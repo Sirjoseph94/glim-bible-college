@@ -21,6 +21,22 @@ test("a signed-out visitor sees the landing page, its Programmes and the ways in
     /On-campus\s*Online/,
   );
 
+  const courses = page.getByRole("region", { name: "Courses" });
+  await expect(courses.getByTestId("course-list")).toContainText("PAS101");
+  await expect(courses.getByTestId("course-list")).toContainText("Pastoral Care");
+
+  const tuition = page.getByRole("region", { name: "Fees and course access" });
+  await expect(tuition).toContainText("₦100,000 per year");
+  await expect(tuition).toContainText("€300 per year for a single student");
+  await expect(tuition).toContainText("€500 per year for a couple (two students)");
+  await expect(tuition).toContainText("Installment payments are accepted");
+  await expect(tuition).toContainText("using a code provided by the institution");
+
+  const teaching = page.getByRole("region", { name: "Live teaching in every course" });
+  await expect(teaching).toContainText("Tuesdays and Thursdays, 9:00 pm to 11:00 pm Nigerian time");
+  await expect(teaching).toContainText("join classes online on their devices");
+  await expect(page.locator("body")).not.toContainText(/Google Meet|Dial in by phone/);
+
   // The hero's badge says where the Intake stands, whatever state the suite left it in.
   await expect(page.getByTestId("intake-badge")).toContainText(
     /Applications (open|closed)|No Intake scheduled/,
@@ -33,7 +49,7 @@ test("a signed-out visitor sees the landing page, its Programmes and the ways in
 
   // Red is for live classes only: the phone picture's badge and button.
   const signals = page.getByRole("region", { name: "Built for weak signals" });
-  await expect(signals).toContainText("Dial in when the signal is weak");
+  await expect(signals).toContainText("Students can join classes online on their devices.");
   await expect(signals).toContainText("40 MB per hour");
 
   // No page-wide horizontal scroll on a phone.

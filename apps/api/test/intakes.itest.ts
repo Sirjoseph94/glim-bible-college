@@ -109,6 +109,7 @@ describe("intakes", () => {
     });
     // Only programmes taking applications: the personas' is archived.
     expect(shown.programmes.map((pr) => pr.code)).not.toContain("PDIP");
+    expect(shown.courses).toContainEqual({ code: "PBIB101", title: "Persona Course" });
     expect(shown.statementOfFaithUrl).toBe("https://glim.edu.ng/statement-of-faith");
   });
 

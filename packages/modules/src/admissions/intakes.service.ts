@@ -31,6 +31,7 @@ export interface IntakeView {
 export interface CurrentIntake {
   intake: Pick<IntakeView, "code" | "opensOn" | "closesOn" | "startsOn" | "status"> | null;
   programmes: { id: string; code: string; name: string }[];
+  courses: { code: string; title: string }[];
   statementOfFaithUrl: string | null;
 }
 
@@ -75,6 +76,11 @@ export class IntakesService {
       .from(schema.programmes)
       .where(eq(schema.programmes.status, "ACTIVE"))
       .orderBy(asc(schema.programmes.code));
+    const courses = await this.db.read
+      .select({ code: schema.courses.code, title: schema.courses.title })
+      .from(schema.courses)
+      .where(eq(schema.courses.status, "ACTIVE"))
+      .orderBy(asc(schema.courses.code));
     const settings = await this.settings.get();
     return {
       intake:
@@ -88,6 +94,7 @@ export class IntakesService {
               status: intake.status,
             },
       programmes,
+      courses,
       statementOfFaithUrl: settings.statementOfFaithUrl,
     };
   }
