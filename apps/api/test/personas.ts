@@ -270,11 +270,12 @@ export async function enrollStudent(
     ],
   );
   const programmeEnrollmentId = enrollment.rows[0]?.id;
+  const enrolledAt = t.clock.now();
   for (const [key, status] of Object.entries(spec.studies ?? {}) as [OfferingKey, StudyStatus][]) {
     await q(
-      `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status)
-       VALUES ($1, $2, $3, 'COHORT', $4) RETURNING id`,
-      [programmeEnrollmentId, world.offerings[key], studentId, status],
+      `INSERT INTO course_enrollments (programme_enrollment_id, course_offering_id, student_id, selection, status, enrolled_at)
+       VALUES ($1, $2, $3, 'COHORT', $4, $5) RETURNING id`,
+      [programmeEnrollmentId, world.offerings[key], studentId, status, enrolledAt],
     );
   }
 }

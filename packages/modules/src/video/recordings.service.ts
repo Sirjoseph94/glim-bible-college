@@ -640,7 +640,8 @@ export class RecordingsService {
         await boss.send(
           "recording.ingest",
           { recordingId: id },
-          { startAfter: new Date(this.clock.now().getTime() + waitMs) },
+          // A numeric `startAfter` is a delay in seconds, anchored to the database clock.
+          { startAfter: waitMs / 1000 },
         );
     });
   }
